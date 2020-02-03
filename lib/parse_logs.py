@@ -10,7 +10,7 @@ import numpy as np
 import pandas as pd
 from absl import flags
 
-from utils import load_params
+from .utils import load_params
 
 FLOAT_REGEXP = '[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?'
 

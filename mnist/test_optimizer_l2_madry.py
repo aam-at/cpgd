@@ -10,16 +10,19 @@ import numpy as np
 import tensorflow as tf
 from absl import flags
 
-from attack_l2 import OptimizerL2
-from data import load_mnist, make_input_pipeline, select_balanced_subset
+import lib
+from data import load_mnist
+from lib.attack_l2 import OptimizerL2
+from lib.utils import (MetricsDictionary, compute_norms, log_metrics,
+                       make_input_pipeline, register_experiment_flags,
+                       reset_metrics, save_images, select_balanced_subset,
+                       setup_experiment)
 from models import MadryCNN
-from utils import (MetricsDictionary, compute_norms, log_metrics,
-                   register_experiment_flags, reset_metrics, save_images,
-                   setup_experiment)
+from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="test_l2")
-flags.DEFINE_string("load_from", 'trades.pkl', "path to load checkpoint from")
+register_experiment_flags(working_dir="../results/mnist/test_l2")
+flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
@@ -44,36 +47,10 @@ flags.DEFINE_integer("print_frequency", 1, "summarize frequency")
 FLAGS = flags.FLAGS
 
 
-def load_madry(load_dir, model_vars):
-    import scipy.io
-    w = scipy.io.loadmat(load_dir)
-    mapping = {
-        "A0": "conv2d/kernel:0",
-        "A1": "conv2d/bias:0",
-        "A2": "conv2d_1/kernel:0",
-        "A3": "conv2d_1/bias:0",
-        "A4": "dense/kernel:0",
-        "A5": "dense/bias:0",
-        "A6": "dense_1/kernel:0",
-        "A7": "dense_1/bias:0"
-    }
-    for var_name in w.keys():
-        if not var_name.startswith("A"):
-            continue
-        var = w[var_name]
-        if var.ndim == 2:
-            var = var.squeeze()
-        model_var_name = mapping[var_name]
-        model_var = [
-            v for v in model_vars if v.name == model_var_name
-        ]
-        assert len(model_var) == 1
-        model_var[0].assign(var)
-
-
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-    setup_experiment("madry_l2_test", "attack_l2.py")
+    assert FLAGS.load_from is not None
+    setup_experiment("madry_l2_test", [lib.attack_l2.__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size, seed=FLAGS.data_seed)
@@ -190,11 +167,11 @@ def main(unused_args):
             x_test, y_test, num_classes, num_classes)
         summary_images = tf.convert_to_tensor(summary_images)
         summary_labels = tf.convert_to_tensor(summary_labels)
-        summary_li_imgs = test_step(summary_images, summary_labels, -1)
+        summary_l2_imgs = test_step(summary_images, summary_labels, -1)
         save_path = os.path.join(FLAGS.samples_dir, 'orig.png')
         save_images(summary_images.numpy(), save_path)
-        save_path = os.path.join(FLAGS.samples_dir, 'li.png')
-        save_images(summary_li_imgs.numpy(), save_path)
+        save_path = os.path.join(FLAGS.samples_dir, 'l2.png')
+        save_images(summary_l2_imgs.numpy(), save_path)
         log_metrics(
             test_metrics,
             "Summary results [{:.2f}s]:".format(time.time() - start_time))
@@ -202,7 +179,7 @@ def main(unused_args):
         logging.debug("Skipping summary...")
 
     reset_metrics(test_metrics)
-    X_li_list = []
+    X_l2_list = []
     y_list = []
     indx_list = []
     start_time = time.time()
@@ -218,7 +195,7 @@ def main(unused_args):
                                      'epoch_l2-%d.png' % batch_index)
             save_images(X_l2, save_path)
             # save adversarial data
-            X_li_list.append(X_l2)
+            X_l2_list.append(X_l2)
             y_list.append(label)
             indx_list.append(indx)
             if batch_index % FLAGS.print_frequency == 0:
@@ -235,11 +212,11 @@ def main(unused_args):
             test_metrics,
             "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                  batch_index))
-        X_li_all = tf.concat(X_li_list, axis=0).numpy()
+        X_l2_all = tf.concat(X_l2_list, axis=0).numpy()
         y_all = tf.concat(y_list, axis=0).numpy()
         indx_list = tf.concat(indx_list, axis=0).numpy()
         np.savez(Path(FLAGS.working_dir) / 'X_adv',
-                 X_adv=X_li_all,
+                 X_adv=X_l2_all,
                  y=y_all,
                  indices=indx_list)
 

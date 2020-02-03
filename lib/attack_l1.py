@@ -1,10 +1,9 @@
 from __future__ import absolute_import, division, print_function
 
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from utils import li_metric, prediction, to_indexed_slices, l1_metric
+from .utils import li_metric, prediction, to_indexed_slices, l1_metric
 
 tfd = tfp.distributions
 
