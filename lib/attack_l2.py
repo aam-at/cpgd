@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from utils import li_metric, prediction, to_indexed_slices
+from .utils import li_metric, prediction, to_indexed_slices
 
 tfd = tfp.distributions
 

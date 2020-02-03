@@ -11,12 +11,12 @@ import numpy as np
 import tensorflow as tf
 from absl import flags
 
-from attack import OptimizerL2
+from lib.attack import OptimizerL2
 from data import load_mnist, make_input_pipeline, select_balanced_subset
 from models import TradesCNN
-from utils import (MetricsDictionary, compute_norms, log_metrics,
-                   register_experiment_flags, reset_metrics, save_images,
-                   setup_experiment)
+from lib.utils import (MetricsDictionary, compute_norms, log_metrics,
+                       register_experiment_flags, reset_metrics, save_images,
+                       setup_experiment)
 
 # general experiment parameters
 register_experiment_flags(working_dir="test_l2")

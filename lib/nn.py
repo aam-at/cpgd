@@ -2,77 +2,8 @@ from __future__ import absolute_import, division, print_function
 
 import tensorflow as tf
 
-from utils import (spectral_norm, spectral_norm_conv2d,
-                   spectral_norm_conv2d_transpose)
-
-
-class FiLM(tf.keras.layers.Layer):
-    def __init__(self,
-                 center=True,
-                 scale=True,
-                 use_shared=True,
-                 use_bias=False,
-                 **kwargs):
-        super(FiLM, self).__init__(**kwargs)
-        self.center = center
-        self.scale = scale
-        self.use_shared = use_shared
-        self.use_bias = use_bias
-
-    def build(self, inputs_shape):
-        input_shape = inputs_shape[0]
-        label_shape = inputs_shape[1]
-        num_channels = input_shape[1]
-        num_labels = label_shape[-1]
-        if input_shape.ndims == 2:
-            broadcast_shape = [num_channels]
-        else:
-            broadcast_shape = [num_channels, 1, 1]
-        if self.scale:
-            self.gamma_embed = tf.keras.Sequential([
-                tf.keras.layers.Dense(num_channels,
-                                      use_bias=self.use_bias,
-                                      input_shape=(num_labels,)),
-                tf.keras.layers.Reshape(broadcast_shape)
-            ])
-            if self.use_shared:
-                self.gamma_shared = self.add_weight(
-                    name='gamma',
-                    shape=broadcast_shape,
-                    initializer=tf.keras.initializers.get('ones'),
-                    trainable=True)
-        if self.center:
-            self.beta_embed = tf.keras.Sequential([
-                tf.keras.layers.Dense(num_channels,
-                                      use_bias=self.use_bias,
-                                      input_shape=(num_labels,)),
-                tf.keras.layers.Reshape(broadcast_shape)
-            ])
-            if self.use_shared:
-                self.beta_shared = self.add_weight(
-                    name='beta',
-                    shape=broadcast_shape,
-                    initializer=tf.keras.initializers.get('zeros'),
-                    trainable=True)
-
-    def call(self, inputs):
-        x, y = inputs
-        if self.scale:
-            gamma = self.gamma_embed(y)
-            if self.use_shared:
-                gamma += self.gamma_shared
-            x *= gamma
-        if self.center:
-            beta = self.beta_embed(y)
-            if self.use_shared:
-                beta += self.beta_shared
-            x += beta
-        return x
-
-
-def cond_batch_norm(x, y):
-    x = tf.keras.layers.BatchNormalization(axis=1, center=False, scale=False)(x)
-    return FiLM()([x, y])
+from .utils import (spectral_norm, spectral_norm_conv2d,
+                    spectral_norm_conv2d_transpose)
 
 
 class SNDense(tf.keras.layers.Dense):

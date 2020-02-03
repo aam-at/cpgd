@@ -2,6 +2,7 @@ import scipy.io
 
 
 def load_madry(load_dir, model_vars):
+    import pudb; pudb.set_trace()  # XXX BREAKPOINT
     w = scipy.io.loadmat(load_dir)
     mapping = {
         "A0": "conv2d/kernel:0",

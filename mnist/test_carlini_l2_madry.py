@@ -11,10 +11,10 @@ import tensorflow as tf
 from absl import flags
 
 from data import load_mnist, make_input_pipeline, select_balanced_subset
+from lib.utils import (compute_norms, load_experiment, log_metrics,
+                       register_experiment_flags, reset_metrics, save_images,
+                       setup_experiment)
 from models import create_model, register_model_flags
-from utils import (compute_norms, load_experiment, log_metrics,
-                   register_experiment_flags, reset_metrics, save_images,
-                   setup_experiment)
 
 # general experiment parameters
 register_experiment_flags(working_dir="test_ca")
@@ -42,7 +42,6 @@ FLAGS = flags.FLAGS
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-    load_experiment(FLAGS.load_from)
     setup_experiment(Path(FLAGS.load_from).name)
 
     # data
@@ -100,7 +99,7 @@ def main(unused_args):
 
     # attacks
     if FLAGS.use_carlini_prob:
-        from attack import CWL2Prob as CWL2
+        from lib.attack import CWL2Prob as CWL2
         cwl2 = CWL2(lambda x: test_classifier(x)["logits"],
                     batch_size=FLAGS.batch_size,
                     targeted=False,
@@ -110,7 +109,7 @@ def main(unused_args):
                     lower_bound=FLAGS.carlini_lb,
                     upper_bound=FLAGS.carlini_ub)
     else:
-        from attack import CWL2 as CWL2
+        from lib.attack import CWL2 as CWL2
         cwl2 = CWL2(lambda x: test_classifier(x)["logits"],
                     batch_size=FLAGS.batch_size,
                     targeted=False,
