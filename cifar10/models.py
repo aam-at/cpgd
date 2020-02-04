@@ -7,7 +7,8 @@ FLAGS = flags.FLAGS
 
 
 class MadryCNN(tf.keras.Model):
-    def __init__(self):
+    def __init__(self, model_type='plain'):
+        self.model_type = model_type
         super(MadryCNN, self).__init__()
 
     def build(self, inputs_shape):
@@ -19,20 +20,31 @@ class MadryCNN(tf.keras.Model):
         # configure layers
         conv = change_default_args(conv,
                                    activation='relu',
+                                   use_bias=self.model_type == 'plain',
                                    padding='same',
                                    data_format='channels_last')
-        max_pool = change_default_args(tf.keras.layers.MaxPool2D,
-                                       data_format='channels_last')
         dense = change_default_args(dense)
-        activation = tf.keras.activations.get('relu')
+        act = change_default_args(tf.keras.layers.Activation,
+                                  activation='relu')
         # define functional computation graph
         with tf.init_scope():
-            z = conv(16, 3)(x)
-            h = z
-            logits = tf.keras.layers.Dense(10, activation=None)(z)
-        self.model = tf.keras.Model(inputs=x, outputs=[h, logits])
+            z = conv(96, 3)(x)
+            z = conv(96, 3)(z)
+            z = conv(192, 3, strides=2)(z)
+            z = conv(192, 3)(z)
+            z = conv(192, 3)(z)
+            z = conv(192, 3, strides=2)(z)
+            z = conv(192, 3)(z)
+            z = conv(384, 2, strides=2)(z)
+            # classifier
+            z = tf.keras.layers.Flatten()(z)
+            h = dense(1200)(z)
+            z = act()(h)
+            logits = dense(10)(z)
+        self.model = tf.keras.Model(inputs=x, outputs=[z, logits])
 
     def call(self, inputs, training=True):
-        inputs = tf.map_fn(lambda img: tf.image.per_image_standardization(img), inputs)
+        if self.model_type == 'l2':
+            inputs = inputs - tf.ones_like(inputs) * 0.5
         h, logits = self.model(inputs, training=training)
         return add_default_end_points({'features': h, 'logits': logits})
