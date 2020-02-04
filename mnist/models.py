@@ -67,19 +67,21 @@ class MadryCNN(tf.keras.Model):
                                    padding='same',
                                    data_format='channels_last')
         max_pool = change_default_args(tf.keras.layers.MaxPool2D,
+                                       padding='valid',
                                        data_format='channels_last')
-        dense = change_default_args(dense)
-        activation = tf.keras.activations.get('relu')
+        dense = change_default_args(dense, activation=None)
+        act = change_default_args(tf.keras.layers.Activation, activation='relu')
         # define functional computation graph
         with tf.init_scope():
             z = conv(32, 5)(x)
             z = max_pool(2)(z)
             z = conv(64, 5)(z)
             z = max_pool(2)(z)
+            # classifier
             z = tf.keras.layers.Flatten()(z)
             h = dense(1024)(z)
-            z = tf.keras.layers.Lambda(lambda x: activation(x))(h)
-            logits = tf.keras.layers.Dense(10, activation=None)(z)
+            z = act()(h)
+            logits = dense(10)(z)
         self.model = tf.keras.Model(inputs=x, outputs=[h, logits])
 
     def call(self, inputs, training=True):
