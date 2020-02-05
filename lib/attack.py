@@ -5,8 +5,8 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 from .at import fast_gradient_perturbation
-from .utils import (arctanh_reparametrize, prediction,
-                    random_targets, tanh_reparametrize, to_indexed_slices, li_metric)
+from .utils import (arctanh_reparametrize, li_metric, prediction,
+                    random_targets, tanh_reparametrize, to_indexed_slices)
 
 tfd = tfp.distributions
 

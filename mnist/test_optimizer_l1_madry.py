@@ -13,9 +13,10 @@ from absl import flags
 import lib
 from data import load_mnist
 from lib.attack_l1 import OptimizerL1
-from lib.utils import (MetricsDictionary, l1_metric, log_metrics,
+from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold, l1_metric,
+                       log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment, select_balanced_subset, make_input_pipeline)
+                       select_balanced_subset, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
@@ -63,7 +64,8 @@ def main(unused_args):
         indices = indices[ys_indices]
 
     test_ds = tf.data.Dataset.from_tensor_slices((x_test, y_test, indices))
-    test_ds = make_input_pipeline(test_ds, shuffle=False,
+    test_ds = make_input_pipeline(test_ds,
+                                  shuffle=False,
                                   batch_size=FLAGS.batch_size)
 
     # models
@@ -99,53 +101,14 @@ def main(unused_args):
     def test_step(image, label, batch_index):
         label_onehot = tf.one_hot(label, num_classes)
         image_l1 = ol1(image, label_onehot)
-        # measure norm
-        l1 = l1_metric(image - image_l1)
-
-        image_l1_2 = tf.where(tf.reshape(l1 <= 2.0, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_2_5 = tf.where(tf.reshape(l1 <= 2.5, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_4 = tf.where(tf.reshape(l1 <= 4.0, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_5 = tf.where(tf.reshape(l1 <= 5.0, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_6 = tf.where(tf.reshape(l1 <= 6.0, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_7_5 = tf.where(tf.reshape(l1 <= 7.5, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_8 = tf.where(tf.reshape(l1 <= 8.0, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_8_75 = tf.where(tf.reshape(l1 <= 8.75, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_10_0 = tf.where(tf.reshape(l1 <= 10.0, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_12_5 = tf.where(tf.reshape(l1 <= 12.5, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_16_25 = tf.where(tf.reshape(l1 <= 16.25, (-1, 1, 1, 1)), image_l1, image)
-        image_l1_20 = tf.where(tf.reshape(l1 <= 20.0, (-1, 1, 1, 1)), image_l1, image)
 
         outs = test_classifier(image)
         outs_l1 = test_classifier(image_l1)
-        outs_l1_2 = test_classifier(image_l1_2)
-        outs_l1_2_5 = test_classifier(image_l1_2_5)
-        outs_l1_4 = test_classifier(image_l1_4)
-        outs_l1_5 = test_classifier(image_l1_5)
-        outs_l1_6 = test_classifier(image_l1_6)
-        outs_l1_7_5 = test_classifier(image_l1_7_5)
-        outs_l1_8 = test_classifier(image_l1_8)
-        outs_l1_8_75 = test_classifier(image_l1_8_75)
-        outs_l1_10_0 = test_classifier(image_l1_10_0)
-        outs_l1_12_5 = test_classifier(image_l1_12_5)
-        outs_l1_16_25 = test_classifier(image_l1_16_25)
-        outs_l1_20_0 = test_classifier(image_l1_20)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
         acc_l1 = acc_fn(label, outs_l1["logits"])
-        acc_l1_2 = acc_fn(label, outs_l1_2["logits"])
-        acc_l1_2_5 = acc_fn(label, outs_l1_2_5["logits"])
-        acc_l1_4 = acc_fn(label, outs_l1_4["logits"])
-        acc_l1_5 = acc_fn(label, outs_l1_5["logits"])
-        acc_l1_6 = acc_fn(label, outs_l1_6["logits"])
-        acc_l1_7_5 = acc_fn(label, outs_l1_7_5["logits"])
-        acc_l1_8 = acc_fn(label, outs_l1_8["logits"])
-        acc_l1_8_75 = acc_fn(label, outs_l1_8_75["logits"])
-        acc_l1_10_0 = acc_fn(label, outs_l1_10_0["logits"])
-        acc_l1_12_5 = acc_fn(label, outs_l1_12_5["logits"])
-        acc_l1_16_25 = acc_fn(label, outs_l1_16_25["logits"])
-        acc_l1_20_0 = acc_fn(label, outs_l1_20_0["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
@@ -153,26 +116,22 @@ def main(unused_args):
         test_metrics["conf"](outs["conf"])
         test_metrics["acc_l1"](acc_l1)
         test_metrics["conf_l2"](outs_l1["conf"])
-        test_metrics["acc_l1_2.0"](acc_l1_2)
-        test_metrics["acc_l1_2.5"](acc_l1_2_5)
-        test_metrics["acc_l1_4.0"](acc_l1_4)
-        test_metrics["acc_l1_5.0"](acc_l1_5)
-        test_metrics["acc_l1_6.0"](acc_l1_6)
-        test_metrics["acc_l1_7.5"](acc_l1_7_5)
-        test_metrics["acc_l1_8.0"](acc_l1_8)
-        test_metrics["acc_l1_8.75"](acc_l1_8_75)
-        test_metrics["acc_l1_10.0"](acc_l1_10_0)
-        test_metrics["acc_l1_12.5"](acc_l1_12_5)
-        test_metrics["acc_l1_16.25"](acc_l1_16_25)
-        test_metrics["acc_l1_20.0"](acc_l1_20_0)
 
+        # measure norm
+        l1 = l1_metric(image - image_l1)
+        tf.summary.scalar("l1", tf.reduce_mean(l1), batch_index)
+        for threshold in [
+                2.0, 2.5, 4.0, 5.0, 6.0, 7.5, 8.0, 8.75, 10.0, 12.5, 16.25,
+                20.0
+        ]:
+            acc_th = get_acc_for_lp_threshold(
+                lambda x: test_classifier(x)['logits'], image, image_l1, label,
+                l1, threshold)
+            test_metrics["acc_l2_%.2f" % threshold](acc_th)
         test_metrics["l1"](l1)
         # exclude incorrectly classified
         is_corr = outs['pred'] == label
         test_metrics["l1_corr"](l1[is_corr])
-
-        # summaries
-        tf.summary.scalar("l1", tf.reduce_mean(l1), batch_index)
 
         return image_l1
 
