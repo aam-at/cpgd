@@ -73,7 +73,6 @@ def main(unused_args):
 
     # load classifier
     classifier(np.zeros([1, 32, 32, 3], dtype=np.float32))
-
     load_madry(FLAGS.load_from,
                classifier.trainable_variables,
                model_type=model_type)

@@ -10,12 +10,16 @@ import numpy as np
 import tensorflow as tf
 from absl import flags
 
+import lib
+from data import load_cifar10
 from lib.attack_l2 import OptimizerL2
-from .data import load_cifar10, make_input_pipeline, select_balanced_subset
-from models import MadryCNN
-from lib.utils import (MetricsDictionary, compute_norms, log_metrics,
-                       register_experiment_flags, reset_metrics, save_images,
+from lib.utils import (MetricsDictionary, compute_norms,
+                       get_acc_for_lp_threshold, log_metrics,
+                       make_input_pipeline, register_experiment_flags,
+                       reset_metrics, save_images, select_balanced_subset,
                        setup_experiment)
+from models import MadryCNN
+from utils import load_madry
 
 # general experiment parameters
 register_experiment_flags(working_dir="test_l2")
@@ -44,64 +48,39 @@ flags.DEFINE_integer("print_frequency", 1, "summarize frequency")
 FLAGS = flags.FLAGS
 
 
-def load_madry(load_dir, model_vars):
-    import scipy.io
-    w = scipy.io.loadmat(load_dir)
-    mapping = {
-        "A0": "conv2d/kernel:0",
-        "A1": "conv2d/bias:0",
-        "A2": "conv2d_1/kernel:0",
-        "A3": "conv2d_1/bias:0",
-        "A4": "dense/kernel:0",
-        "A5": "dense/bias:0",
-        "A6": "dense_1/kernel:0",
-        "A7": "dense_1/bias:0"
-    }
-    for var_name in w.keys():
-        if not var_name.startswith("A"):
-            continue
-        var = w[var_name]
-        if var.ndim == 2:
-            var = var.squeeze()
-        model_var_name = mapping[var_name]
-        model_var = [
-            v for v in model_vars if v.name == model_var_name
-        ]
-        assert len(model_var) == 1
-        model_var[0].assign(var)
-
-
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-    setup_experiment("madry_l2_test", "attack_l2.py")
+    assert FLAGS.load_from is not None
+    model_type = Path(FLAGS.load_from).stem.split("_")[-1]
+    setup_experiment("madry_l2_test", [lib.attack_l2.__file__])
 
     # data
-    import pudb; pudb.set_trace()  # XXX BREAKPOINT
-    _, _, test_ds = load_cifar10(FLAGS.validation_size, seed=FLAGS.data_seed)
+    _, _, test_ds = load_cifar10(FLAGS.validation_size)
     x_test, y_test = test_ds._tensors
     x_test, y_test = x_test.numpy(), y_test.numpy()
-    x_test = x_test.transpose(0, 2, 3, 1)
     indices = np.arange(x_test.shape[0])
     if FLAGS.sort_labels:
         ys_indices = np.argsort(y_test)
         x_test = x_test[ys_indices]
         y_test = y_test[ys_indices]
-        indices = indices[ys_indices]
 
     test_ds = tf.data.Dataset.from_tensor_slices((x_test, y_test, indices))
-    test_ds = make_input_pipeline(test_ds, shuffle=False,
+    test_ds = make_input_pipeline(test_ds,
+                                  shuffle=False,
                                   batch_size=FLAGS.batch_size)
 
     # models
     num_classes = 10
-    classifier = MadryCNN()
+    classifier = MadryCNN(model_type=model_type)
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
 
     # load classifier
-    classifier(np.zeros([1, 28, 28, 1], dtype=np.float32))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
+    classifier(np.zeros([1, 32, 32, 3], dtype=np.float32))
+    load_madry(FLAGS.load_from,
+               classifier.trainable_variables,
+               model_type=model_type)
 
     # attacks
     ol2 = OptimizerL2(lambda x: test_classifier(x)["logits"],
@@ -126,24 +105,9 @@ def main(unused_args):
     def test_step(image, label, batch_index):
         label_onehot = tf.one_hot(label, num_classes)
         image_l2 = ol2(image, label_onehot)
-        # measure norm
-        l2, l2_norm = compute_norms(image, image_l2)
-
-        image_l2_0_5 = tf.where(tf.reshape(l2 <= 0.5, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_1 = tf.where(tf.reshape(l2 <= 1.0, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_1_5 = tf.where(tf.reshape(l2 <= 1.5, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_2_0 = tf.where(tf.reshape(l2 <= 2.0, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_2_5 = tf.where(tf.reshape(l2 <= 2.5, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_3_0 = tf.where(tf.reshape(l2 <= 3.0, (-1, 1, 1, 1)), image_l2, image)
 
         outs = test_classifier(image)
         outs_l2 = test_classifier(image_l2)
-        outs_l2_0_5 = test_classifier(image_l2_0_5)
-        outs_l2_1 = test_classifier(image_l2_1)
-        outs_l2_1_5 = test_classifier(image_l2_1_5)
-        outs_l2_2_0 = test_classifier(image_l2_2_0)
-        outs_l2_2_5 = test_classifier(image_l2_2_5)
-        outs_l2_3_0 = test_classifier(image_l2_3_0)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -169,13 +133,20 @@ def main(unused_args):
         test_metrics["acc_l2_2.5"](acc_l2_2_5)
         test_metrics["acc_l2_3.0"](acc_l2_3_0)
 
+        # measure norm
+        l2, l2_norm = compute_norms(image, image_l2)
+        for threshold in [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1.0, 1.25]:
+            acc_th = get_acc_for_lp_threshold(
+                lambda x: test_classifier(x)['logits'], image, image_l2, label,
+                l2, threshold)
+            test_metrics["acc_l2_%.2f" % threshold](acc_th)
+
+        test_metrics["l2"](l2)
         test_metrics["l2"](l2)
         test_metrics["l2_norm"](l2_norm)
         # exclude incorrectly classified
         is_corr = outs['pred'] == label
         test_metrics["l2_corr"](l2[is_corr])
-
-        # summaries
         tf.summary.scalar("l2", tf.reduce_mean(l2), batch_index)
         tf.summary.scalar("l2_norm", tf.reduce_mean(l2_norm), batch_index)
 
@@ -210,8 +181,6 @@ def main(unused_args):
     try:
         for batch_index, (image, label, indx) in enumerate(test_ds, 1):
             X_l2 = test_step(image, label, batch_index)
-            image = np.transpose(image, (0, 3, 1, 2))
-            X_l2 = np.transpose(X_l2, (0, 3, 1, 2))
             save_path = os.path.join(FLAGS.samples_dir,
                                      'epoch_orig-%d.png' % batch_index)
             save_images(image, save_path)

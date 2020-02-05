@@ -13,7 +13,8 @@ from absl import flags
 import lib
 from data import load_mnist
 from lib.attack_l2 import OptimizerL2
-from lib.utils import (MetricsDictionary, compute_norms, log_metrics,
+from lib.utils import (MetricsDictionary, compute_norms,
+                       get_acc_for_lp_threshold, log_metrics,
                        make_input_pipeline, register_experiment_flags,
                        reset_metrics, save_images, select_balanced_subset,
                        setup_experiment)
@@ -65,7 +66,8 @@ def main(unused_args):
         indices = indices[ys_indices]
 
     test_ds = tf.data.Dataset.from_tensor_slices((x_test, y_test, indices))
-    test_ds = make_input_pipeline(test_ds, shuffle=False,
+    test_ds = make_input_pipeline(test_ds,
+                                  shuffle=False,
                                   batch_size=FLAGS.batch_size)
 
     # models
@@ -102,35 +104,14 @@ def main(unused_args):
     def test_step(image, label, batch_index):
         label_onehot = tf.one_hot(label, num_classes)
         image_l2 = ol2(image, label_onehot)
-        # measure norm
-        l2, l2_norm = compute_norms(image, image_l2)
-
-        image_l2_0_5 = tf.where(tf.reshape(l2 <= 0.5, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_1 = tf.where(tf.reshape(l2 <= 1.0, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_1_5 = tf.where(tf.reshape(l2 <= 1.5, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_2_0 = tf.where(tf.reshape(l2 <= 2.0, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_2_5 = tf.where(tf.reshape(l2 <= 2.5, (-1, 1, 1, 1)), image_l2, image)
-        image_l2_3_0 = tf.where(tf.reshape(l2 <= 3.0, (-1, 1, 1, 1)), image_l2, image)
 
         outs = test_classifier(image)
         outs_l2 = test_classifier(image_l2)
-        outs_l2_0_5 = test_classifier(image_l2_0_5)
-        outs_l2_1 = test_classifier(image_l2_1)
-        outs_l2_1_5 = test_classifier(image_l2_1_5)
-        outs_l2_2_0 = test_classifier(image_l2_2_0)
-        outs_l2_2_5 = test_classifier(image_l2_2_5)
-        outs_l2_3_0 = test_classifier(image_l2_3_0)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
         acc_l2 = acc_fn(label, outs_l2["logits"])
-        acc_l2_0_5 = acc_fn(label, outs_l2_0_5["logits"])
-        acc_l2_1 = acc_fn(label, outs_l2_1["logits"])
-        acc_l2_1_5 = acc_fn(label, outs_l2_1_5["logits"])
-        acc_l2_2_0 = acc_fn(label, outs_l2_2_0["logits"])
-        acc_l2_2_5 = acc_fn(label, outs_l2_2_5["logits"])
-        acc_l2_3_0 = acc_fn(label, outs_l2_3_0["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
@@ -138,20 +119,19 @@ def main(unused_args):
         test_metrics["conf"](outs["conf"])
         test_metrics["acc_l2"](acc_l2)
         test_metrics["conf_l2"](outs_l2["conf"])
-        test_metrics["acc_l2_0.5"](acc_l2_0_5)
-        test_metrics["acc_l2_1.0"](acc_l2_1)
-        test_metrics["acc_l2_1.5"](acc_l2_1_5)
-        test_metrics["acc_l2_2.0"](acc_l2_2_0)
-        test_metrics["acc_l2_2.5"](acc_l2_2_5)
-        test_metrics["acc_l2_3.0"](acc_l2_3_0)
 
+        # measure norm
+        l2, l2_norm = compute_norms(image, image_l2)
+        for threshold in [0.5, 1.0, 1.5, 2.0, 2.5, 3.0]:
+            acc_th = get_acc_for_lp_threshold(
+                lambda x: test_classifier(x)['logits'], image, image_l2, label,
+                l2, threshold)
+            test_metrics["acc_l2_%.2f" % threshold](acc_th)
         test_metrics["l2"](l2)
-        test_metrics["l2_norm"](l2_norm)
         # exclude incorrectly classified
         is_corr = outs['pred'] == label
         test_metrics["l2_corr"](l2[is_corr])
-
-        # summaries
+        test_metrics["l2_norm"](l2_norm)
         tf.summary.scalar("l2", tf.reduce_mean(l2), batch_index)
         tf.summary.scalar("l2_norm", tf.reduce_mean(l2_norm), batch_index)
 
