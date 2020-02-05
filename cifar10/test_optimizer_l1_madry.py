@@ -12,17 +12,16 @@ from absl import flags
 
 import lib
 from data import load_cifar10
-from lib.attack_l2 import OptimizerL2
-from lib.utils import (MetricsDictionary, compute_norms,
-                       get_acc_for_lp_threshold, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, select_balanced_subset,
-                       setup_experiment)
+from lib.attack_l1 import OptimizerL1
+from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold, l1_metric,
+                       log_metrics, make_input_pipeline,
+                       register_experiment_flags, reset_metrics, save_images,
+                       select_balanced_subset, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="test_l2")
+register_experiment_flags(working_dir="test_l1")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -38,7 +37,6 @@ flags.DEFINE_string("attack_r0_init", "normal", "r0 initializer")
 flags.DEFINE_float("attack_tol", 5e-3, "attack tolerance")
 flags.DEFINE_float("attack_confidence", 0, "margin confidence of adversarial examples")
 flags.DEFINE_float("attack_initial_const", 1e2, "initial const for attack")
-flags.DEFINE_bool("attack_multitargeted", False, "use multitargeted attack")
 flags.DEFINE_bool("attack_proxy_constrain", True, "use proxy for lagrange multiplier maximization")
 
 flags.DEFINE_boolean("generate_summary", False, "generate summary images")
@@ -52,7 +50,7 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
-    setup_experiment("madry_l2_test", [lib.attack_l2.__file__])
+    setup_experiment("madry_l1_test", [lib.attack_l1.__file__])
 
     # data
     _, _, test_ds = load_cifar10(FLAGS.validation_size)
@@ -84,11 +82,10 @@ def main(unused_args):
                model_type=model_type)
 
     # attacks
-    ol2 = OptimizerL2(lambda x: test_classifier(x)["logits"],
+    ol1 = OptimizerL1(lambda x: test_classifier(x)["logits"],
                       batch_size=FLAGS.batch_size,
                       confidence=FLAGS.attack_confidence,
                       targeted=False,
-                      multitargeted=FLAGS.attack_multitargeted,
                       r0_init=FLAGS.attack_r0_init,
                       max_iterations=FLAGS.attack_max_iter,
                       min_restart_iterations=FLAGS.attack_min_restart_iter,
@@ -105,41 +102,40 @@ def main(unused_args):
     @tf.function
     def test_step(image, label, batch_index):
         label_onehot = tf.one_hot(label, num_classes)
-        image_l2 = ol2(image, label_onehot)
+        image_l1 = ol1(image, label_onehot)
 
         outs = test_classifier(image)
-        outs_l2 = test_classifier(image_l2)
+        outs_l1 = test_classifier(image_l1)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
-        acc_l2 = acc_fn(label, outs_l2["logits"])
+        acc_l1 = acc_fn(label, outs_l1["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics["acc_l2"](acc_l2)
-        test_metrics["conf_l2"](outs_l2["conf"])
+        test_metrics["acc_l1"](acc_l1)
+        test_metrics["conf_l2"](outs_l1["conf"])
 
         # measure norm
-        l2, l2_norm = compute_norms(image, image_l2)
-        for threshold in [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1.0, 1.25]:
+        l1 = l1_metric(image - image_l1)
+        tf.summary.scalar("l1", tf.reduce_mean(l1), batch_index)
+        for threshold in [
+                2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 8.75, 9.0, 10.0, 12.0, 12.5,
+                15.0, 16.25, 20.0
+        ]:
             acc_th = get_acc_for_lp_threshold(
-                lambda x: test_classifier(x)['logits'], image, image_l2, label,
-                l2, threshold)
+                lambda x: test_classifier(x)['logits'], image, image_l1, label,
+                l1, threshold)
             test_metrics["acc_l2_%.2f" % threshold](acc_th)
-
-        test_metrics["l2"](l2)
-        test_metrics["l2"](l2)
-        test_metrics["l2_norm"](l2_norm)
+        test_metrics["l1"](l1)
         # exclude incorrectly classified
         is_corr = outs['pred'] == label
-        test_metrics["l2_corr"](l2[is_corr])
-        tf.summary.scalar("l2", tf.reduce_mean(l2), batch_index)
-        tf.summary.scalar("l2_norm", tf.reduce_mean(l2_norm), batch_index)
+        test_metrics["l1_corr"](l1[is_corr])
 
-        return image_l2
+        return image_l1
 
     summary_writer = tf.summary.create_file_writer(FLAGS.working_dir)
     summary_writer.set_as_default()
@@ -151,11 +147,11 @@ def main(unused_args):
             x_test, y_test, num_classes, num_classes)
         summary_images = tf.convert_to_tensor(summary_images)
         summary_labels = tf.convert_to_tensor(summary_labels)
-        summary_l2_imgs = test_step(summary_images, summary_labels, -1)
+        summary_l1_imgs = test_step(summary_images, summary_labels, -1)
         save_path = os.path.join(FLAGS.samples_dir, 'orig.png')
         save_images(summary_images.numpy(), save_path)
-        save_path = os.path.join(FLAGS.samples_dir, 'li.png')
-        save_images(summary_l2_imgs.numpy(), save_path)
+        save_path = os.path.join(FLAGS.samples_dir, 'l1.png')
+        save_images(summary_l1_imgs.numpy(), save_path)
         log_metrics(
             test_metrics,
             "Summary results [{:.2f}s]:".format(time.time() - start_time))
@@ -163,21 +159,23 @@ def main(unused_args):
         logging.debug("Skipping summary...")
 
     reset_metrics(test_metrics)
-    X_l2_list = []
+    X_l1_list = []
     y_list = []
     indx_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label, indx) in enumerate(test_ds, 1):
-            X_l2 = test_step(image, label, batch_index)
+            X_l1 = test_step(image, label, batch_index)
+            image = np.transpose(image, (0, 3, 1, 2))
+            X_l1 = np.transpose(X_l1, (0, 3, 1, 2))
             save_path = os.path.join(FLAGS.samples_dir,
                                      'epoch_orig-%d.png' % batch_index)
             save_images(image, save_path)
             save_path = os.path.join(FLAGS.samples_dir,
-                                     'epoch_l2-%d.png' % batch_index)
-            save_images(X_l2, save_path)
+                                     'epoch_l1-%d.png' % batch_index)
+            save_images(X_l1, save_path)
             # save adversarial data
-            X_l2_list.append(X_l2)
+            X_l1_list.append(X_l1)
             y_list.append(label)
             indx_list.append(indx)
             if batch_index % FLAGS.print_frequency == 0:
@@ -194,11 +192,11 @@ def main(unused_args):
             test_metrics,
             "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                  batch_index))
-        X_l2_all = tf.concat(X_l2_list, axis=0).numpy()
+        X_l1_all = tf.concat(X_l1_list, axis=0).numpy()
         y_all = tf.concat(y_list, axis=0).numpy()
         indx_list = tf.concat(indx_list, axis=0).numpy()
         np.savez(Path(FLAGS.working_dir) / 'X_adv',
-                 X_adv=X_l2_all,
+                 X_adv=X_l1_all,
                  y=y_all,
                  indices=indx_list)
 
