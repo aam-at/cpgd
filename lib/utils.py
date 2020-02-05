@@ -242,6 +242,13 @@ def l2_normalize(d, axes=None, epsilon=1e-12):
     return tf.multiply(d, d_inv_norm)
 
 
+def get_acc_for_lp_threshold(model, image_o, image_m, label, lp, threshold):
+    image_th = tf.where(tf.reshape(lp <= threshold, (-1, 1, 1, 1)), image_m, image_o)
+    logits_th = model(image_th)
+    acc_th = tf.keras.metrics.sparse_categorical_accuracy(label, logits_th)
+    return acc_th
+
+
 def entropy(l):
     p = tf.nn.softmax(l)
     lp = tf.nn.log_softmax(l)
