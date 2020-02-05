@@ -37,12 +37,14 @@ def load_madry(load_dir, model_vars, model_type="plain"):
         del mapping["A10"]
         del mapping["A11"]
     for var_name in sorted(w.keys()):
-        if not var_name.startswith("A"):
+        if var_name.startswith("__"):
             continue
         var = w[var_name]
         if var.ndim == 2:
             var = var.squeeze()
         model_var_name = mapping[var_name]
+        if "bias" in model_var_name and model_type == "plain":
+            var = -var
         model_var = [v for v in model_vars if v.name == model_var_name]
         assert len(model_var) == 1
         model_var[0].assign(var)

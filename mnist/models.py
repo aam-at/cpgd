@@ -52,6 +52,7 @@ class TradesCNN(tf.keras.Model):
 
 
 class MadryCNN(tf.keras.Model):
+    # Model trained using adversarial training with projected gradient attack
     def __init__(self):
         super(MadryCNN, self).__init__()
 

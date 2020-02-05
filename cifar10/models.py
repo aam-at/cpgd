@@ -7,6 +7,7 @@ FLAGS = flags.FLAGS
 
 
 class MadryCNN(tf.keras.Model):
+    # Model trained using adversarial training with projected gradient attack
     def __init__(self, model_type='plain'):
         self.model_type = model_type
         super(MadryCNN, self).__init__()

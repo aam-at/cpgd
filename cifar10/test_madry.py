@@ -11,15 +11,10 @@ from absl import flags
 
 from data import load_cifar10
 from lib.attack import DeepFool, FastGradientMethod, HighConfidenceAttack
-from lib.utils import (
-    MetricsDictionary,
-    compute_norms,
-    log_metrics,
-    make_input_pipeline,
-    register_experiment_flags,
-    save_images,
-    setup_experiment,
-)
+from lib.utils import (MetricsDictionary, compute_norms,
+                       get_acc_for_lp_threshold, log_metrics,
+                       make_input_pipeline, register_experiment_flags,
+                       save_images, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
@@ -165,6 +160,20 @@ def main(unused_args):
         image_at1 = at1(image, label)
         image_at2 = at2(image, label)
 
+        # measure norm
+        l2_df, l2_df_norm = compute_norms(image, image_df)
+        for threshold in [
+                0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1.0, 1.25
+        ]:
+            acc_th = get_acc_for_lp_threshold(
+                lambda x: test_classifier(x)['logits'],
+                image,
+                image_df,
+                label,
+                l2_df,
+                threshold=threshold)
+            test_metrics["acc_l2_%.2f" % threshold](acc_th)
+
         outs = test_classifier(image)
         outs_df = test_classifier(image_df)
         outs_hc = test_classifier(image_hc)
@@ -191,7 +200,6 @@ def main(unused_args):
         test_metrics["psnr_df"](psnr_df[~tf.math.is_nan(psnr_df)])
         test_metrics["ssim_df"](tf.image.ssim(image, image_df, max_val=1.0))
 
-        l2_df, l2_df_norm = compute_norms(image, image_df)
         test_metrics["l2_df"](l2_df)
         test_metrics["l2_df_norm"](l2_df_norm)
 
