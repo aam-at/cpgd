@@ -69,7 +69,7 @@ def to_ascii(v):
     return nv
 
 
-def org_table(df, compute_stat=True, decimals=6):
+def org_table(df, compute_stat=False, decimals=6):
     org_table = ([None] + [list(df)] + [None] + to_ascii(df.values.tolist()) +
                  [None])
     if compute_stat:
