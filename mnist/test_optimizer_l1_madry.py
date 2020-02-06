@@ -127,7 +127,7 @@ def main(unused_args):
             acc_th = get_acc_for_lp_threshold(
                 lambda x: test_classifier(x)['logits'], image, image_l1, label,
                 l1, threshold)
-            test_metrics["acc_l2_%.2f" % threshold](acc_th)
+            test_metrics["acc_l1_%.2f" % threshold](acc_th)
         test_metrics["l1"](l1)
         # exclude incorrectly classified
         is_corr = outs['pred'] == label

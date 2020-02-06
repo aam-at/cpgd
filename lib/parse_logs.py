@@ -1,5 +1,7 @@
 # -*- coding: utf-8 -*-
+import ast
 import glob
+import json
 import os
 import re
 import sys
@@ -10,13 +12,23 @@ import numpy as np
 import pandas as pd
 from absl import flags
 
-from .utils import load_params
-
 FLOAT_REGEXP = '[-+]?(\d+(\.\d*)?|\.\d+)([eE][-+]?\d+)?'
 
 flags.DEFINE_string("wildcard", None, "directories to parse logs")
 
 FLAGS = flags.FLAGS
+
+
+def load_params(str):
+    try:
+        return ast.literal_eval(str)
+    except:
+        return json.loads(str)
+
+
+def load_training_params(path):
+    with open(os.path.join(path, 'tensorflow.log'), 'r') as f:
+        return load_params(f.readline())
 
 
 def parse_float_value(id, text):
@@ -58,7 +70,8 @@ def to_ascii(v):
 
 
 def org_table(df, compute_stat=True, decimals=6):
-    org_table = ([None] + [list(df)] + [None] + to_ascii(df.values.tolist()) + [None])
+    org_table = ([None] + [list(df)] + [None] + to_ascii(df.values.tolist()) +
+                 [None])
     if compute_stat:
         df_stat = df.agg([np.mean, np.std])
         df_stat_list = df_stat.values.tolist()
@@ -68,9 +81,13 @@ def org_table(df, compute_stat=True, decimals=6):
     return round(org_table, decimals)
 
 
-def org_group_and_summarize(df, group_by=None, sort_groups=False,
-                            sort_keys=('err', 'l2_df'), decimals=6):
+def org_group_and_summarize(df,
+                            group_by=None,
+                            sort_groups=False,
+                            sort_keys=('err', 'l2_df'),
+                            decimals=6):
     if group_by is None:
+
         def group_by(id):
             name = df.get_value(id, "name")
             try:
@@ -84,11 +101,13 @@ def org_group_and_summarize(df, group_by=None, sort_groups=False,
         df.drop(group_by, axis=1, inplace=True)
 
     if sort_groups:
+
         def sort_key(item):
             name, group = item
             group_stat = group.agg([np.mean])
             key = group_stat[sort_keys[0]] / group_stat[sort_keys[1]]
             return key[0]
+
         groups = sorted(groups, key=sort_key, reverse=False)
 
     org_table = [None] + [list(df)]
@@ -118,8 +137,11 @@ def org_group_and_summarize(df, group_by=None, sort_groups=False,
     return round(org_table, decimals)
 
 
-def parse_test_log(wildcard, exclude=None, export_org=False,
-                   export_params=None, sort_rows=True):
+def parse_test_log(wildcard,
+                   exclude=None,
+                   export_org=False,
+                   export_params=None,
+                   sort_rows=True):
     fields = [
         'nll', 'acc', 'conf', 'acc_at1', 'acc_at2', 'acc_df', 'l2_df',
         'l2_df_norm', 'conf_df', 'psnr_df', 'ssim_df'
@@ -171,8 +193,11 @@ def parse_test_log(wildcard, exclude=None, export_org=False,
         return df
 
 
-def parse_test_corruptions_log(wildcard, exclude=None, export_org=False,
-                               export_params=None, sort_rows=True):
+def parse_test_corruptions_log(wildcard,
+                               exclude=None,
+                               export_org=False,
+                               export_params=None,
+                               sort_rows=True):
     fields = ['acc_corr']
     sub_fields = ['acc', 'conf']
     if exclude is not None:
@@ -201,7 +226,8 @@ def parse_test_corruptions_log(wildcard, exclude=None, export_org=False,
                 final_results = re.findall("(?=Mean accuracy: ).*", text)[0]
 
             curr_value = [name]
-            curr_value.append(float(re.findall(FLOAT_REGEXP, final_results)[0][0]))
+            curr_value.append(
+                float(re.findall(FLOAT_REGEXP, final_results)[0][0]))
             for test_result in test_results:
                 name = re.findall("\((.*)\)", test_result)[0]
                 for f in sub_fields:
@@ -232,7 +258,9 @@ def parse_test_corruptions_log(wildcard, exclude=None, export_org=False,
         return df
 
 
-def parse_test_optimizer_l2_log(root, exclude=None, export_org=False,
+def parse_test_optimizer_l2_log(root,
+                                exclude=None,
+                                export_org=False,
                                 export_test_params=None):
     fields = [
         'nll_loss', 'acc', 'acc_l2', 'acc_l2_0.5', 'acc_l2_1.0', 'acc_l2_1.5',
@@ -280,22 +308,17 @@ def parse_test_optimizer_l2_log(root, exclude=None, export_org=False,
         return df
 
 
-def parse_test_optimizer_l1_log(root, exclude=None, export_org=False,
+def parse_test_optimizer_l1_log(root,
+                                exclude=None,
+                                export_org=False,
                                 export_test_params=None):
-    fields = [
-        'nll_loss', 'acc', 'acc_l1', 'acc_l1_2.0', 'acc_l1_2.5', 'acc_l1_4.0',
-        'acc_l1_5.0', 'acc_l1_6.0', 'acc_l1_7.5', 'acc_l1_8.0', 'acc_l1_8.75',
-        'acc_l1_10.0', 'acc_l1_12.5', 'acc_l1_16.25', 'acc_l1_20.0', 'l1',
-        'l1_corr'
-    ]
-    if exclude is not None:
-        for f in exclude:
-            fields.remove(f)
+    if exclude is None:
+        exclude = []
     if export_test_params is None:
         export_test_params = []
 
     failed = []
-    values = []
+    test_results = []
     for index, load_dir in enumerate(sorted(Path(root).glob('*'))):
         load_dir = str(load_dir)
         with open(os.path.join(load_dir, 'tensorflow.log'), 'r') as f:
@@ -305,35 +328,38 @@ def parse_test_optimizer_l1_log(root, exclude=None, export_org=False,
         name = os.path.basename(load_dir)
 
         try:
-            test_results = re.findall("(?<=Test results).*", text)[-1]
+            test_results_str = re.findall("(?<=Test results).*", text)[-1]
+            test_results_str = test_results_str[test_results_str.find(":") + 1:]
+            test_values_with_name = test_results_str.split(',')
+            test_result = {'name': name}
+            for test_value_with_name in test_values_with_name:
+                test_name, test_value = test_value_with_name.split(":")
+                test_name = test_name.strip()
+                test_value = float(test_value)
+                if test_name not in exclude:
+                    test_result[test_name] = float(test_value)
 
-            def parse_values(s):
-                for field in fields:
-                    curr_value.append(parse_float_value(field, s))
-
-            curr_value = [name]
-            parse_values(test_results)
             for param_name in export_test_params:
-                curr_value.append(test_params[param_name])
-            values.append(tuple(curr_value))
+                test_result[param_name] = test_params[param_name]
+            test_results.append(test_result)
         except:
             failed.append(load_dir)
 
     if len(failed) > 0:
         print("Failed to parse directories: %s" % failed)
 
-    columns = (['name'] + fields + export_test_params)
-    df = pd.DataFrame(values, columns=columns)
+    df = pd.DataFrame.from_dict(test_results)
     if export_org:
         return org_table(df)
     else:
         return df
 
 
-def parse_test_carlini_log(root, exclude=None, export_org=False,
+def parse_test_carlini_log(root,
+                           exclude=None,
+                           export_org=False,
                            export_test_params=None):
-    fields = ['nll', 'acc', 'acc_ca', 'conf_ca',
-              'l2_ca', 'l2_ca_norm']
+    fields = ['nll', 'acc', 'acc_ca', 'conf_ca', 'l2_ca', 'l2_ca_norm']
     if exclude is not None:
         for f in exclude:
             fields.remove(f)
@@ -379,28 +405,5 @@ def parse_test_carlini_log(root, exclude=None, export_org=False,
         return df
 
 
-def main(unused_args):
-    np.random.seed(1)
-    if FLAGS.wildcard is None:
-        return
-
-    if not FLAGS.wildcard.endswith("*"):
-        FLAGS.wildcard += "*"
-
-    export_params = []
-    logs = parse_train_attack_log(FLAGS.wildcard, export_params=export_params)
-    print(logs)
-
-    def group_by(id):
-        name = logs.get_value(id, "name")
-        unique_name = re.findall("[^0-9]+", name)[0]
-        return unique_name
-
-    grouped = logs.groupby(group_by, axis=0)
-    for name, group in grouped:
-        print(name)
-        print(group.agg([np.mean, np.std]))
-
-
 if __name__ == '__main__':
-    absl.app.run(main)
+    pass
