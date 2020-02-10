@@ -1,0 +1,37 @@
+#+TITLE: Todos for cpgd project
+
+* TODOs
+** Mnist experiments
+*** DONE Import MNIST challenge model
+CLOSED: [2020-02-07 Fri 17:22]
+This model was already used in fab-paper.
+** General algorithm
+*** TODO Test different schedules to reduce sampling radius
+Plot with summary the average perturbation norm and observe what is crucial
+(rapid decay of the radius or having a search within large radius)
+**** Test the strategy where we decrease the radius and where we keep radius constant
+Fab used the fixed radius for sampling
+**** TODO Implement where initial const is computed on a random batch from the dataset
+Instead of using constant C compute C on the random batch and use for all
+consecutive runs
+**** TODO Compare different stopping thresholds
+Experiments how does the stopping thresholds impacts the performance vs
+different number of iterations
+*** TODO Implement Projected FISTA algorithm for l1 optimization
+*** TODO Implement linf algorithm
+** TODO Cifar10 experiments
+*** TODO Import Cifar10 challenge model
+** TODO Imagenet experiments
+*** TODO Import robust model trained on Restricted Imagenet
+** Main parameters of the algorithm
+- Number of iterations
+- Minimum number of iterations before restarting if the stopping condition is satisfied
+- Maximum number of iterations before random restart
+- Threshold for the first order optimality conditions
+- Initial const for optimization
+- Learning rate for primal and dual variables
+* Paper experiments
+** Robustness MNIST
+** Robustness CIFAR10
+** Robustness Imagenet
+** Robustness to corruptions

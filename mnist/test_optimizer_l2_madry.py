@@ -31,7 +31,7 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 flags.DEFINE_bool("sort_labels", False, "sort labels")
 
 # attack parameters
-flags.DEFINE_integer("attack_max_iter", 10000, "max iterations")
+flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
 flags.DEFINE_integer("attack_min_restart_iter", 10, "min iterations before random restart")
 flags.DEFINE_integer("attack_max_restart_iter", 100, "max iterations before random restart")
 flags.DEFINE_string("attack_r0_init", "normal", "r0 initializer")
@@ -149,15 +149,16 @@ def main(unused_args):
         summary_labels = tf.convert_to_tensor(summary_labels)
         summary_l2_imgs = test_step(summary_images, summary_labels, -1)
         save_path = os.path.join(FLAGS.samples_dir, 'orig.png')
-        save_images(summary_images.numpy(), save_path)
+        save_images(summary_images.numpy(), save_path, data_format="NHWC")
         save_path = os.path.join(FLAGS.samples_dir, 'l2.png')
-        save_images(summary_l2_imgs.numpy(), save_path)
+        save_images(summary_l2_imgs.numpy(), save_path, data_format="NHWC")
         log_metrics(
             test_metrics,
             "Summary results [{:.2f}s]:".format(time.time() - start_time))
     else:
         logging.debug("Skipping summary...")
 
+    # reset metrics
     reset_metrics(test_metrics)
     X_l2_list = []
     y_list = []
@@ -166,14 +167,12 @@ def main(unused_args):
     try:
         for batch_index, (image, label, indx) in enumerate(test_ds, 1):
             X_l2 = test_step(image, label, batch_index)
-            image = np.transpose(image, (0, 3, 1, 2))
-            X_l2 = np.transpose(X_l2, (0, 3, 1, 2))
             save_path = os.path.join(FLAGS.samples_dir,
                                      'epoch_orig-%d.png' % batch_index)
-            save_images(image, save_path)
+            save_images(image, save_path, data_format="NHWC")
             save_path = os.path.join(FLAGS.samples_dir,
                                      'epoch_l2-%d.png' % batch_index)
-            save_images(X_l2, save_path)
+            save_images(X_l2, save_path, data_format="NHWC")
             # save adversarial data
             X_l2_list.append(X_l2)
             y_list.append(label)
