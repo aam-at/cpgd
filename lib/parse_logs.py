@@ -85,11 +85,12 @@ def org_group_and_summarize(df,
                             group_by=None,
                             sort_groups=False,
                             sort_keys=('err', 'l2_df'),
+                            top_k=None,
                             decimals=6):
     if group_by is None:
 
         def group_by(id):
-            name = df.get_value(id, "name")
+            name = df.iat[id, 0]
             try:
                 unique_name = re.findall(".+(?=_.+)", name)[0]
             except:
@@ -112,6 +113,9 @@ def org_group_and_summarize(df,
                 return group_stat[sort_keys][0]
 
         groups = sorted(groups, key=sort_key, reverse=False)
+
+    if top_k is not None:
+        groups = groups[:top_k]
 
     org_table = [None] + [list(df)]
     org_table[1].insert(1, 'statistic')

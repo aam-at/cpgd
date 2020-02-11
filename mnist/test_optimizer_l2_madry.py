@@ -9,6 +9,7 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
+from tensorboard.plugins.hparams import api as hp
 
 import lib
 from data import load_mnist
@@ -136,13 +137,8 @@ def main(unused_args):
         # exclude incorrectly classified
         is_corr = outs['pred'] == label
         test_metrics["l2_corr"](l2[is_corr])
-        tf.summary.scalar("l2", tf.reduce_mean(l2), batch_index)
-        tf.summary.scalar("l2_norm", tf.reduce_mean(l2_norm), batch_index)
 
         return image_l2
-
-    summary_writer = tf.summary.create_file_writer(FLAGS.working_dir)
-    summary_writer.set_as_default()
 
     if FLAGS.generate_summary:
         start_time = time.time()
@@ -169,6 +165,7 @@ def main(unused_args):
     indx_list = []
     start_time = time.time()
     try:
+        is_completed = False
         for batch_index, (image, label, indx) in enumerate(test_ds, 1):
             X_l2 = test_step(image, label, batch_index)
             save_path = os.path.join(FLAGS.samples_dir,
@@ -187,7 +184,37 @@ def main(unused_args):
                         batch_index,
                         time.time() - start_time))
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
+                is_completed = True
                 break
+        else:
+            is_completed = True
+        if is_completed:
+            # hyperparameter tuning
+            with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
+                # hyperparameters
+                hp_param_names = [
+                    'attack_max_iter', 'attack_tol', 'attack_learning_rate',
+                    'attack_lambda_learning_rate', 'attack_initial_const'
+                ]
+                hp_metric_names = ['final_l2', 'final_l2_corr']
+                hp_params = [
+                    hp.HParam(hp_param_name)
+                    for hp_param_name in hp_param_names
+                ]
+                hp_metrics = [
+                    hp.Metric(hp_metric_name)
+                    for hp_metric_name in hp_metric_names
+                ]
+                hp.hparams_config(hparams=hp_params, metrics=hp_metrics)
+                hp.hparams({
+                    hp_param_name: getattr(FLAGS, hp_param_name)
+                    for hp_param_name in hp_param_names
+                })
+                final_l2 = test_metrics['l2'].result()
+                tf.summary.scalar('final_l2', final_l2, step=1)
+                final_l2_corr = test_metrics['l2_corr'].result()
+                tf.summary.scalar('final_l2_corr', final_l2_corr, step=1)
+                tf.summary.flush()
     except:
         logging.info("Stopping after {}".format(batch_index))
     finally:
