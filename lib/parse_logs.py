@@ -105,8 +105,11 @@ def org_group_and_summarize(df,
         def sort_key(item):
             name, group = item
             group_stat = group.agg([np.mean])
-            key = group_stat[sort_keys[0]] / group_stat[sort_keys[1]]
-            return key[0]
+            if isinstance(sort_keys, (list, tuple)):
+                assert len(sort_keys) == 2
+                return (group_stat[sort_keys[0]] / group_stat[sort_keys[1]])[0]
+            else:
+                return group_stat[sort_keys][0]
 
         groups = sorted(groups, key=sort_key, reverse=False)
 
