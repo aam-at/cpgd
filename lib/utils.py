@@ -192,6 +192,16 @@ def log_tensorboard_metrics(metrics, prefix=None, step=None):
         tf.summary.scalar(f"{prefix}{metric_name}", metric_value, step)
 
 
+def project_log_distribution_wrt_kl_divergence(log_distribution, axis=1):
+    # For numerical reasons, make sure that the largest element is zero before
+    # exponentiating.
+    log_distribution = log_distribution - tf.reduce_max(
+        log_distribution, axis=axis, keepdims=True)
+    log_distribution = log_distribution - tf.math.log(
+        tf.reduce_sum(tf.exp(log_distribution), axis=axis, keepdims=True))
+    return log_distribution
+
+
 def li_metric(x, epsilon=1e-12, axes=None, keepdims=False):
     """Stable l2 normalization
     """
