@@ -1,7 +1,9 @@
 from __future__ import absolute_import, division, print_function
 
 import importlib
-import os.path
+import itertools
+import subprocess
+from pathlib import Path
 
 import numpy as np
 import six
@@ -24,17 +26,21 @@ def get_tmpl_str(script_name, **flags):
 
 def generate_test_optimizer(script_name, load_from, **kwargs):
     tmpl_str = get_tmpl_str(script_name, **kwargs)
-    assert os.path.exists(load_from)
+    assert Path(f"{script_name}.py").exists()
+    assert Path(load_from).exists()
     return "{} --load_from={}".format(tmpl_str, load_from)
 
 
 def generate_test_optimizer_l2(load_from, **kwargs):
-    return generate_test_optimizer('test_optimizer_l2_madry', load_from, **kwargs)
+    return generate_test_optimizer('test_optimizer_l2_madry', load_from,
+                                   **kwargs)
 
 
 def generate_test_optimizer_l1(load_from, **kwargs):
-    return generate_test_optimizer('test_optimizer_l1_madry', load_from, **kwargs)
+    return generate_test_optimizer('test_optimizer_l1_madry', load_from,
+                                   **kwargs)
 
 
 if __name__ == '__main__':
+    hostname = subprocess.getoutput('hostname')
     pass
