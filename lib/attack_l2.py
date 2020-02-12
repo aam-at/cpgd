@@ -156,7 +156,6 @@ class OptimizerL2(object):
                 l2_loss = tf.reduce_sum(tf.square(r), axis=(1, 2, 3))
                 # Part 2: classification loss
                 cls_con = margin(logits_hat, y_onehot, targeted=targeted)
-                # loss = tf.nn.relu(cls_con)
                 state_distr = tf.exp(state)
                 loss = (state_distr[:, 0] * l2_loss +
                         state_distr[:, 1] * tf.nn.relu(cls_con))
