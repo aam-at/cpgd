@@ -128,7 +128,10 @@ class OptimizerL2(object):
         bestl2 = self.bestl2
         attack = self.attack
         iterations = self.iterations
-        curr_iter = tf.Variable(0, dtype=tf.int64)
+
+        # indices of the correct predictions
+        y = tf.argmax(y_onehot, axis=-1)
+        corr = prediction(self.model(X)) != y
 
         def margin(logits, y_onehot, targeted=False):
             real = tf.reduce_sum(y_onehot * logits, 1)
@@ -222,9 +225,12 @@ class OptimizerL2(object):
                                         direction='DESCENDING')
             for t in tf.split(sorted_targets[:, :-1], num_classes - 1,
                               axis=-1):
-                t_onehot = tf.one_hot(tf.reshape(t, (-1, )), num_classes)
                 # reset optimizer and variables
                 self._reset(X)
+                t_onehot = tf.one_hot(tf.reshape(t, (-1, )), num_classes)
+                # only compute perturbation for correctly classified inputs
+                bestl2.scatter_update(
+                    to_indexed_slices(tf.zeros_like(bestl2), batch_indices, corr))
                 for iteration in range(1, self.max_iterations + 1):
                     optim_constrained(X, t_onehot, targeted=True)
                 best_targeted_l2.append(bestl2.read_value())
@@ -242,8 +248,6 @@ class OptimizerL2(object):
             # reset optimizer and variables
             self._reset(X)
             # only compute perturbation for correctly classified inputs
-            y = tf.argmax(y_onehot, axis=-1)
-            corr = prediction(self.model(X)) != y
             bestl2.scatter_update(
                 to_indexed_slices(tf.zeros_like(bestl2), batch_indices, corr))
             for iteration in range(1, self.max_iterations + 1):
