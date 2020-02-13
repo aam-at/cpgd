@@ -19,6 +19,12 @@ Experiments how does the stopping thresholds impacts the performance vs
 different number of iterations
 *** TODO Implement Projected FISTA algorithm for l1 optimization
 *** TODO Implement linf algorithm
+*** TODO Use iterative thresholding algorithm instead of previous clipping
+*** TODO Set initial const on the warm up batch
+Does not help or helps only slightly. Make whole algorithm a little bit more
+complicated.
+Set it instead to the small value, like the problem is unconstrained
+*** TODO Make a connection to multiplicative updates external regret minimization
 ** TODO Cifar10 experiments
 *** TODO Import Cifar10 challenge model
 ** TODO Imagenet experiments
