@@ -4,7 +4,8 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from .utils import (li_metric, prediction,
+from .attack_utils import random_lp_vector
+from .utils import (l2_metric, l2_normalize, li_metric, prediction,
                     project_log_distribution_wrt_kl_divergence,
                     to_indexed_slices)
 
@@ -17,20 +18,19 @@ class OptimizerL2(object):
         model,
         batch_size=1,
         # parameters for the optimizer
-        learning_rate=5e-2,
-        lambda_learning_rate=1e-2,
+        learning_rate=1e-2,
+        lambda_learning_rate=1e-1,
         max_iterations=10000,
         # parameters for the attack
-        r0_init='zeros',
         confidence=0.0,
         targeted=False,
         multitargeted=False,
         # parameters for random restarts
-        tol=5e-3,
-        min_restart_iterations=10,
-        max_restart_iterations=100,
+        tol=1e-3,
+        min_restart_iterations=100,
+        sampling_radius=None,
         # parameters for non-convex constrained minimization
-        initial_const=None,
+        initial_const=0.1,
         minimal_const=1e-6,
         use_proxy_constraint=False,
         boxmin=0.0,
@@ -48,7 +48,6 @@ class OptimizerL2(object):
         self.lambda_learning_rate = lambda_learning_rate
         self.max_iterations = max_iterations
         # parameters for the attack
-        self.r0_init = r0_init
         self.confidence = confidence
         self.targeted = targeted
         if multitargeted:
@@ -57,7 +56,9 @@ class OptimizerL2(object):
         # parameters for the random restarts
         self.tol = tol
         self.min_restart_iterations = min_restart_iterations
-        self.max_restart_iterations = max_restart_iterations
+        if sampling_radius is not None:
+            assert sampling_radius >= 0
+        self.sampling_radius = sampling_radius
         # parameters for non-convex constrained optimization
         self.initial_const = (minimal_const
                               if initial_const is None else initial_const)
@@ -79,14 +80,13 @@ class OptimizerL2(object):
         self.optimizer = tf.keras.optimizers.Adam(self.learning_rate)
         self.constrained_optimizer = tf.keras.optimizers.Adam(
             self.lambda_learning_rate)
-        # attack parameters
+        # attack variables
         self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="ol2_r")
         self.state = tf.Variable(
             tf.zeros((batch_size, 2)),
             trainable=True,
             constraint=project_log_distribution_wrt_kl_divergence,
             name="state")
-        # attack variables
         self.iterations = tf.Variable(tf.zeros(batch_size), trainable=False)
         self.attack = tf.Variable(tf.zeros(X_shape),
                                   trainable=False,
@@ -96,16 +96,23 @@ class OptimizerL2(object):
                                   name="best_l2")
         self.built = True
 
+    def _init_r(self, X):
+        if self.sampling_radius is not None and self.sampling_radius > 0:
+            r0 = random_lp_vector(X.shape, 2, self.sampling_radius)
+        else:
+            r0 = tf.zeros(X.shape)
+        return r0
+
     def _reset(self, X):
         X_shape = X.shape
         batch_size = X_shape[0]
         initial_one = np.log(1 - self.initial_const)
         initial_zero = np.log(self.initial_const)
+        self.r.assign(self._init_r(X))
         self.state.assign(
             np.stack((np.ones(batch_size) * initial_one,
                       np.ones(batch_size) * initial_zero),
                      axis=1))
-        self.r.assign(tf.keras.initializers.get(self.r0_init)(X_shape))
         self.iterations.assign(tf.zeros(batch_size))
         self.attack.assign(X)
         self.bestl2.assign(1e10 * tf.ones(batch_size))
@@ -117,17 +124,17 @@ class OptimizerL2(object):
 
     def _call(self, X, y_onehot):
         ## get variables
-        r = self.r
         batch_size = X.shape[0]
         batch_indices = self.batch_indices
         num_classes = y_onehot.shape[-1]
 
         optimizer = self.optimizer
         constrained_optimizer = self.constrained_optimizer
+        r = self.r
         state = self.state
-        bestl2 = self.bestl2
-        attack = self.attack
         iterations = self.iterations
+        attack = self.attack
+        bestl2 = self.bestl2
 
         # indices of the correct predictions
         y = tf.argmax(y_onehot, axis=-1)
@@ -189,25 +196,15 @@ class OptimizerL2(object):
 
             # random restart
             if restarts:
-                curr_iter.assign_add(1)
-                # from utils import l2_metric
-                # is_conv = l2_metric(r - r_v) <= self.tol
-                # is_conv = l2_metric(r - r_v) / l2_metric(r) <= self.tol
-                is_conv = li_metric(r - r_v) <= self.tol
-                should_restart = tf.logical_or(
-                    tf.logical_and(tf.logical_and(is_conv, is_adv),
-                                   iterations > self.min_restart_iterations),
-                    iterations > self.max_restart_iterations)
-                bestr = attack - X
-                # random perturbation at current best perturbation
-                rs = tf.random.uniform(r.shape[1:], maxval=1.0)
-                pr = tf.cast(curr_iter / self.max_iterations, tf.float32)
-                scale = tf.minimum(tf.pow(1.0 - 1 / tf.sqrt(bestl2), pr),
-                                   1.0 - tf.pow(pr, 4))
-                rs *= tf.reshape(scale, (-1, 1, 1, 1))
-                rs = tf.clip_by_value(rs, 0.20, 1.0)
-                r0 = bestr + rs * tf.sign(tf.random.normal(r.shape))
-                r0 = tf.clip_by_value(X + r0, 0.0, 1.0) - X
+                is_conv = l2_metric(r - r_v) <= self.tol
+                is_not_best = tf.logical_and(
+                    l2_loss > bestl2,
+                    iterations >= self.min_restart_iterations)
+                # stopping condition: run for at least min_restart_iterations
+                # if it does not converges
+                should_restart = tf.logical_or(tf.logical_and(is_conv, is_adv),
+                                               is_not_best)
+                r0 = self._init_r(X)
                 r.scatter_update(
                     to_indexed_slices(r0, batch_indices, should_restart))
                 iterations.scatter_update(
@@ -255,13 +252,6 @@ class OptimizerL2(object):
                                   y_onehot,
                                   targeted=self.targeted,
                                   restarts=True)
-
-            # final finetuning
-            for iteration in range(1, self.max_iterations // 10 + 1):
-                optim_constrained(X,
-                                  y_onehot,
-                                  targeted=self.targeted,
-                                  restarts=False)
 
             return attack.read_value()
 

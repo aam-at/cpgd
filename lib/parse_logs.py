@@ -89,15 +89,15 @@ def org_group_and_summarize(df,
                             decimals=6):
     if group_by is None:
 
-        def group_by(id):
-            name = df.iat[id, 0]
+        def get_unique_name(name):
             try:
                 unique_name = re.findall(".+(?=_.+)", name)[0]
             except:
                 unique_name = re.findall(".+(?=\d+)", name)[0]
             return unique_name
 
-    groups = df.groupby(group_by, axis=0)
+    df['group_name'] = [group_by(n) for n in df['name']]
+    groups = df.groupby('group_name', axis=0)
     if isinstance(group_by, (list, tuple)):
         df.drop(group_by, axis=1, inplace=True)
 
@@ -125,6 +125,7 @@ def org_group_and_summarize(df,
         org_table.append(None)
         group_stat = group.agg([np.mean, np.std, np.min, np.max])
         group_stat.drop(["name"], axis=1, inplace=True)
+        group_stat.drop(["group_name"], axis=1, inplace=True)
         group_stat_list = group_stat.values.tolist()
         group_stat_list[0].insert(0, 'mean')
         group_stat_list[1].insert(0, 'std')
