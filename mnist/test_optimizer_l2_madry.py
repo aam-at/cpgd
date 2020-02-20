@@ -38,7 +38,8 @@ flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
 flags.DEFINE_integer("attack_min_iter_per_start", 0, "min iterations before random restart")
 flags.DEFINE_integer("attack_max_iter_per_start", 0, "max iterations before random restart")
 flags.DEFINE_float("attack_tol", 0.005, "attack tolerance")
-flags.DEFINE_bool("attack_floor", False, "attack floor multiple of tolerance")
+flags.DEFINE_float("attack_round_tol", 0.001, "round attack norm to multiples of")
+flags.DEFINE_string("attack_round_op", None, "attack rounding operation")
 flags.DEFINE_float("attack_sampling_radius", None, "attack sampling radius")
 flags.DEFINE_float("attack_confidence", 0, "margin confidence of adversarial examples")
 flags.DEFINE_float("attack_initial_const", 0.1, "initial const for attack")
@@ -98,7 +99,8 @@ def main(unused_args):
                       multitargeted=FLAGS.attack_multitargeted,
                       sampling_radius=FLAGS.attack_sampling_radius,
                       tol=FLAGS.attack_tol,
-                      floor=FLAGS.attack_floor,
+                      round_op=FLAGS.attack_round_op,
+                      round_tol=FLAGS.attack_round_tol,
                       initial_const=FLAGS.attack_initial_const,
                       use_proxy_constraint=FLAGS.attack_proxy_constrain)
 

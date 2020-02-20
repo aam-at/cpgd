@@ -185,7 +185,7 @@ class OptimizerL2(object):
             with tf.control_dependencies(
                 [optimizer.apply_gradients([(fg, r)])]):
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
-                if self.round_op is not None or self.round_op != 'none':
+                if self.round_op is not None and self.round_op != 'none':
                     r_norm = l2_metric(r, keepdims=True)
                     round_op = getattr(tf.math, self.round_op)
                     r.assign(
