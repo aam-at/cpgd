@@ -27,7 +27,10 @@ class OptimizerL2(object):
         multitargeted=False,
         # parameters for random restarts
         tol=1e-3,
-        min_restart_iterations=100,
+        round_tol=1e-3,
+        floor=False,
+        min_iterations_per_start=0,
+        max_iterations_per_start=100,
         sampling_radius=None,
         # parameters for non-convex constrained minimization
         initial_const=0.1,
@@ -55,7 +58,10 @@ class OptimizerL2(object):
         self.multitargeted = multitargeted
         # parameters for the random restarts
         self.tol = tol
-        self.min_restart_iterations = min_restart_iterations
+        self.round_tol = round_tol
+        self.floor = floor
+        self.min_iterations_per_start = min_iterations_per_start
+        self.max_iterations_per_start = max_iterations_per_start
         if sampling_radius is not None:
             assert sampling_radius >= 0
         self.sampling_radius = sampling_radius
@@ -177,6 +183,11 @@ class OptimizerL2(object):
             with tf.control_dependencies(
                 [optimizer.apply_gradients([(fg, r)])]):
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
+                if self.floor:
+                    r_norm = l2_metric(r, keepdims=True)
+                    r.assign(
+                        tf.math.ceil(r_norm / self.round_tol) *
+                        self.round_tol * l2_normalize(r))
 
             if self.use_proxy_constraint:
                 multipliers_gradients = -cls_con
@@ -197,13 +208,13 @@ class OptimizerL2(object):
             # random restart
             if restarts:
                 is_conv = l2_metric(r - r_v) <= self.tol
-                is_not_best = tf.logical_and(
-                    l2_loss > bestl2,
-                    iterations >= self.min_restart_iterations)
                 # stopping condition: run for at least min_restart_iterations
                 # if it does not converges
-                should_restart = tf.logical_or(tf.logical_and(is_conv, is_adv),
-                                               is_not_best)
+                should_restart = tf.logical_or(
+                    tf.logical_and(
+                        tf.logical_and(is_conv, is_adv),
+                        iterations >= self.min_iterations_per_start),
+                    iterations >= self.max_iterations_per_start)
                 r0 = self._init_r(X)
                 r.scatter_update(
                     to_indexed_slices(r0, batch_indices, should_restart))
