@@ -27,8 +27,8 @@ class OptimizerL2(object):
         multitargeted=False,
         # parameters for random restarts
         tol=1e-3,
+        round_op=None,
         round_tol=1e-3,
-        floor=False,
         min_iterations_per_start=0,
         max_iterations_per_start=100,
         sampling_radius=None,
@@ -59,7 +59,9 @@ class OptimizerL2(object):
         # parameters for the random restarts
         self.tol = tol
         self.round_tol = round_tol
-        self.floor = floor
+        if round_op is not None:
+            round_op = round_op.lower()
+        self.round_op = round_op
         self.min_iterations_per_start = min_iterations_per_start
         self.max_iterations_per_start = max_iterations_per_start
         if sampling_radius is not None:
@@ -183,10 +185,11 @@ class OptimizerL2(object):
             with tf.control_dependencies(
                 [optimizer.apply_gradients([(fg, r)])]):
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
-                if self.floor:
+                if self.round_op is not None or self.round_op != 'none':
                     r_norm = l2_metric(r, keepdims=True)
+                    round_op = getattr(tf.math, self.round_op)
                     r.assign(
-                        tf.math.ceil(r_norm / self.round_tol) *
+                        round_op(r_norm / self.round_tol) *
                         self.round_tol * l2_normalize(r))
 
             if self.use_proxy_constraint:
