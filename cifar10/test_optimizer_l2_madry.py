@@ -32,11 +32,11 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 flags.DEFINE_bool("sort_labels", False, "sort labels")
 
 # attack parameters
-flags.DEFINE_float("attack_learning_rate", 5e-2, "learning rate for primal variables")
+flags.DEFINE_float("attack_learning_rate", 1e-2, "learning rate for primal variables")
 flags.DEFINE_float("attack_lambda_learning_rate", 1e-1, "learning rate for dual variables")
 flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
 flags.DEFINE_integer("attack_min_iter_per_start", 0, "min iterations before random restart")
-flags.DEFINE_integer("attack_max_iter_per_start", 0, "max iterations before random restart")
+flags.DEFINE_integer("attack_max_iter_per_start", 100, "max iterations before random restart")
 flags.DEFINE_float("attack_tol", 0.005, "attack tolerance")
 flags.DEFINE_float("attack_round_tol", 0.001, "round attack norm to multiples of")
 flags.DEFINE_string("attack_round_op", None, "attack rounding operation")
