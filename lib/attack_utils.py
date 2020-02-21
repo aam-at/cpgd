@@ -7,7 +7,7 @@ def random_exponential(shape, rate=1.0, dtype=tf.float32, seed=None):
     Helper function to sample from the exponential distribution, which is not
     included in core TensorFlow.
     """
-    return tf.random_gamma(shape,
+    return tf.random.gamma(shape,
                            alpha=1,
                            beta=1. / rate,
                            dtype=dtype,
