@@ -21,6 +21,7 @@ class OptimizerL1(object):
         learning_rate=1e-2,
         lambda_learning_rate=1e-1,
         max_iterations=10000,
+        finetune=True,
         # parameters for the attack
         confidence=0.0,
         targeted=False,
@@ -29,6 +30,7 @@ class OptimizerL1(object):
         tol=1e-3,
         min_iterations_per_start=0,
         max_iterations_per_start=100,
+        r0_init="uniform",
         sampling_radius=None,
         # parameters for non-convex constrained minimization
         initial_const=0.1,
@@ -46,6 +48,7 @@ class OptimizerL1(object):
         self.learning_rate = learning_rate
         self.lambda_learning_rate = lambda_learning_rate
         self.max_iterations = max_iterations
+        self.finetune = finetune
         # parameters for the attack
         self.confidence = confidence
         self.targeted = targeted
@@ -56,6 +59,7 @@ class OptimizerL1(object):
         self.tol = tol
         self.min_iterations_per_start = min_iterations_per_start
         self.max_iterations_per_start = max_iterations_per_start
+        self.r0_init = r0_init
         if sampling_radius is not None:
             assert sampling_radius >= 0
         self.sampling_radius = sampling_radius
@@ -98,20 +102,30 @@ class OptimizerL1(object):
 
     def _init_r(self, X):
         if self.sampling_radius is not None and self.sampling_radius > 0:
-            r0 = random_lp_vector(X.shape, 1, self.sampling_radius)
+            if self.r0_init == 'sign':
+                r0 = tf.sign(tf.random.normal(X.shape))
+                r0 = self.sampling_radius * r0 / l1_metric(r0, keepdims=True)
+            elif self.r0_init == 'uniform':
+                r0 = tf.random.uniform(X.shape, -1.0, 1.0)
+                r0 = self.sampling_radius * r0 / l1_metric(r0, keepdims=True)
+            elif self.r0_init == 'lp_sphere':
+                r0 = random_lp_vector(X.shape, 1, self.sampling_radius)
+            else:
+                raise ValueError
         else:
             r0 = tf.zeros(X.shape)
+        r0 = tf.clip_by_value(X + r0, 0.0, 1.0) - X
         return r0
 
     def _reset(self, X):
         X_shape = X.shape
         batch_size = X_shape[0]
-        initial_one = np.log(1 - self.initial_const)
         initial_zero = np.log(self.initial_const)
+        initial_one = np.log(1 - self.initial_const)
         self.r.assign(self._init_r(X))
         self.state.assign(
-            np.stack((np.ones(batch_size) * initial_one,
-                      np.ones(batch_size) * initial_zero),
+            np.stack((np.ones(batch_size) * initial_zero,
+                      np.ones(batch_size) * initial_one),
                      axis=1))
         self.iterations.assign(tf.zeros(batch_size))
         self.attack.assign(X)
@@ -176,7 +190,9 @@ class OptimizerL1(object):
             with tf.control_dependencies(
                 [optimizer.apply_gradients([(fg, r)])]):
                 # soft-thresholding operator for L1-lasso
-                r.assign(tfp.math.soft_threshold(r, self.tol))
+                lambd = self.learning_rate * state_distr[:, 0] / state_distr[:, 1]
+                lambd = tf.reshape(lambd, (-1, 1, 1, 1))
+                r.assign(tf.where(tf.abs(r) <= lambd, tf.zeros_like(r), r))
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
 
             if self.use_proxy_constraint:
@@ -222,6 +238,15 @@ class OptimizerL1(object):
                               y_onehot,
                               targeted=self.targeted,
                               restarts=True)
+
+        # finetune
+        if self.finetune:
+            r.assign(attack - X)
+            for iteration in range(1, self.max_iterations // 10 + 1):
+                optim_constrained(X,
+                                  y_onehot,
+                                  targeted=self.targeted,
+                                  restarts=False)
 
         return attack.read_value()
 

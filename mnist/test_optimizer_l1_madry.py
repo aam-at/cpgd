@@ -36,7 +36,9 @@ flags.DEFINE_float("attack_lambda_learning_rate", 1e-1, "learning rate for dual 
 flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
 flags.DEFINE_integer("attack_min_iter_per_start", 0, "min iterations before random restart")
 flags.DEFINE_integer("attack_max_iter_per_start", 100, "max iterations before random restart")
+flags.DEFINE_bool("attack_finetune", True, "attack finetune")
 flags.DEFINE_float("attack_tol", 0.005, "attack tolerance")
+flags.DEFINE_string("attack_r0_init", "sign", "attack r0 init")
 flags.DEFINE_float("attack_sampling_radius", None, "attack sampling radius")
 flags.DEFINE_float("attack_confidence", 0, "margin confidence of adversarial examples")
 flags.DEFINE_float("attack_initial_const", 0.1, "initial const for attack")
@@ -88,10 +90,12 @@ def main(unused_args):
                       learning_rate=FLAGS.attack_learning_rate,
                       lambda_learning_rate=FLAGS.attack_lambda_learning_rate,
                       max_iterations=FLAGS.attack_max_iter,
+                      finetune=FLAGS.attack_finetune,
                       min_iterations_per_start=FLAGS.attack_min_iter_per_start,
                       max_iterations_per_start=FLAGS.attack_max_iter_per_start,
                       confidence=FLAGS.attack_confidence,
                       targeted=False,
+                      r0_init=FLAGS.attack_r0_init,
                       sampling_radius=FLAGS.attack_sampling_radius,
                       tol=FLAGS.attack_tol,
                       initial_const=FLAGS.attack_initial_const,

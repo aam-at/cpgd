@@ -31,6 +31,7 @@ class OptimizerL2(object):
         round_tol=1e-3,
         min_iterations_per_start=0,
         max_iterations_per_start=100,
+        r0_init='uniform',
         sampling_radius=None,
         # parameters for non-convex constrained minimization
         initial_const=0.1,
@@ -64,6 +65,7 @@ class OptimizerL2(object):
         self.round_op = round_op
         self.min_iterations_per_start = min_iterations_per_start
         self.max_iterations_per_start = max_iterations_per_start
+        self.r0_init = r0_init
         if sampling_radius is not None:
             assert sampling_radius >= 0
         self.sampling_radius = sampling_radius
@@ -106,9 +108,19 @@ class OptimizerL2(object):
 
     def _init_r(self, X):
         if self.sampling_radius is not None and self.sampling_radius > 0:
-            r0 = random_lp_vector(X.shape, 2, self.sampling_radius)
+            if self.r0_init == 'sign':
+                r0 = tf.sign(tf.random.normal(X.shape))
+                r0 = self.sampling_radius * r0 / l2_metric(r0, keepdims=True)
+            elif self.r0_init == 'uniform':
+                r0 = tf.random.uniform(X.shape, -1.0, 1.0)
+                r0 = self.sampling_radius * r0 / l2_metric(r0, keepdims=True)
+            elif self.r0_init == 'lp_sphere':
+                r0 = random_lp_vector(X.shape, 2, self.sampling_radius)
+            else:
+                raise ValueError
         else:
             r0 = tf.zeros(X.shape)
+        r0 = tf.clip_by_value(X + r0, 0.0, 1.0) - X
         return r0
 
     def _reset(self, X):
@@ -118,8 +130,8 @@ class OptimizerL2(object):
         initial_zero = np.log(self.initial_const)
         self.r.assign(self._init_r(X))
         self.state.assign(
-            np.stack((np.ones(batch_size) * initial_one,
-                      np.ones(batch_size) * initial_zero),
+            np.stack((np.ones(batch_size) * initial_zero,
+                      np.ones(batch_size) * initial_one),
                      axis=1))
         self.iterations.assign(tf.zeros(batch_size))
         self.attack.assign(X)
@@ -185,12 +197,6 @@ class OptimizerL2(object):
             with tf.control_dependencies(
                 [optimizer.apply_gradients([(fg, r)])]):
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
-                if self.round_op is not None and self.round_op != 'none':
-                    r_norm = l2_metric(r, keepdims=True)
-                    round_op = getattr(tf.math, self.round_op)
-                    r.assign(
-                        round_op(r_norm / self.round_tol) *
-                        self.round_tol * l2_normalize(r))
 
             if self.use_proxy_constraint:
                 multipliers_gradients = -cls_con
