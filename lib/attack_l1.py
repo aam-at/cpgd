@@ -81,8 +81,8 @@ class OptimizerL1(object):
         batch_size = X_shape[0]
         assert y_shape.ndims == 2
         # primal and dual variable optimizer
-        self.optimizer = tf.keras.optimizers.Adam(self.learning_rate)
-        self.constrained_optimizer = tf.keras.optimizers.Adam(
+        self.optimizer = tf.keras.optimizers.SGD(self.learning_rate)
+        self.constrained_optimizer = tf.keras.optimizers.SGD(
             self.lambda_learning_rate)
         # attack variables
         self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="ol1_r")
@@ -175,24 +175,24 @@ class OptimizerL1(object):
             with tf.GradientTape(persistent=True) as find_r_tape:
                 X_hat = X + r
                 logits_hat = self.model(X_hat)
-                # Part 1: minimize li loss
+                # Part 1: minimize l1 loss
                 l1_loss = l1_metric(r)
                 # Part 2: classification loss
                 cls_con = margin(logits_hat, y_onehot, targeted=targeted)
-                state_distr = tf.exp(state)
-                loss = (state_distr[:, 0] * l1_loss +
-                        state_distr[:, 1] * tf.nn.relu(cls_con))
+                loss = tf.nn.relu(cls_con)
 
-            # spectral projected gradient
-            is_adv = y != tf.argmax(logits_hat, axis=-1)
+            # soft-thresholding operator for L1-lasso
+            state_distr = tf.exp(state)
+            lambd = self.learning_rate * state_distr[:, 0] / state_distr[:, 1]
+            lambd = tf.reshape(lambd, (-1, 1, 1, 1))
+
+            # generalized gradient
             fg = find_r_tape.gradient(loss, r)
+            fgp = (r - tfp.math.soft_threshold(r - self.learning_rate * fg,
+                                               lambd)) / self.learning_rate
 
             with tf.control_dependencies(
-                [optimizer.apply_gradients([(fg, r)])]):
-                # soft-thresholding operator for L1-lasso
-                lambd = self.learning_rate * state_distr[:, 0] / state_distr[:, 1]
-                lambd = tf.reshape(lambd, (-1, 1, 1, 1))
-                r.assign(tf.where(tf.abs(r) <= lambd, tf.zeros_like(r), r))
+                [optimizer.apply_gradients([(fgp, r)])]):
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
 
             if self.use_proxy_constraint:
@@ -205,6 +205,7 @@ class OptimizerL1(object):
             constrained_optimizer.apply_gradients([(multipliers_gradients,
                                                     state)])
 
+            is_adv = y != tf.argmax(logits_hat, axis=-1)
             is_best_attack = tf.logical_and(is_adv, l1_loss < bestl1)
             bestl1.scatter_update(
                 to_indexed_slices(l1_loss, batch_indices, is_best_attack))
