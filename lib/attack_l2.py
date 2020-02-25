@@ -18,20 +18,20 @@ class OptimizerL2(object):
         model,
         batch_size=1,
         # parameters for the optimizer
-        learning_rate=1e-2,
+        optimizer='sgd',
+        learning_rate=1e-1,
         lambda_learning_rate=1e-1,
         max_iterations=10000,
+        finetune=True,
         # parameters for the attack
         confidence=0.0,
         targeted=False,
         multitargeted=False,
         # parameters for random restarts
         tol=1e-3,
-        round_op=None,
-        round_tol=1e-3,
         min_iterations_per_start=0,
         max_iterations_per_start=100,
-        r0_init='uniform',
+        r0_init="uniform",
         sampling_radius=None,
         # parameters for non-convex constrained minimization
         initial_const=0.1,
@@ -48,9 +48,11 @@ class OptimizerL2(object):
         self.batch_size = batch_size
         self.batch_indices = tf.range(batch_size)
         # parameters for the optimizer
+        self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.lambda_learning_rate = lambda_learning_rate
         self.max_iterations = max_iterations
+        self.finetune = finetune
         # parameters for the attack
         self.confidence = confidence
         self.targeted = targeted
@@ -59,10 +61,6 @@ class OptimizerL2(object):
         self.multitargeted = multitargeted
         # parameters for the random restarts
         self.tol = tol
-        self.round_tol = round_tol
-        if round_op is not None:
-            round_op = round_op.lower()
-        self.round_op = round_op
         self.min_iterations_per_start = min_iterations_per_start
         self.max_iterations_per_start = max_iterations_per_start
         self.r0_init = r0_init
@@ -83,13 +81,19 @@ class OptimizerL2(object):
         self.built = False
 
     def build(self, inputs_shape):
+        assert not self.built
         X_shape, y_shape = inputs_shape
         batch_size = X_shape[0]
         assert y_shape.ndims == 2
         # primal and dual variable optimizer
-        self.optimizer = tf.keras.optimizers.Adam(self.learning_rate)
-        self.constrained_optimizer = tf.keras.optimizers.Adam(
-            self.lambda_learning_rate)
+        if self.optimizer == 'sgd':
+            opt = tf.keras.optimizers.SGD
+        elif self.optimizer == 'adam':
+            opt = tf.keras.optimizers.Adam
+        else:
+            raise ValueError
+        self.primal_optimizer = opt(self.learning_rate)
+        self.dual_optimizer = opt(self.lambda_learning_rate)
         # attack variables
         self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="ol2_r")
         self.state = tf.Variable(
@@ -126,8 +130,8 @@ class OptimizerL2(object):
     def _reset(self, X):
         X_shape = X.shape
         batch_size = X_shape[0]
-        initial_one = np.log(1 - self.initial_const)
         initial_zero = np.log(self.initial_const)
+        initial_one = np.log(1 - self.initial_const)
         self.r.assign(self._init_r(X))
         self.state.assign(
             np.stack((np.ones(batch_size) * initial_zero,
@@ -136,20 +140,22 @@ class OptimizerL2(object):
         self.iterations.assign(tf.zeros(batch_size))
         self.attack.assign(X)
         self.bestl2.assign(1e10 * tf.ones(batch_size))
-        [var.assign(tf.zeros_like(var)) for var in self.optimizer.variables()]
         [
             var.assign(tf.zeros_like(var))
-            for var in self.constrained_optimizer.variables()
+            for var in self.primal_optimizer.variables()
+        ]
+        [
+            var.assign(tf.zeros_like(var))
+            for var in self.dual_optimizer.variables()
         ]
 
     def _call(self, X, y_onehot):
         ## get variables
         batch_size = X.shape[0]
         batch_indices = self.batch_indices
-        num_classes = y_onehot.shape[-1]
 
-        optimizer = self.optimizer
-        constrained_optimizer = self.constrained_optimizer
+        primal_optimizer = self.primal_optimizer
+        dual_optimizer = self.dual_optimizer
         r = self.r
         state = self.state
         iterations = self.iterations
