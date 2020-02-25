@@ -32,18 +32,18 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 flags.DEFINE_bool("sort_labels", False, "sort labels")
 
 # attack parameters
-flags.DEFINE_float("attack_learning_rate", 5e-2, "learning rate for primal variables")
-flags.DEFINE_float("attack_lambda_learning_rate", 1e-1, "learning rate for dual variables")
+flags.DEFINE_string("attack_optimizer", "adam", "optimizer for the attack")
+flags.DEFINE_float("attack_primal_lr", 5e-2, "learning rate for primal variables")
+flags.DEFINE_float("attack_dual_lr", 1e-1, "learning rate for dual variables")
 flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
 flags.DEFINE_integer("attack_min_iter_per_start", 0, "min iterations before random restart")
 flags.DEFINE_integer("attack_max_iter_per_start", 100, "max iterations before random restart")
+flags.DEFINE_bool("attack_finetune", True, "attack finetune")
 flags.DEFINE_float("attack_tol", 0.005, "attack tolerance")
-flags.DEFINE_float("attack_round_tol", 0.001, "round attack norm to multiples of")
-flags.DEFINE_string("attack_round_op", None, "attack rounding operation")
+flags.DEFINE_string("attack_r0_init", "sign", "attack r0 init")
 flags.DEFINE_float("attack_sampling_radius", None, "attack sampling radius")
 flags.DEFINE_float("attack_confidence", 0, "margin confidence of adversarial examples")
 flags.DEFINE_float("attack_initial_const", 0.1, "initial const for attack")
-flags.DEFINE_bool("attack_multitargeted", False, "use multitargeted attack")
 flags.DEFINE_bool("attack_proxy_constrain", True, "use proxy for lagrange multiplier maximization")
 
 flags.DEFINE_boolean("generate_summary", False, "generate summary images")
@@ -89,18 +89,18 @@ def main(unused_args):
     # attacks
     ol2 = OptimizerL2(lambda x: test_classifier(x)["logits"],
                       batch_size=FLAGS.batch_size,
-                      learning_rate=FLAGS.attack_learning_rate,
-                      lambda_learning_rate=FLAGS.attack_lambda_learning_rate,
+                      optimizer=FLAGS.attack_optimizer,
+                      primal_lr=FLAGS.attack_primal_lr,
+                      dual_lr=FLAGS.attack_dual_lr,
                       max_iterations=FLAGS.attack_max_iter,
+                      finetune=FLAGS.attack_finetune,
                       min_iterations_per_start=FLAGS.attack_min_iter_per_start,
                       max_iterations_per_start=FLAGS.attack_max_iter_per_start,
                       confidence=FLAGS.attack_confidence,
                       targeted=False,
-                      multitargeted=FLAGS.attack_multitargeted,
+                      r0_init=FLAGS.attack_r0_init,
                       sampling_radius=FLAGS.attack_sampling_radius,
                       tol=FLAGS.attack_tol,
-                      round_op=FLAGS.attack_round_op,
-                      round_tol=FLAGS.attack_round_tol,
                       initial_const=FLAGS.attack_initial_const,
                       use_proxy_constraint=FLAGS.attack_proxy_constrain)
 
@@ -153,9 +153,9 @@ def main(unused_args):
         summary_labels = tf.convert_to_tensor(summary_labels)
         summary_l2_imgs = test_step(summary_images, summary_labels, -1)
         save_path = os.path.join(FLAGS.samples_dir, 'orig.png')
-        save_images(summary_images.numpy(), save_path, data_format="NHWC")
+        save_images(summary_images, save_path, data_format="NHWC")
         save_path = os.path.join(FLAGS.samples_dir, 'l2.png')
-        save_images(summary_l2_imgs.numpy(), save_path, data_format="NHWC")
+        save_images(summary_l2_imgs, save_path, data_format="NHWC")
         log_metrics(
             test_metrics,
             "Summary results [{:.2f}s]:".format(time.time() - start_time))

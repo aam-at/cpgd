@@ -89,8 +89,8 @@ def main(unused_args):
     # attacks
     ol1 = OptimizerL1(lambda x: test_classifier(x)["logits"],
                       batch_size=FLAGS.batch_size,
-                      learning_rate=FLAGS.attack_learning_rate,
-                      lambda_learning_rate=FLAGS.attack_lambda_learning_rate,
+                      primal_lr=FLAGS.attack_learning_rate,
+                      dual_lr=FLAGS.attack_lambda_learning_rate,
                       max_iterations=FLAGS.attack_max_iter,
                       finetune=FLAGS.attack_finetune,
                       min_iterations_per_start=FLAGS.attack_min_iter_per_start,

@@ -5,11 +5,15 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 from .attack_utils import random_lp_vector
-from .utils import (l2_metric, l2_normalize, li_metric, prediction,
+from .utils import (l2_metric, prediction,
                     project_log_distribution_wrt_kl_divergence,
                     to_indexed_slices)
 
 tfd = tfp.distributions
+
+
+def proximal_l2(u, lambd):
+    return tf.nn.relu(1 - lambd / l2_metric(u, keepdims=True)) * u
 
 
 class OptimizerL2(object):
@@ -19,8 +23,8 @@ class OptimizerL2(object):
         batch_size=1,
         # parameters for the optimizer
         optimizer='sgd',
-        learning_rate=1e-1,
-        lambda_learning_rate=1e-1,
+        primal_lr=1e-1,
+        dual_lr=1e-1,
         max_iterations=10000,
         finetune=True,
         # parameters for the attack
@@ -39,8 +43,8 @@ class OptimizerL2(object):
         use_proxy_constraint=False,
         boxmin=0.0,
         boxmax=1.0):
-        """The L_2 optimization attack (external regret minimization with multiplicative
-        updates).
+        """The L_2 optimization attack (external regret minimization with
+        multiplicative updates).
 
         """
         super(OptimizerL2, self).__init__()
@@ -49,8 +53,8 @@ class OptimizerL2(object):
         self.batch_indices = tf.range(batch_size)
         # parameters for the optimizer
         self.optimizer = optimizer
-        self.learning_rate = learning_rate
-        self.lambda_learning_rate = lambda_learning_rate
+        self.primal_lr = primal_lr
+        self.dual_lr = dual_lr
         self.max_iterations = max_iterations
         self.finetune = finetune
         # parameters for the attack
@@ -86,14 +90,18 @@ class OptimizerL2(object):
         batch_size = X_shape[0]
         assert y_shape.ndims == 2
         # primal and dual variable optimizer
-        if self.optimizer == 'sgd':
-            opt = tf.keras.optimizers.SGD
-        elif self.optimizer == 'adam':
-            opt = tf.keras.optimizers.Adam
-        else:
-            raise ValueError
-        self.primal_optimizer = opt(self.learning_rate)
-        self.dual_optimizer = opt(self.lambda_learning_rate)
+        self.primal_optimizer = tf.keras.optimizers.get({
+            'class_name': self.optimizer,
+            'config': {
+                'learning_rate': self.primal_lr
+            }
+        })
+        self.dual_optimizer = tf.keras.optimizers.get({
+            'class_name': self.optimizer,
+            'config': {
+                'learning_rate': self.dual_lr
+            }
+        })
         # attack variables
         self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="ol2_r")
         self.state = tf.Variable(
@@ -188,20 +196,25 @@ class OptimizerL2(object):
             with tf.GradientTape(persistent=True) as find_r_tape:
                 X_hat = X + r
                 logits_hat = self.model(X_hat)
-                # Part 1: minimize l2 loss
-                l2_loss = tf.reduce_sum(tf.square(r), axis=(1, 2, 3))
+                # Part 1: minimize l1 loss
+                l2_loss = l2_metric(r)
                 # Part 2: classification loss
                 cls_con = margin(logits_hat, y_onehot, targeted=targeted)
-                state_distr = tf.exp(state)
-                loss = (state_distr[:, 0] * l2_loss +
-                        state_distr[:, 1] * tf.nn.relu(cls_con))
+                loss = tf.nn.relu(cls_con)
 
-            # spectral projected gradient
-            is_adv = y != tf.argmax(logits_hat, axis=-1)
+            # soft-thresholding operator for L1-lasso
+            state_distr = tf.exp(state)
+            lambd = self.primal_lr * state_distr[:, 0] / state_distr[:, 1]
+            lambd = tf.reshape(lambd, (-1, 1, 1, 1))
+
             fg = find_r_tape.gradient(loss, r)
+            # generalized gradient
+            fgp = (r - proximal_l2(r - self.primal_lr * fg,
+                                   lambd)) / self.primal_lr
 
             with tf.control_dependencies(
-                [optimizer.apply_gradients([(fg, r)])]):
+                [primal_optimizer.apply_gradients([(fgp, r)])]):
+                # projection
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
 
             if self.use_proxy_constraint:
@@ -211,9 +224,9 @@ class OptimizerL2(object):
             multipliers_gradients = tf.stack(
                 (tf.zeros_like(multipliers_gradients), multipliers_gradients),
                 axis=1)
-            constrained_optimizer.apply_gradients([(multipliers_gradients,
-                                                    state)])
+            dual_optimizer.apply_gradients([(multipliers_gradients, state)])
 
+            is_adv = y != tf.argmax(logits_hat, axis=-1)
             is_best_attack = tf.logical_and(is_adv, l2_loss < bestl2)
             bestl2.scatter_update(
                 to_indexed_slices(l2_loss, batch_indices, is_best_attack))
@@ -237,49 +250,27 @@ class OptimizerL2(object):
                     to_indexed_slices(tf.zeros_like(iterations), batch_indices,
                                       should_restart))
 
-        if self.multitargeted:
-            best_targeted_l2 = []
-            best_targeted_attack = []
-            logits = self.model(X)
-            logits = tf.where(tf.cast(y_onehot, tf.bool),
-                              -np.inf * tf.ones_like(logits), logits)
-            sorted_targets = tf.argsort(logits,
-                                        axis=-1,
-                                        direction='DESCENDING')
-            for t in tf.split(sorted_targets[:, :-1], num_classes - 1,
-                              axis=-1):
-                # reset optimizer and variables
-                self._reset(X)
-                t_onehot = tf.one_hot(tf.reshape(t, (-1, )), num_classes)
-                # only compute perturbation for correctly classified inputs
-                bestl2.scatter_update(
-                    to_indexed_slices(tf.zeros_like(bestl2), batch_indices, corr))
-                for iteration in range(1, self.max_iterations + 1):
-                    optim_constrained(X, t_onehot, targeted=True)
-                best_targeted_l2.append(bestl2.read_value())
-                best_targeted_attack.append(attack.read_value())
+        # reset optimizer and variables
+        self._reset(X)
+        # only compute perturbation for correctly classified inputs
+        bestl2.scatter_update(
+            to_indexed_slices(tf.zeros_like(bestl2), batch_indices, corr))
+        for iteration in range(1, self.max_iterations + 1):
+            optim_constrained(X,
+                              y_onehot,
+                              targeted=self.targeted,
+                              restarts=True)
 
-            best_targeted_attack = tf.stack(best_targeted_attack, axis=1)
-            best_targeted_l2 = tf.stack(best_targeted_l2, axis=1)
-            bestind = tf.argmin(best_targeted_l2, axis=-1)
-            return tf.reshape(
-                tf.gather(best_targeted_attack,
-                          tf.expand_dims(bestind, 1),
-                          axis=1,
-                          batch_dims=1), X.shape)
-        else:
-            # reset optimizer and variables
-            self._reset(X)
-            # only compute perturbation for correctly classified inputs
-            bestl2.scatter_update(
-                to_indexed_slices(tf.zeros_like(bestl2), batch_indices, corr))
-            for iteration in range(1, self.max_iterations + 1):
+        # finetune
+        if self.finetune:
+            r.assign(attack - X)
+            for iteration in range(1, self.max_iterations // 10 + 1):
                 optim_constrained(X,
                                   y_onehot,
                                   targeted=self.targeted,
-                                  restarts=True)
+                                  restarts=False)
 
-            return attack.read_value()
+        return attack.read_value()
 
     def __call__(self, X, y_onehot):
         if not self.built:

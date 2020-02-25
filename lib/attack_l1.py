@@ -212,8 +212,10 @@ class OptimizerL1(object):
 
             with tf.control_dependencies(
                 [primal_optimizer.apply_gradients([(fgp, r)])]):
-                # perturbation after update is smaller than threshold
+                # gradient momentum can destroy the sparsity of updates
+                # use hard thresholding to restore the perturbation sparsity
                 r.assign(tf.where(tf.abs(r) <= lambd, 0.0, r))
+                # projection
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
 
             if self.use_proxy_constraint:
