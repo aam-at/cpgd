@@ -1,14 +1,18 @@
 from __future__ import absolute_import, division, print_function
 
-import importlib
 import itertools
 import subprocess
 from pathlib import Path
 
 import numpy as np
-import six
 
 from lib.generate_script import generate_test_optimizer
+
+models = [
+    './models/mnist_weights_plain.mat', './models/mnist_weights_linf.mat',
+    './models/mnist_weights_l2.mat'
+]
+hostname = subprocess.getoutput('hostname')
 
 
 def generate_test_optimizer_l2(load_from, **kwargs):
