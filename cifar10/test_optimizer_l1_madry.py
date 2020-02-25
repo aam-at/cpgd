@@ -9,6 +9,7 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
+from tensorboard.plugins.hparams import api as hp
 
 import lib
 from data import load_cifar10
@@ -30,13 +31,17 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 flags.DEFINE_bool("sort_labels", False, "sort labels")
 
 # attack parameters
-flags.DEFINE_integer("attack_max_iter", 10000, "max iterations")
-flags.DEFINE_integer("attack_min_restart_iter", 10, "min iterations before random restart")
-flags.DEFINE_integer("attack_max_restart_iter", 100, "max iterations before random restart")
-flags.DEFINE_string("attack_r0_init", "normal", "r0 initializer")
-flags.DEFINE_float("attack_tol", 5e-3, "attack tolerance")
+flags.DEFINE_float("attack_learning_rate", 5e-2, "learning rate for primal variables")
+flags.DEFINE_float("attack_lambda_learning_rate", 1e-1, "learning rate for dual variables")
+flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
+flags.DEFINE_integer("attack_min_iter_per_start", 0, "min iterations before random restart")
+flags.DEFINE_integer("attack_max_iter_per_start", 100, "max iterations before random restart")
+flags.DEFINE_bool("attack_finetune", True, "attack finetune")
+flags.DEFINE_float("attack_tol", 0.005, "attack tolerance")
+flags.DEFINE_string("attack_r0_init", "sign", "attack r0 init")
+flags.DEFINE_float("attack_sampling_radius", None, "attack sampling radius")
 flags.DEFINE_float("attack_confidence", 0, "margin confidence of adversarial examples")
-flags.DEFINE_float("attack_initial_const", 1e2, "initial const for attack")
+flags.DEFINE_float("attack_initial_const", 0.1, "initial const for attack")
 flags.DEFINE_bool("attack_proxy_constrain", True, "use proxy for lagrange multiplier maximization")
 
 flags.DEFINE_boolean("generate_summary", False, "generate summary images")
@@ -84,12 +89,16 @@ def main(unused_args):
     # attacks
     ol1 = OptimizerL1(lambda x: test_classifier(x)["logits"],
                       batch_size=FLAGS.batch_size,
+                      learning_rate=FLAGS.attack_learning_rate,
+                      lambda_learning_rate=FLAGS.attack_lambda_learning_rate,
+                      max_iterations=FLAGS.attack_max_iter,
+                      finetune=FLAGS.attack_finetune,
+                      min_iterations_per_start=FLAGS.attack_min_iter_per_start,
+                      max_iterations_per_start=FLAGS.attack_max_iter_per_start,
                       confidence=FLAGS.attack_confidence,
                       targeted=False,
                       r0_init=FLAGS.attack_r0_init,
-                      max_iterations=FLAGS.attack_max_iter,
-                      min_restart_iterations=FLAGS.attack_min_restart_iter,
-                      max_restart_iterations=FLAGS.attack_max_restart_iter,
+                      sampling_radius=FLAGS.attack_sampling_radius,
                       tol=FLAGS.attack_tol,
                       initial_const=FLAGS.attack_initial_const,
                       use_proxy_constraint=FLAGS.attack_proxy_constrain)
@@ -121,7 +130,6 @@ def main(unused_args):
 
         # measure norm
         l1 = l1_metric(image - image_l1)
-        tf.summary.scalar("l1", tf.reduce_mean(l1), batch_index)
         for threshold in [
                 2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 8.75, 9.0, 10.0, 12.0, 12.5,
                 15.0, 16.25, 20.0
@@ -137,9 +145,6 @@ def main(unused_args):
 
         return image_l1
 
-    summary_writer = tf.summary.create_file_writer(FLAGS.working_dir)
-    summary_writer.set_as_default()
-
     if FLAGS.generate_summary:
         start_time = time.time()
         logging.info("Generating samples...")
@@ -149,21 +154,23 @@ def main(unused_args):
         summary_labels = tf.convert_to_tensor(summary_labels)
         summary_l1_imgs = test_step(summary_images, summary_labels, -1)
         save_path = os.path.join(FLAGS.samples_dir, 'orig.png')
-        save_images(summary_images.numpy(), save_path)
+        save_images(summary_images, save_path)
         save_path = os.path.join(FLAGS.samples_dir, 'l1.png')
-        save_images(summary_l1_imgs.numpy(), save_path)
+        save_images(summary_l1_imgs, save_path)
         log_metrics(
             test_metrics,
             "Summary results [{:.2f}s]:".format(time.time() - start_time))
     else:
         logging.debug("Skipping summary...")
 
+    # reset metrics
     reset_metrics(test_metrics)
     X_l1_list = []
     y_list = []
     indx_list = []
     start_time = time.time()
     try:
+        is_completed = False
         for batch_index, (image, label, indx) in enumerate(test_ds, 1):
             X_l1 = test_step(image, label, batch_index)
             image = np.transpose(image, (0, 3, 1, 2))
@@ -184,7 +191,37 @@ def main(unused_args):
                         batch_index,
                         time.time() - start_time))
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
+                is_completed = True
                 break
+        else:
+            is_completed = True
+        if is_completed:
+            # hyperparameter tuning
+            with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
+                # hyperparameters
+                hp_param_names = [
+                    'attack_max_iter', 'attack_tol', 'attack_learning_rate',
+                    'attack_lambda_learning_rate', 'attack_initial_const'
+                ]
+                hp_metric_names = ['final_l1', 'final_l1_corr']
+                hp_params = [
+                    hp.HParam(hp_param_name)
+                    for hp_param_name in hp_param_names
+                ]
+                hp_metrics = [
+                    hp.Metric(hp_metric_name)
+                    for hp_metric_name in hp_metric_names
+                ]
+                hp.hparams_config(hparams=hp_params, metrics=hp_metrics)
+                hp.hparams({
+                    hp_param_name: getattr(FLAGS, hp_param_name)
+                    for hp_param_name in hp_param_names
+                })
+                final_l1 = test_metrics['l1'].result()
+                tf.summary.scalar('final_l1', final_l1, step=1)
+                final_l2_corr = test_metrics['l1_corr'].result()
+                tf.summary.scalar('final_l1_corr', final_l2_corr, step=1)
+                tf.summary.flush()
     except:
         logging.info("Stopping after {}".format(batch_index))
     finally:
