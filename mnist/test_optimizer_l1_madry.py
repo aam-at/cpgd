@@ -32,8 +32,8 @@ flags.DEFINE_bool("sort_labels", False, "sort labels")
 
 # attack parameters
 flags.DEFINE_string("attack_optimizer", "sgd", "optimizer for the attack")
-flags.DEFINE_float("attack_learning_rate", 5e-2, "learning rate for primal variables")
-flags.DEFINE_float("attack_lambda_learning_rate", 1e-1, "learning rate for dual variables")
+flags.DEFINE_float("attack_primal_lr", 5e-2, "learning rate for primal variables")
+flags.DEFINE_float("attack_dual_lr", 1e-1, "learning rate for dual variables")
 flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
 flags.DEFINE_integer("attack_min_iter_per_start", 0, "min iterations before random restart")
 flags.DEFINE_integer("attack_max_iter_per_start", 100, "max iterations before random restart")
@@ -88,8 +88,9 @@ def main(unused_args):
     # attacks
     ol1 = OptimizerL1(lambda x: test_classifier(x)["logits"],
                       batch_size=FLAGS.batch_size,
-                      learning_rate=FLAGS.attack_learning_rate,
-                      lambda_learning_rate=FLAGS.attack_lambda_learning_rate,
+                      optimizer=FLAGS.attack_optimizer,
+                      primal_lr=FLAGS.attack_primal_lr,
+                      dual_lr=FLAGS.attack_dual_lr,
                       max_iterations=FLAGS.attack_max_iter,
                       finetune=FLAGS.attack_finetune,
                       min_iterations_per_start=FLAGS.attack_min_iter_per_start,

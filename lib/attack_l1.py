@@ -12,6 +12,10 @@ from .utils import (l1_metric, prediction,
 tfd = tfp.distributions
 
 
+def proximal_l1(u, lambd):
+    return tfp.math.soft_threshold(u, lambd)
+
+
 class OptimizerL1(object):
     def __init__(
         self,
@@ -19,8 +23,8 @@ class OptimizerL1(object):
         batch_size=1,
         # parameters for the optimizer
         optimizer='sgd',
-        learning_rate=1e-1,
-        lambda_learning_rate=1e-1,
+        primal_lr=1e-1,
+        dual_lr=1e-1,
         max_iterations=10000,
         finetune=True,
         # parameters for the attack
@@ -47,8 +51,8 @@ class OptimizerL1(object):
         self.batch_indices = tf.range(batch_size)
         # parameters for the optimizer
         self.optimizer = optimizer
-        self.learning_rate = learning_rate
-        self.lambda_learning_rate = lambda_learning_rate
+        self.primal_lr = primal_lr
+        self.dual_lr = dual_lr
         self.max_iterations = max_iterations
         self.finetune = finetune
         # parameters for the attack
@@ -87,13 +91,13 @@ class OptimizerL1(object):
         self.primal_optimizer = tf.keras.optimizers.get({
             'class_name': self.optimizer,
             'config': {
-                'learning_rate': self.learning_rate
+                'learning_rate': self.primal_lr
             }
         })
         self.dual_optimizer = tf.keras.optimizers.get({
             'class_name': self.optimizer,
             'config': {
-                'learning_rate': self.lambda_learning_rate
+                'learning_rate': self.dual_lr
             }
         })
         # attack variables
@@ -198,16 +202,18 @@ class OptimizerL1(object):
 
             # soft-thresholding operator for L1-lasso
             state_distr = tf.exp(state)
-            lambd = self.learning_rate * state_distr[:, 0] / state_distr[:, 1]
+            lambd = self.primal_lr * state_distr[:, 0] / state_distr[:, 1]
             lambd = tf.reshape(lambd, (-1, 1, 1, 1))
 
-            # generalized gradient
             fg = find_r_tape.gradient(loss, r)
-            fgp = (r - tfp.math.soft_threshold(r - self.learning_rate * fg,
-                                               lambd)) / self.learning_rate
+            # generalized gradient
+            fgp = (r - proximal_l1(r - self.primal_lr * fg,
+                                   lambd)) / self.primal_lr
 
             with tf.control_dependencies(
                 [primal_optimizer.apply_gradients([(fgp, r)])]):
+                # perturbation after update is smaller than threshold
+                r.assign(tf.where(tf.abs(r) <= lambd, 0.0, r))
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
 
             if self.use_proxy_constraint:
