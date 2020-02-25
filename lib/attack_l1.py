@@ -18,7 +18,8 @@ class OptimizerL1(object):
         model,
         batch_size=1,
         # parameters for the optimizer
-        learning_rate=1e-2,
+        optimizer='sgd',
+        learning_rate=1e-1,
         lambda_learning_rate=1e-1,
         max_iterations=10000,
         finetune=True,
@@ -45,6 +46,7 @@ class OptimizerL1(object):
         self.batch_size = batch_size
         self.batch_indices = tf.range(batch_size)
         # parameters for the optimizer
+        self.optimizer = optimizer
         self.learning_rate = learning_rate
         self.lambda_learning_rate = lambda_learning_rate
         self.max_iterations = max_iterations
@@ -77,13 +79,23 @@ class OptimizerL1(object):
         self.built = False
 
     def build(self, inputs_shape):
+        assert not self.built
         X_shape, y_shape = inputs_shape
         batch_size = X_shape[0]
         assert y_shape.ndims == 2
         # primal and dual variable optimizer
-        self.optimizer = tf.keras.optimizers.SGD(self.learning_rate)
-        self.constrained_optimizer = tf.keras.optimizers.SGD(
-            self.lambda_learning_rate)
+        self.primal_optimizer = tf.keras.optimizers.get({
+            'class_name': self.optimizer,
+            'config': {
+                'learning_rate': self.learning_rate
+            }
+        })
+        self.dual_optimizer = tf.keras.optimizers.get({
+            'class_name': self.optimizer,
+            'config': {
+                'learning_rate': self.lambda_learning_rate
+            }
+        })
         # attack variables
         self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="ol1_r")
         self.state = tf.Variable(
@@ -130,10 +142,13 @@ class OptimizerL1(object):
         self.iterations.assign(tf.zeros(batch_size))
         self.attack.assign(X)
         self.bestl1.assign(1e10 * tf.ones(batch_size))
-        [var.assign(tf.zeros_like(var)) for var in self.optimizer.variables()]
         [
             var.assign(tf.zeros_like(var))
-            for var in self.constrained_optimizer.variables()
+            for var in self.primal_optimizer.variables()
+        ]
+        [
+            var.assign(tf.zeros_like(var))
+            for var in self.dual_optimizer.variables()
         ]
 
     def _call(self, X, y_onehot):
@@ -141,8 +156,8 @@ class OptimizerL1(object):
         batch_size = X.shape[0]
         batch_indices = self.batch_indices
 
-        optimizer = self.optimizer
-        constrained_optimizer = self.constrained_optimizer
+        primal_optimizer = self.primal_optimizer
+        dual_optimizer = self.dual_optimizer
         r = self.r
         state = self.state
         iterations = self.iterations
@@ -192,7 +207,7 @@ class OptimizerL1(object):
                                                lambd)) / self.learning_rate
 
             with tf.control_dependencies(
-                [optimizer.apply_gradients([(fgp, r)])]):
+                [primal_optimizer.apply_gradients([(fgp, r)])]):
                 r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
 
             if self.use_proxy_constraint:
@@ -202,8 +217,7 @@ class OptimizerL1(object):
             multipliers_gradients = tf.stack(
                 (tf.zeros_like(multipliers_gradients), multipliers_gradients),
                 axis=1)
-            constrained_optimizer.apply_gradients([(multipliers_gradients,
-                                                    state)])
+            dual_optimizer.apply_gradients([(multipliers_gradients, state)])
 
             is_adv = y != tf.argmax(logits_hat, axis=-1)
             is_best_attack = tf.logical_and(is_adv, l1_loss < bestl1)
