@@ -4,16 +4,13 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from .attack_utils import random_lp_vector
-from .utils import (l2_metric, prediction,
+from .attack_utils import (project_box, proximal_l2, random_lp_vector,
+                           reset_optimizer)
+from .utils import (l2_metric, l2_normalize, prediction,
                     project_log_distribution_wrt_kl_divergence,
                     to_indexed_slices)
 
 tfd = tfp.distributions
-
-
-def proximal_l2(u, lambd):
-    return tf.nn.relu(1 - lambd / l2_metric(u, keepdims=True)) * u
 
 
 class OptimizerL2(object):
@@ -22,11 +19,13 @@ class OptimizerL2(object):
         model,
         batch_size=1,
         # parameters for the optimizer
+        gradient_normalize=False,
         optimizer='sgd',
         primal_lr=1e-1,
+        finetune=True,
+        primal_fn_lr=0.01,
         dual_lr=1e-1,
         max_iterations=10000,
-        finetune=True,
         # parameters for the attack
         confidence=0.0,
         targeted=False,
@@ -54,9 +53,11 @@ class OptimizerL2(object):
         # parameters for the optimizer
         self.optimizer = optimizer
         self.primal_lr = primal_lr
+        self.finetune = finetune
+        self.primal_fn_lr = primal_fn_lr
         self.dual_lr = dual_lr
         self.max_iterations = max_iterations
-        self.finetune = finetune
+        self.gradient_normalize = gradient_normalize
         # parameters for the attack
         self.confidence = confidence
         self.targeted = targeted
@@ -96,13 +97,19 @@ class OptimizerL2(object):
                 'learning_rate': self.primal_lr
             }
         })
+        self.primal_fn_optimizer = tf.keras.optimizers.get({
+            'class_name': self.optimizer,
+            'config': {
+                'learning_rate': self.primal_fn_lr
+            }
+        })
         self.dual_optimizer = tf.keras.optimizers.get({
             'class_name': self.optimizer,
             'config': {
                 'learning_rate': self.dual_lr
             }
         })
-        # attack variables
+        # create attack variables
         self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="ol2_r")
         self.state = tf.Variable(
             tf.zeros((batch_size, 2)),
@@ -116,6 +123,11 @@ class OptimizerL2(object):
         self.bestl2 = tf.Variable(tf.zeros(batch_size),
                                   trainable=False,
                                   name="best_l2")
+        # create optimizer variables
+        gs = [(tf.zeros_like(self.r), self.r)]
+        self.primal_optimizer.apply_gradients(gs)
+        self.primal_fn_optimizer.apply_gradients(gs)
+        self.dual_optimizer.apply_gradients(gs)
         self.built = True
 
     def _init_r(self, X):
@@ -148,22 +160,18 @@ class OptimizerL2(object):
         self.iterations.assign(tf.zeros(batch_size))
         self.attack.assign(X)
         self.bestl2.assign(1e10 * tf.ones(batch_size))
-        [
-            var.assign(tf.zeros_like(var))
-            for var in self.primal_optimizer.variables()
-        ]
-        [
-            var.assign(tf.zeros_like(var))
-            for var in self.dual_optimizer.variables()
-        ]
+        reset_optimizer(self.primal_optimizer)
+        reset_optimizer(self.primal_fn_optimizer)
+        reset_optimizer(self.dual_optimizer)
 
     def _call(self, X, y_onehot):
         ## get variables
         batch_size = X.shape[0]
         batch_indices = self.batch_indices
 
-        primal_optimizer = self.primal_optimizer
-        dual_optimizer = self.dual_optimizer
+        primal_opt = self.primal_optimizer
+        primal_fn_opt = self.primal_fn_optimizer
+        dual_opt = self.dual_optimizer
         r = self.r
         state = self.state
         iterations = self.iterations
@@ -189,7 +197,11 @@ class OptimizerL2(object):
             return cls_con
 
         @tf.function
-        def optim_constrained(X, y_onehot, targeted=False, restarts=True):
+        def optim_constrained(X,
+                              y_onehot,
+                              targeted=False,
+                              finetune=False,
+                              restarts=True):
             # increment iterations
             iterations.assign_add(tf.ones(batch_size))
             r_v = r.read_value()
@@ -202,20 +214,24 @@ class OptimizerL2(object):
                 cls_con = margin(logits_hat, y_onehot, targeted=targeted)
                 loss = tf.nn.relu(cls_con)
 
-            # soft-thresholding operator for L1-lasso
+            # lambda for proximity operator
             state_distr = tf.exp(state)
             lambd = self.primal_lr * state_distr[:, 0] / state_distr[:, 1]
             lambd = tf.reshape(lambd, (-1, 1, 1, 1))
 
             fg = find_r_tape.gradient(loss, r)
-            # generalized gradient
-            fgp = (r - proximal_l2(r - self.primal_lr * fg,
-                                   lambd)) / self.primal_lr
+            if self.gradient_normalize:
+                fg = l2_normalize(fg)
+            # generalized gradient (after proximity and projection operator)
+            fgp = (r -
+                   project_box(X, proximal_l2(r - self.primal_lr * fg, lambd),
+                               self.boxmin, self.boxmax)) / self.primal_lr
+            gs = [(fgp, r)]
 
             with tf.control_dependencies(
-                [primal_optimizer.apply_gradients([(fgp, r)])]):
+                [(primal_fn_opt if finetune else primal_opt).apply_gradients(gs)]):
                 # projection
-                r.assign(tf.clip_by_value(X + r, 0.0, 1.0) - X)
+                r.assign(project_box(X, r, self.boxmin, self.boxmax))
 
             if self.use_proxy_constraint:
                 multipliers_gradients = -cls_con
@@ -224,7 +240,7 @@ class OptimizerL2(object):
             multipliers_gradients = tf.stack(
                 (tf.zeros_like(multipliers_gradients), multipliers_gradients),
                 axis=1)
-            dual_optimizer.apply_gradients([(multipliers_gradients, state)])
+            dual_opt.apply_gradients([(multipliers_gradients, state)])
 
             is_adv = y != tf.argmax(logits_hat, axis=-1)
             is_best_attack = tf.logical_and(is_adv, l2_loss < bestl2)
@@ -268,7 +284,8 @@ class OptimizerL2(object):
                 optim_constrained(X,
                                   y_onehot,
                                   targeted=self.targeted,
-                                  restarts=False)
+                                  restarts=False,
+                                  finetune=True)
 
         return attack.read_value()
 

@@ -1,6 +1,16 @@
 import numpy as np
 import tensorflow as tf
 
+from .utils import l2_metric
+
+
+def proximal_l2(u, lambd):
+    return tf.nn.relu(1 - lambd / l2_metric(u, keepdims=True)) * u
+
+
+def project_box(x, u, boxmin, boxmax):
+    return tf.clip_by_value(x + u, boxmin, boxmax) - x
+
 
 def random_exponential(shape, rate=1.0, dtype=tf.float32, seed=None):
     """
