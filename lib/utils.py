@@ -192,17 +192,7 @@ def log_tensorboard_metrics(metrics, prefix=None, step=None):
         tf.summary.scalar(f"{prefix}{metric_name}", metric_value, step)
 
 
-def project_log_distribution_wrt_kl_divergence(log_distribution, axis=1):
-    # For numerical reasons, make sure that the largest element is zero before
-    # exponentiating.
-    log_distribution = log_distribution - tf.reduce_max(
-        log_distribution, axis=axis, keepdims=True)
-    log_distribution = log_distribution - tf.math.log(
-        tf.reduce_sum(tf.exp(log_distribution), axis=axis, keepdims=True))
-    return log_distribution
-
-
-def li_metric(x, epsilon=1e-12, axes=None, keepdims=False):
+def li_metric(x, axes=None, keepdims=False):
     """Stable l2 normalization
     """
     if axes is None:
@@ -211,7 +201,17 @@ def li_metric(x, epsilon=1e-12, axes=None, keepdims=False):
     return tf.reduce_max(tf.abs(x), axes, keepdims=keepdims)
 
 
-def l1_metric(x, epsilon=1e-12, axes=None, keepdims=False):
+def li_normalize(d, axes=None):
+    """Li normalization
+    """
+    if axes is None:
+        axes = list(range(1, d.shape.ndims))
+    d = tf.convert_to_tensor(d, name="d")
+    d_li = li_metric(d, axes, keepdims=True)
+    return d / d_li
+
+
+def l1_metric(x, axes=None, keepdims=False):
     """L1 metric
     """
     if axes is None:
@@ -220,7 +220,7 @@ def l1_metric(x, epsilon=1e-12, axes=None, keepdims=False):
     return tf.reduce_sum(tf.abs(x), axes, keepdims=keepdims)
 
 
-def l1_normalize(d, axes=None, epsilon=1e-12):
+def l1_normalize(d, axes=None):
     """L1 normalization
     """
     if axes is None:

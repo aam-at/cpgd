@@ -13,8 +13,8 @@ from tensorboard.plugins.hparams import api as hp
 
 import lib
 from data import load_mnist
-from lib.attack_l1 import OptimizerL1
-from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold, l1_metric,
+from lib.attack_li import OptimizerLi
+from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold, li_metric,
                        log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
                        select_balanced_subset, setup_experiment)
@@ -22,7 +22,7 @@ from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_l1")
+register_experiment_flags(working_dir="../results/mnist/test_li")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -57,7 +57,7 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment("madry_l1_test", [lib.attack_l1.__file__])
+    setup_experiment("madry_li_test", [lib.attack_li.__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size, seed=FLAGS.data_seed)
@@ -88,7 +88,7 @@ def main(unused_args):
     load_madry(FLAGS.load_from, classifier.trainable_variables)
 
     # attacks
-    ol1 = OptimizerL1(lambda x: test_classifier(x)["logits"],
+    oli = OptimizerLi(lambda x: test_classifier(x)["logits"],
                       batch_size=FLAGS.batch_size,
                       gradient_normalize=FLAGS.attack_gradient_normalize,
                       optimizer=FLAGS.attack_optimizer,
@@ -112,42 +112,42 @@ def main(unused_args):
 
     test_metrics = MetricsDictionary()
 
-    @tf.function
+    # @tf.function
     def test_step(image, label, batch_index):
         label_onehot = tf.one_hot(label, num_classes)
-        image_l1 = ol1(image, label_onehot)
+        image_li = oli(image, label_onehot)
 
         outs = test_classifier(image)
-        outs_l1 = test_classifier(image_l1)
+        outs_li = test_classifier(image_li)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
-        acc_l1 = acc_fn(label, outs_l1["logits"])
+        acc_li = acc_fn(label, outs_li["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics["acc_l1"](acc_l1)
-        test_metrics["conf_l1"](outs_l1["conf"])
+        test_metrics["acc_li"](acc_li)
+        test_metrics["conf_li"](outs_li["conf"])
 
         # measure norm
-        l1 = l1_metric(image - image_l1)
+        li = li_metric(image - image_li)
         for threshold in [
-                2.0, 2.5, 4.0, 5.0, 6.0, 7.5, 8.0, 8.75, 10.0, 12.5, 16.25,
-                20.0
+                0.03, 0.05, 0.07, 0.09, 0.1, 0.11, 0.15, 0.2, 0.25, 0.3, 0.325,
+                0.35
         ]:
             acc_th = get_acc_for_lp_threshold(
-                lambda x: test_classifier(x)['logits'], image, image_l1, label,
-                l1, threshold)
-            test_metrics["acc_l1_%.2f" % threshold](acc_th)
-        test_metrics["l1"](l1)
+                lambda x: test_classifier(x)['logits'], image, image_li, label,
+                li, threshold)
+            test_metrics["acc_li_%.2f" % threshold](acc_th)
+        test_metrics["li"](li)
         # exclude incorrectly classified
         is_corr = outs['pred'] == label
-        test_metrics["l1_corr"](l1[is_corr])
+        test_metrics["li_corr"](li[is_corr])
 
-        return image_l1
+        return image_li
 
     if FLAGS.generate_summary:
         start_time = time.time()
@@ -156,11 +156,11 @@ def main(unused_args):
             x_test, y_test, num_classes, num_classes)
         summary_images = tf.convert_to_tensor(summary_images)
         summary_labels = tf.convert_to_tensor(summary_labels)
-        summary_l1_imgs = test_step(summary_images, summary_labels, -1)
+        summary_li_imgs = test_step(summary_images, summary_labels, -1)
         save_path = os.path.join(FLAGS.samples_dir, 'orig.png')
         save_images(summary_images, save_path, data_format="NHWC")
-        save_path = os.path.join(FLAGS.samples_dir, 'l1.png')
-        save_images(summary_l1_imgs, save_path, data_format="NHWC")
+        save_path = os.path.join(FLAGS.samples_dir, 'li.png')
+        save_images(summary_li_imgs, save_path, data_format="NHWC")
         log_metrics(
             test_metrics,
             "Summary results [{:.2f}s]:".format(time.time() - start_time))
@@ -169,22 +169,22 @@ def main(unused_args):
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_l1_list = []
+    X_li_list = []
     y_list = []
     indx_list = []
     start_time = time.time()
     try:
         is_completed = False
         for batch_index, (image, label, indx) in enumerate(test_ds, 1):
-            X_l1 = test_step(image, label, batch_index)
+            X_li = test_step(image, label, batch_index)
             save_path = os.path.join(FLAGS.samples_dir,
                                      'epoch_orig-%d.png' % batch_index)
             save_images(image, save_path, data_format="NHWC")
             save_path = os.path.join(FLAGS.samples_dir,
-                                     'epoch_l1-%d.png' % batch_index)
-            save_images(X_l1, save_path, data_format="NHWC")
+                                     'epoch_li-%d.png' % batch_index)
+            save_images(X_li, save_path, data_format="NHWC")
             # save adversarial data
-            X_l1_list.append(X_l1)
+            X_li_list.append(X_li)
             y_list.append(label)
             indx_list.append(indx)
             if batch_index % FLAGS.print_frequency == 0:
@@ -205,7 +205,7 @@ def main(unused_args):
                     'attack_max_iter', 'attack_tol', 'attack_learning_rate',
                     'attack_lambda_learning_rate', 'attack_initial_const'
                 ]
-                hp_metric_names = ['final_l1', 'final_l1_corr']
+                hp_metric_names = ['final_li', 'final_li_corr']
                 hp_params = [
                     hp.HParam(hp_param_name)
                     for hp_param_name in hp_param_names
@@ -219,10 +219,10 @@ def main(unused_args):
                     hp_param_name: getattr(FLAGS, hp_param_name)
                     for hp_param_name in hp_param_names
                 })
-                final_l1 = test_metrics['l1'].result()
-                tf.summary.scalar('final_l1', final_l1, step=1)
-                final_l1_corr = test_metrics['l1_corr'].result()
-                tf.summary.scalar('final_l1_corr', final_l1_corr, step=1)
+                final_li = test_metrics['li'].result()
+                tf.summary.scalar('final_li', final_li, step=1)
+                final_li_corr = test_metrics['li_corr'].result()
+                tf.summary.scalar('final_li_corr', final_li_corr, step=1)
                 tf.summary.flush()
     except:
         logging.info("Stopping after {}".format(batch_index))
@@ -231,11 +231,11 @@ def main(unused_args):
             test_metrics,
             "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                  batch_index))
-        X_l1_all = tf.concat(X_l1_list, axis=0).numpy()
+        X_li_all = tf.concat(X_li_list, axis=0).numpy()
         y_all = tf.concat(y_list, axis=0).numpy()
         indx_list = tf.concat(indx_list, axis=0).numpy()
         np.savez(Path(FLAGS.working_dir) / 'X_adv',
-                 X_adv=X_l1_all,
+                 X_adv=X_li_all,
                  y=y_all,
                  indices=indx_list)
 

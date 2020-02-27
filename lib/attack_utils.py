@@ -1,11 +1,80 @@
 import numpy as np
 import tensorflow as tf
+import tensorflow_probability as tfp
 
 from .utils import l2_metric
 
 
+def proximal_l1(u, lambd):
+    return tfp.math.soft_threshold(u, lambd)
+
+
 def proximal_l2(u, lambd):
     return tf.nn.relu(1 - lambd / l2_metric(u, keepdims=True)) * u
+
+
+def proximal_linf(u, lambd):
+    u_shape = u.shape
+    if u.shape.ndims != 2:
+        u = tf.reshape(u, (u_shape[0], -1))
+    lambd = tf.reshape(lambd, (-1, 1))
+    return tf.reshape(u - lambd * project_l1ball(u / lambd, 1.0), u_shape)
+
+
+def project_simplex(v, z=1):
+    """ Compute the Euclidean projection on a positive simplex
+    Solves the optimisation problem (using the algorithm from [1]):
+        min_w 0.5 * || w - v ||_2^2 , s.t. \sum_i w_i = s, w_i >= 0
+
+    Notes
+    -----
+    The complexity of this algorithm is in O(n log(n)) as it involves sorting v.
+    Better alternatives exist for high-dimensional sparse vectors (cf. [1])
+    However, this implementation still easily scales to millions of dimensions.
+    References
+    ----------
+    [1] Efficient Projections onto the .1-Ball for Learning in High Dimensions
+        John Duchi, Shai Shalev-Shwartz, Yoram Singer, and Tushar Chandra.
+        International Conference on Machine Learning (ICML 2008)
+        http://www.cs.berkeley.edu/~jduchi/projects/DuchiSiShCh08.pdf
+    """
+    assert v.shape.ndims == 2
+    n, d = v.shape
+    u = tf.sort(v, direction="DESCENDING")
+    cssv = tf.cumsum(u, axis=-1) - z
+    ind = tf.tile(tf.expand_dims(tf.range(d, dtype=tf.float32) + 1, 0), [n, 1])
+    cond = tf.where(u - cssv / ind > 0, ind, -1)
+    rho = tf.argmax(cond, -1)
+    batch_indices = tf.range(n, dtype=rho.dtype)
+    rho_idx = tf.stack([batch_indices, rho], axis=1)
+    theta = tf.gather_nd(cssv, rho_idx) / tf.cast(rho + 1, tf.float32)
+    theta = tf.expand_dims(theta, -1)
+    return tf.nn.relu(v - theta)
+
+
+def project_l1ball(v, radius):
+    """Projects values onto the feasible region.
+    """
+    assert radius > 0
+    assert v.shape.ndims == 2
+    u = tf.abs(v)
+
+    cond = tf.reduce_sum(u, axis=1) <= radius
+    if tf.reduce_all(cond):
+        return u
+
+    w = tf.where(tf.reshape(cond, (-1, 1)), v, tf.sign(v) * project_simplex(u, radius))
+    return w
+
+
+def project_log_distribution_wrt_kl_divergence(log_distribution, axis=1):
+    # For numerical reasons, make sure that the largest element is zero before
+    # exponentiating.
+    log_distribution = log_distribution - tf.reduce_max(
+        log_distribution, axis=axis, keepdims=True)
+    log_distribution = log_distribution - tf.math.log(
+        tf.reduce_sum(tf.exp(log_distribution), axis=axis, keepdims=True))
+    return log_distribution
 
 
 def project_box(x, u, boxmin, boxmax):
