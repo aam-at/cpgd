@@ -266,10 +266,10 @@ def parse_test_corruptions_log(wildcard,
         return df
 
 
-def parse_test_optimizer_l2_log(root,
-                                exclude=None,
-                                export_org=False,
-                                export_test_params=None):
+def parse_test_optimizer_log(root,
+                             exclude=None,
+                             export_org=False,
+                             export_test_params=None):
     if exclude is None:
         exclude = []
     if export_test_params is None:
@@ -291,53 +291,6 @@ def parse_test_optimizer_l2_log(root,
             test_values_with_name = test_results_str.split(',')
             test_result = {'name': name}
 
-            for test_value_with_name in test_values_with_name:
-                test_name, test_value = test_value_with_name.split(":")
-                test_name = test_name.strip()
-                test_value = float(test_value)
-                if test_name not in exclude:
-                    test_result[test_name] = float(test_value)
-
-            for param_name in export_test_params:
-                test_result[param_name] = test_params[param_name]
-            test_results.append(test_result)
-        except:
-            failed.append(load_dir)
-
-    if len(failed) > 0:
-        print("Failed to parse directories: %s" % failed)
-
-    df = pd.DataFrame.from_dict(test_results)
-    if export_org:
-        return org_table(df)
-    else:
-        return df
-
-
-def parse_test_optimizer_l1_log(root,
-                                exclude=None,
-                                export_org=False,
-                                export_test_params=None):
-    if exclude is None:
-        exclude = []
-    if export_test_params is None:
-        export_test_params = []
-
-    failed = []
-    test_results = []
-    for index, load_dir in enumerate(sorted(Path(root).glob('*'))):
-        load_dir = str(load_dir)
-        with open(os.path.join(load_dir, 'tensorflow.log'), 'r') as f:
-            test_param_str = f.readline()
-            test_params = load_params(test_param_str)
-            text = "\n".join(f.readlines())
-        name = os.path.basename(load_dir)
-
-        try:
-            test_results_str = re.findall("(?<=Test results).*", text)[-1]
-            test_results_str = test_results_str[test_results_str.find(":") + 1:]
-            test_values_with_name = test_results_str.split(',')
-            test_result = {'name': name}
             for test_value_with_name in test_values_with_name:
                 test_name, test_value = test_value_with_name.split(":")
                 test_name = test_name.strip()

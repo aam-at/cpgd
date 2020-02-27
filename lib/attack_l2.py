@@ -12,10 +12,6 @@ tfd = tfp.distributions
 
 class OptimizerL2(OptimizerLp):
     def __init__(self, model, **kwargs):
-        """The L_2 optimization attack (external regret minimization with
-        multiplicative updates).
-
-        """
         super(OptimizerL2, self).__init__(model=model, **kwargs)
         self.ord = 2
 

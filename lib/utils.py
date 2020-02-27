@@ -192,9 +192,14 @@ def log_tensorboard_metrics(metrics, prefix=None, step=None):
         tf.summary.scalar(f"{prefix}{metric_name}", metric_value, step)
 
 
+def l0_metric(x, axes=None, keepdims=False):
+    if axes is None:
+        axes = list(range(1, x.shape.ndims))
+    x = tf.convert_to_tensor(x, name="x")
+    return tf.reduce_sum(tf.abs(x) > 0, axes, keepdims=keepdims)
+
+
 def li_metric(x, axes=None, keepdims=False):
-    """Stable l2 normalization
-    """
     if axes is None:
         axes = list(range(1, x.shape.ndims))
     x = tf.convert_to_tensor(x, name="x")
@@ -202,8 +207,6 @@ def li_metric(x, axes=None, keepdims=False):
 
 
 def li_normalize(d, axes=None):
-    """Li normalization
-    """
     if axes is None:
         axes = list(range(1, d.shape.ndims))
     d = tf.convert_to_tensor(d, name="d")
