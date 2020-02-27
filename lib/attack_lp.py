@@ -35,6 +35,11 @@ def margin(logits, y_onehot, delta=0.0, targeted=False):
 
 
 class OptimizerLp(object):
+    """The L_p optimization attack (external regret minimization with
+    multiplicative updates).
+
+    """
+
     def __init__(
         self,
         model,

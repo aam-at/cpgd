@@ -5,6 +5,10 @@ import tensorflow_probability as tfp
 from .utils import l2_metric
 
 
+def proximal_l0(u, lambd):
+    return tf.where(u ** 2 <= lambd, 0, u)
+
+
 def proximal_l1(u, lambd):
     return tfp.math.soft_threshold(u, lambd)
 

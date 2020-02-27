@@ -10,10 +10,6 @@ from .utils import li_metric, li_normalize
 
 class OptimizerLi(OptimizerLp):
     def __init__(self, model, **kwargs):
-        """The L_2 optimization attack (external regret minimization with
-        multiplicative updates).
-
-        """
         super(OptimizerLi, self).__init__(model=model, **kwargs)
         self.ord = np.inf
 
