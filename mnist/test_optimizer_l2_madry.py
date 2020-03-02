@@ -38,6 +38,7 @@ flags.DEFINE_float("attack_primal_lr", 5e-2, "learning rate for primal variables
 flags.DEFINE_bool("attack_finetune", True, "attack finetune")
 flags.DEFINE_float("attack_primal_fn_lr", 1e-2, "learning rate for primal variables (finetune)")
 flags.DEFINE_float("attack_dual_lr", 1e-1, "learning rate for dual variables")
+flags.DEFINE_integer("attack_iter", 100, "iterations before restart")
 flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
 flags.DEFINE_integer("attack_min_iter_per_start", 0, "min iterations before random restart")
 flags.DEFINE_integer("attack_max_iter_per_start", 100, "max iterations before random restart")
@@ -97,14 +98,12 @@ def main(unused_args):
                       finetune=FLAGS.attack_finetune,
                       primal_fn_lr=FLAGS.attack_primal_fn_lr,
                       dual_lr=FLAGS.attack_dual_lr,
+                      iterations=FLAGS.attack_iter,
                       max_iterations=FLAGS.attack_max_iter,
-                      min_iterations_per_start=FLAGS.attack_min_iter_per_start,
-                      max_iterations_per_start=FLAGS.attack_max_iter_per_start,
                       confidence=FLAGS.attack_confidence,
                       targeted=False,
                       r0_init=FLAGS.attack_r0_init,
                       sampling_radius=FLAGS.attack_sampling_radius,
-                      tol=FLAGS.attack_tol,
                       initial_const=FLAGS.attack_initial_const,
                       use_proxy_constraint=FLAGS.attack_proxy_constrain)
 
@@ -201,8 +200,8 @@ def main(unused_args):
             with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
                 # hyperparameters
                 hp_param_names = [
-                    'attack_max_iter', 'attack_tol', 'attack_learning_rate',
-                    'attack_lambda_learning_rate', 'attack_initial_const'
+                    'attack_iter', 'attack_max_iter', 'attack_primal_lr',
+                    'attack_dual_lr', 'attack_initial_const'
                 ]
                 hp_metric_names = ['final_l2', 'final_l2_corr']
                 hp_params = [
