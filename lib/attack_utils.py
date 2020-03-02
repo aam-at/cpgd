@@ -5,8 +5,22 @@ import tensorflow_probability as tfp
 from .utils import l2_metric
 
 
+def margin(logits, y_onehot, delta=0.0, targeted=False):
+    real = tf.reduce_sum(y_onehot * logits, 1)
+    other = tf.reduce_max((1 - y_onehot) * logits - y_onehot * 10000, 1)
+    if targeted:
+        # if targetted, optimize for making the other class
+        # most likely
+        cls_con = other - real + delta
+    else:
+        # if untargeted, optimize for making this class least
+        # likely.
+        cls_con = real - other + delta
+    return cls_con
+
+
 def proximal_l0(u, lambd):
-    return tf.where(u ** 2 <= lambd, 0, u)
+    return tf.where(u**2 <= lambd, 0, u)
 
 
 def proximal_l1(u, lambd):
@@ -67,7 +81,8 @@ def project_l1ball(v, radius):
     if tf.reduce_all(cond):
         return u
 
-    w = tf.where(tf.reshape(cond, (-1, 1)), v, tf.sign(v) * project_simplex(u, radius))
+    w = tf.where(tf.reshape(cond, (-1, 1)), v,
+                 tf.sign(v) * project_simplex(u, radius))
     return w
 
 

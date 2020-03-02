@@ -37,10 +37,8 @@ flags.DEFINE_float("attack_primal_lr", 5e-2, "learning rate for primal variables
 flags.DEFINE_bool("attack_finetune", True, "attack finetune")
 flags.DEFINE_float("attack_primal_fn_lr", 1e-2, "learning rate for primal variables (finetune)")
 flags.DEFINE_float("attack_dual_lr", 1e-1, "learning rate for dual variables")
+flags.DEFINE_integer("attack_iter", 100, "iterations before restart")
 flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
-flags.DEFINE_integer("attack_min_iter_per_start", 0, "min iterations before random restart")
-flags.DEFINE_integer("attack_max_iter_per_start", 100, "max iterations before random restart")
-flags.DEFINE_float("attack_tol", 0.005, "attack tolerance")
 flags.DEFINE_string("attack_r0_init", "sign", "attack r0 init")
 flags.DEFINE_float("attack_sampling_radius", None, "attack sampling radius")
 flags.DEFINE_float("attack_confidence", 0, "margin confidence of adversarial examples")
@@ -96,14 +94,12 @@ def main(unused_args):
                       finetune=FLAGS.attack_finetune,
                       primal_fn_lr=FLAGS.attack_primal_fn_lr,
                       dual_lr=FLAGS.attack_dual_lr,
+                      iterations=FLAGS.attack_iter,
                       max_iterations=FLAGS.attack_max_iter,
-                      min_iterations_per_start=FLAGS.attack_min_iter_per_start,
-                      max_iterations_per_start=FLAGS.attack_max_iter_per_start,
                       confidence=FLAGS.attack_confidence,
                       targeted=False,
                       r0_init=FLAGS.attack_r0_init,
                       sampling_radius=FLAGS.attack_sampling_radius,
-                      tol=FLAGS.attack_tol,
                       initial_const=FLAGS.attack_initial_const,
                       use_proxy_constraint=FLAGS.attack_proxy_constrain)
 
@@ -112,7 +108,7 @@ def main(unused_args):
 
     test_metrics = MetricsDictionary()
 
-    # @tf.function
+    @tf.function
     def test_step(image, label, batch_index):
         label_onehot = tf.one_hot(label, num_classes)
         image_li = oli(image, label_onehot)
@@ -202,8 +198,8 @@ def main(unused_args):
             with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
                 # hyperparameters
                 hp_param_names = [
-                    'attack_max_iter', 'attack_tol', 'attack_learning_rate',
-                    'attack_lambda_learning_rate', 'attack_initial_const'
+                    'attack_iter', 'attack_max_iter', 'attack_primal_lr',
+                    'attack_dual_lr', 'attack_initial_const'
                 ]
                 hp_metric_names = ['final_li', 'final_li_corr']
                 hp_params = [
