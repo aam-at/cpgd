@@ -5,9 +5,9 @@ from abc import abstractmethod
 import numpy as np
 import tensorflow as tf
 
-from .attack_utils import (project_log_distribution_wrt_kl_divergence,
+from .attack_utils import (margin, project_log_distribution_wrt_kl_divergence,
                            random_lp_vector)
-from .utils import prediction, to_indexed_slices, l2_normalize
+from .utils import l2_normalize, prediction, random_targets, to_indexed_slices
 
 
 def create_optimizer(opt, lr, **kwargs):
@@ -18,20 +18,6 @@ def create_optimizer(opt, lr, **kwargs):
 
 def reset_optimizer(opt):
     [var.assign(tf.zeros_like(var)) for var in opt.variables()]
-
-
-def margin(logits, y_onehot, delta=0.0, targeted=False):
-    real = tf.reduce_sum(y_onehot * logits, 1)
-    other = tf.reduce_max((1 - y_onehot) * logits - y_onehot * 10000, 1)
-    if targeted:
-        # if targetted, optimize for making the other class
-        # most likely
-        cls_con = other - real + delta
-    else:
-        # if untargeted, optimize for making this class least
-        # likely.
-        cls_con = real - other + delta
-    return cls_con
 
 
 class OptimizerLp(object):
@@ -46,19 +32,18 @@ class OptimizerLp(object):
         batch_size=1,
         # parameters for the optimizer
         gradient_normalize=False,
-        optimizer='sgd',
+        optimizer='adam',
         primal_lr=1e-1,
         finetune=True,
         primal_fn_lr=0.01,
         dual_lr=1e-1,
+        iterations=100,
         max_iterations=10000,
         # parameters for the attack
         confidence=0.0,
         targeted=False,
+        multitargeted=False,
         # parameters for random restarts
-        tol=5e-3,
-        min_iterations_per_start=0,
-        max_iterations_per_start=100,
         r0_init="uniform",
         sampling_radius=None,
         # parameters for non-convex constrained minimization
@@ -77,15 +62,14 @@ class OptimizerLp(object):
         self.finetune = finetune
         self.primal_fn_lr = primal_fn_lr
         self.dual_lr = dual_lr
+        self.iterations = iterations
         self.max_iterations = max_iterations
         self.gradient_normalize = gradient_normalize
         # parameters for the attack
         self.confidence = confidence
         self.targeted = targeted
+        self.multitargeted = multitargeted
         # parameters for the random restarts
-        self.tol = tol
-        self.min_iterations_per_start = min_iterations_per_start
-        self.max_iterations_per_start = max_iterations_per_start
         self.r0_init = r0_init
         if sampling_radius is not None:
             assert sampling_radius >= 0
@@ -111,14 +95,21 @@ class OptimizerLp(object):
         self.primal_fn_opt = create_optimizer(self.optimizer,
                                               self.primal_fn_lr)
         self.dual_opt = create_optimizer(self.optimizer, self.dual_lr)
-        # create attack variables
+        # primal variable
         self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="r")
+        # dual variable
+        initial_zero = np.log(self.initial_const)
+        initial_one = np.log(1 - self.initial_const)
+        self.state0 = np.array(np.stack(
+            (np.ones(batch_size) * initial_zero,
+             np.ones(batch_size) * initial_one),
+            axis=1), dtype=np.float32)
         self.state = tf.Variable(
             tf.zeros((batch_size, 2)),
             trainable=True,
             constraint=project_log_distribution_wrt_kl_divergence,
             name="dual_state")
-        self.iterations = tf.Variable(tf.zeros(batch_size), trainable=False)
+        # create other attack variables
         self.attack = tf.Variable(tf.zeros(X_shape),
                                   trainable=False,
                                   name="x_hat")
@@ -152,22 +143,16 @@ class OptimizerLp(object):
         return r0
 
     def _reset_attack(self, X, y):
-        X_shape = X.shape
-        batch_size = X_shape[0]
-        self.attack.assign(X)
+        batch_size = X.shape[0]
+        assert batch_size == self.batch_size
         self.r.assign(self._init_r0(X))
-        initial_zero = np.log(self.initial_const)
-        initial_one = np.log(1 - self.initial_const)
-        self.state.assign(
-            np.stack((np.ones(batch_size) * initial_zero,
-                      np.ones(batch_size) * initial_one),
-                     axis=1))
-        self.iterations.assign(tf.zeros(batch_size))
+        self.state.assign(self.state0)
+        self.attack.assign(X)
         self.bestlp.assign(1e10 * tf.ones(batch_size))
         # indices of the correct predictions
         assert y.ndim == 1
-        corr = prediction(self.model(X)) != y
         # only compute perturbation for correctly classified inputs
+        corr = prediction(self.model(X)) != y
         self.bestlp.scatter_update(
             to_indexed_slices(tf.zeros_like(self.bestlp), self.batch_indices,
                               corr))
@@ -181,15 +166,20 @@ class OptimizerLp(object):
         pass
 
     @abstractmethod
+    def lp_normalize(self, u):
+        pass
+
+    @abstractmethod
     def proximal_step(self, opt, X, g, l):
         pass
 
     def _call(self, X, y_onehot):
         # correct prediction
+        num_classes = y_onehot.shape[0]
+        logits = self.model(X)
         y = tf.argmax(y_onehot, axis=-1)
 
         # get variables
-        batch_size = self.batch_size
         primal_opt = self.primal_opt
         primal_fn_opt = self.primal_fn_opt
         dual_opt = self.dual_opt
@@ -197,17 +187,14 @@ class OptimizerLp(object):
         r = self.r
         state = self.state
         bestlp = self.bestlp
-        iterations = self.iterations
 
         @tf.function
         def optim_step(X,
                        y_onehot,
                        targeted=False,
                        finetune=False,
-                       restarts=True):
-            r_v = r.read_value()
+                       restarts=False):
             # increment iterations
-            iterations.assign_add(tf.ones(batch_size))
             with tf.GradientTape(persistent=True) as find_r_tape:
                 X_hat = X + r
                 logits_hat = self.model(X_hat)
@@ -224,7 +211,7 @@ class OptimizerLp(object):
 
             fg = find_r_tape.gradient(loss, r)
             if self.gradient_normalize:
-                fg = l2_normalize(fg)
+                fg = self.lp_normalize(fg)
             # generalized gradient (after proximity and projection operator)
             self.proximal_step(primal_fn_opt if finetune else primal_opt, X, fg, lambd)
 
@@ -244,36 +231,34 @@ class OptimizerLp(object):
             attack.scatter_update(
                 to_indexed_slices(X_hat, self.batch_indices, is_best_attack))
 
-            # random restart
             if restarts:
-                is_conv = self.lp_metric(r - r_v) <= self.tol
-                # stopping condition: run for at least min_restart_iterations
-                # if it does not converges
-                should_restart = tf.logical_or(
-                    tf.logical_and(
-                        tf.logical_and(is_conv, is_adv),
-                        iterations >= self.min_iterations_per_start),
-                    iterations >= self.max_iterations_per_start)
-                r0 = self._init_r0(X)
-                r.scatter_update(
-                    to_indexed_slices(r0, self.batch_indices, should_restart))
-                iterations.scatter_update(
-                    to_indexed_slices(tf.zeros_like(iterations), self.batch_indices,
-                                      should_restart))
+                r.assign(self._init_r0(X))
+                state.assign(self.state0)
+                reset_optimizer(self.primal_opt)
+                reset_optimizer(self.dual_opt)
 
         # reset optimizer and variables
         self._reset_attack(X, y)
-        for iteration in range(1, self.max_iterations + 1):
-            optim_step(X, y_onehot, targeted=self.targeted, restarts=True)
+        for iteration in range(self.max_iterations):
+            if iteration % self.iterations == 0:
+                restarts = True
+                t_onehot = tf.one_hot(random_targets(num_classes, y_onehot, logits),
+                                      num_classes)
+            else:
+                restarts = False
+            if self.multitargeted:
+                optim_step(X, t_onehot, targeted=True, restarts=restarts)
+            else:
+                optim_step(X, y_onehot, targeted=self.targeted, restarts=restarts)
 
         # finetune for 1/10 iterations
         if self.finetune:
             r.assign(attack - X)
+            state.assign(self.state0)
             for iteration in range(1, self.max_iterations // 10 + 1):
                 optim_step(X,
                            y_onehot,
                            targeted=self.targeted,
-                           restarts=False,
                            finetune=True)
 
         return attack.read_value()

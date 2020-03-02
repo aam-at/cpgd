@@ -10,9 +10,9 @@ from .utils import l0_metric
 tfd = tfp.distributions
 
 
-class OptimizerL1(OptimizerLp):
+class OptimizerL0(OptimizerLp):
     def __init__(self, model, **kwargs):
-        super(OptimizerL1, self).__init__(model=model, **kwargs)
+        super(OptimizerL0, self).__init__(model=model, **kwargs)
         self.ord = 0
 
     def lp_metric(self, u, keepdims=False):

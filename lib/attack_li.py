@@ -16,6 +16,9 @@ class OptimizerLi(OptimizerLp):
     def lp_metric(self, u, keepdims=False):
         return li_metric(u, keepdims=keepdims)
 
+    def lp_normalize(self, g):
+        return li_normalize(g)
+
     def proximal_step(self, opt, X, g, l):
         r = self.r
         # generalized gradient after proximity and projection operator

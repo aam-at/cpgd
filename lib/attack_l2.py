@@ -5,7 +5,7 @@ import tensorflow_probability as tfp
 
 from .attack_lp import OptimizerLp
 from .attack_utils import project_box, proximal_l2
-from .utils import l2_metric
+from .utils import l2_metric, l2_normalize
 
 tfd = tfp.distributions
 
@@ -17,6 +17,9 @@ class OptimizerL2(OptimizerLp):
 
     def lp_metric(self, u, keepdims=False):
         return l2_metric(u, keepdims=keepdims)
+
+    def lp_normalize(self, g):
+        return l2_normalize(g)
 
     def proximal_step(self, opt, X, g, l):
         r = self.r

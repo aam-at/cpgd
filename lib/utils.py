@@ -206,12 +206,12 @@ def li_metric(x, axes=None, keepdims=False):
     return tf.reduce_max(tf.abs(x), axes, keepdims=keepdims)
 
 
-def li_normalize(d, axes=None):
+def li_normalize(d, eps=1e-6, axes=None):
     if axes is None:
         axes = list(range(1, d.shape.ndims))
     d = tf.convert_to_tensor(d, name="d")
     d_li = li_metric(d, axes, keepdims=True)
-    return d / d_li
+    return d / (d_li + eps)
 
 
 def l1_metric(x, axes=None, keepdims=False):
