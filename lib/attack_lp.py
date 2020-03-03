@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from .attack_utils import (margin, project_log_distribution_wrt_kl_divergence,
                            random_lp_vector)
-from .utils import l2_normalize, prediction, random_targets, to_indexed_slices
+from .utils import prediction, random_targets, to_indexed_slices
 
 
 def create_optimizer(opt, lr, **kwargs):
@@ -127,12 +127,10 @@ class OptimizerLp(object):
         if self.sampling_radius is not None and self.sampling_radius > 0:
             if self.r0_init == 'sign':
                 r0 = tf.sign(tf.random.normal(X.shape))
-                r0 = (self.sampling_radius * r0 /
-                      self.lp_metric(r0, keepdims=True))
+                r0 = self.sampling_radius * r0
             elif self.r0_init == 'uniform':
                 r0 = tf.random.uniform(X.shape, -1.0, 1.0)
-                r0 = (self.sampling_radius * r0 /
-                      self.lp_metric(r0, keepdims=True))
+                r0 = self.sampling_radius * r0
             elif self.r0_init == 'lp_sphere':
                 r0 = random_lp_vector(X.shape, self.ord, self.sampling_radius)
             else:
@@ -192,8 +190,7 @@ class OptimizerLp(object):
         def optim_step(X,
                        y_onehot,
                        targeted=False,
-                       finetune=False,
-                       restarts=False):
+                       finetune=False):
             # increment iterations
             with tf.GradientTape(persistent=True) as find_r_tape:
                 X_hat = X + r
@@ -231,25 +228,24 @@ class OptimizerLp(object):
             attack.scatter_update(
                 to_indexed_slices(X_hat, self.batch_indices, is_best_attack))
 
-            if restarts:
+        # reset optimizer and variables
+        self._reset_attack(X, y)
+        t_onehot = tf.one_hot(random_targets(num_classes, y_onehot, logits),
+                              num_classes)
+        for iteration in range(1, self.max_iterations + 1):
+            if iteration % self.iterations == 0:
+                # reset optimizer and optimization variables
                 r.assign(self._init_r0(X))
                 state.assign(self.state0)
                 reset_optimizer(self.primal_opt)
                 reset_optimizer(self.dual_opt)
 
-        # reset optimizer and variables
-        self._reset_attack(X, y)
-        for iteration in range(self.max_iterations):
-            if iteration % self.iterations == 0:
-                restarts = True
-                t_onehot = tf.one_hot(random_targets(num_classes, y_onehot, logits),
-                                      num_classes)
-            else:
-                restarts = False
+                t_onehot = tf.one_hot(
+                    random_targets(num_classes, y_onehot, logits), num_classes)
             if self.multitargeted:
-                optim_step(X, t_onehot, targeted=True, restarts=restarts)
+                optim_step(X, t_onehot, targeted=True)
             else:
-                optim_step(X, y_onehot, targeted=self.targeted, restarts=restarts)
+                optim_step(X, y_onehot, targeted=self.targeted)
 
         # finetune for 1/10 iterations
         if self.finetune:
