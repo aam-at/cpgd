@@ -55,7 +55,8 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment("madry_li_test", [lib.attack_li.__file__])
+    setup_experiment("madry_li_test",
+                     [lib.attack_lp.__file__, lib.attack_li.__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size, seed=FLAGS.data_seed)
