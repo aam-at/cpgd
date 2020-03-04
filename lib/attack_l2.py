@@ -30,4 +30,4 @@ class OptimizerL2(OptimizerLp):
 
         with tf.control_dependencies([opt.apply_gradients([(pg, r)])]):
             # final projection
-            r.assign(project_box(X, r, self.boxmin, self.boxmax))
+            r.assign(self.project_box(X, r))

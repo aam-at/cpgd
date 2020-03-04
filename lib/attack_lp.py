@@ -6,8 +6,8 @@ import numpy as np
 import tensorflow as tf
 
 from .attack_utils import (margin, project_log_distribution_wrt_kl_divergence,
-                           random_lp_vector)
-from .utils import prediction, random_targets, to_indexed_slices
+                           random_lp_vector, project_box)
+from .utils import prediction, random_targets, to_indexed_slices, l2_metric
 
 
 def create_optimizer(opt, lr, **kwargs):
@@ -34,8 +34,10 @@ class OptimizerLp(object):
         gradient_normalize=False,
         optimizer='adam',
         primal_lr=1e-1,
+        primal_min_lr=1e-2,
+        linesearch=False,
+        linesearch_steps=5,
         finetune=True,
-        primal_fn_lr=0.01,
         dual_lr=1e-1,
         iterations=100,
         max_iterations=10000,
@@ -58,9 +60,12 @@ class OptimizerLp(object):
         self.batch_indices = tf.range(batch_size)
         # parameters for the optimizer
         self.optimizer = optimizer
+        self.has_momentum = optimizer != 'sgd'
         self.primal_lr = primal_lr
+        self.primal_min_lr = primal_min_lr
+        self.linesearch = linesearch
+        self.linesearch_steps = linesearch_steps
         self.finetune = finetune
-        self.primal_fn_lr = primal_fn_lr
         self.dual_lr = dual_lr
         self.iterations = iterations
         self.max_iterations = max_iterations
@@ -101,11 +106,10 @@ class OptimizerLp(object):
         assert batch_size == X_shape[0]
         assert y_shape.ndims == 2
         # primal and dual variable optimizer
-        self.primal_opt = create_optimizer(self.optimizer, self.primal_lr)
-        self.primal_fn_opt = create_optimizer(self.optimizer,
-                                              self.primal_fn_lr)
+        self.primal_opt = create_optimizer(self.optimizer, 1.0)
+        self.primal_fn_opt = create_optimizer(self.optimizer, 0.1)
         self.dual_opt = create_optimizer(self.optimizer, self.dual_lr)
-        # primal variable
+        # primal and dual variable
         self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="r")
         self.state = tf.Variable(
             tf.zeros((batch_size, 2)),
@@ -116,6 +120,9 @@ class OptimizerLp(object):
         self.attack = tf.Variable(tf.zeros(X_shape),
                                   trainable=False,
                                   name="x_hat")
+        self.beststate = tf.Variable(self.state0,
+                                     trainable=False,
+                                     name="best_state")
         self.bestlp = tf.Variable(tf.zeros(batch_size),
                                   trainable=False,
                                   name="best_lp")
@@ -140,18 +147,16 @@ class OptimizerLp(object):
                 raise ValueError
         else:
             r0 = tf.zeros(X.shape)
-        r0 = tf.clip_by_value(X + r0, 0.0, 1.0) - X
-        return r0
+        return self.project_box(X, r0)
 
     def _reset_attack(self, X, y):
         batch_size = X.shape[0]
         assert batch_size == self.batch_size
-        # init optimizer variables
         self.r.assign(self._init_r0(X))
         self.state.assign(self.state0)
-        # reset best solution
         self.attack.assign(X)
-        self.bestlp.assign(1e10 * tf.ones(batch_size))
+        self.beststate.assign(1e10 * tf.ones_like(self.beststate))
+        self.bestlp.assign(1e10 * tf.ones_like(self.bestlp))
         # indices of the correct predictions
         assert y.ndim == 1
         # only compute perturbation for correctly classified inputs
@@ -173,8 +178,42 @@ class OptimizerLp(object):
         pass
 
     @abstractmethod
+    def proximity_operator(self, u, l):
+        pass
+
+    @abstractmethod
     def proximal_step(self, opt, X, g, l):
         pass
+
+    def proximal_gradient(self, X, g, lr, lamb):
+        r = self.r
+        # composition of proximity and projection operator
+        rnew = self.project_box(
+            X, self.proximity_operator(r - lr * g, lr * lamb))
+        return (r - rnew) / lr
+
+    def line_search(self, X, y_onehot, g, lamb):
+        r = self.r
+        lr = self.primal_lr * tf.ones((self.batch_size, 1, 1, 1))
+        g0 = margin(self.model(X + r), y_onehot, self.targeted)
+        pgi = tf.zeros_like(g)
+        m = tf.pow(self.primal_min_lr / self.primal_lr,
+                   1.0 / (self.linesearch_steps - 1))
+        for i in tf.range(self.linesearch_steps):
+            lr_flat = tf.reshape(lr, (-1, ))
+            pgi = self.proximal_gradient(X, g, lr, lamb)
+            ri = r - lr * pgi
+            gi = margin(self.model(X + ri), y_onehot, self.targeted)
+            giapp = g0 - lr_flat * (tf.reduce_sum(pgi * g, axis=(1, 2, 3)) -
+                                    tf.square(l2_metric(pgi)))
+            cond = gi >= giapp
+            lr *= tf.where(tf.reshape(cond, (-1, 1, 1, 1)), m * tf.ones_like(lr), tf.ones_like(lr))
+            if tf.reduce_all(~cond):
+                break
+        return lr
+
+    def project_box(self, X, u):
+        return project_box(X, u, self.boxmin, self.boxmax)
 
     def _call(self, X, y_onehot):
         # correct prediction
@@ -191,6 +230,7 @@ class OptimizerLp(object):
         state = self.state
         # best solution
         attack = self.attack
+        beststate = self.beststate
         bestlp = self.bestlp
 
         @tf.function
@@ -206,11 +246,10 @@ class OptimizerLp(object):
                        y_onehot,
                        targeted=False,
                        finetune=False):
-            # increment iterations
             with tf.GradientTape(persistent=True) as find_r_tape:
                 X_hat = X + r
                 logits_hat = self.model(X_hat)
-                # Part 1: minimize l1 loss
+                # Part 1: lp loss
                 lp_loss = self.lp_metric(r)
                 # Part 2: classification loss
                 cls_con = margin(logits_hat, y_onehot, targeted=targeted)
@@ -218,15 +257,21 @@ class OptimizerLp(object):
 
             # lambda for proximity operator
             state_distr = tf.exp(state)
-            lambd = state_distr[:, 0] / state_distr[:, 1]
-            lambd = tf.reshape(lambd, (-1, 1, 1, 1))
+            lamb = state_distr[:, 0] / state_distr[:, 1]
+            lamb = tf.reshape(lamb, (-1, 1, 1, 1))
 
+            # optimize primal variables (proximal gradient)
             fg = find_r_tape.gradient(loss, r)
             if self.gradient_normalize:
                 fg = self.lp_normalize(fg)
-            # generalized gradient (after proximity and projection operator)
-            self.proximal_step(primal_fn_opt if finetune else primal_opt, X, fg, lambd)
+            if self.linesearch:
+                lr = self.line_search(X, y_onehot, fg, lamb)
+            else:
+                lr = self.primal_lr
+            opt = primal_fn_opt if finetune else primal_opt
+            self.proximal_step(opt, X, fg, lr, lamb)
 
+            # optimize dual variables
             if self.use_proxy_constraint:
                 multipliers_gradients = -cls_con
             else:
@@ -238,10 +283,12 @@ class OptimizerLp(object):
 
             is_adv = y != tf.argmax(logits_hat, axis=-1)
             is_best_attack = tf.logical_and(is_adv, lp_loss < bestlp)
-            bestlp.scatter_update(
-                to_indexed_slices(lp_loss, self.batch_indices, is_best_attack))
             attack.scatter_update(
                 to_indexed_slices(X_hat, self.batch_indices, is_best_attack))
+            beststate.scatter_update(
+                to_indexed_slices(state, self.batch_indices, is_best_attack))
+            bestlp.scatter_update(
+                to_indexed_slices(lp_loss, self.batch_indices, is_best_attack))
 
         # reset optimizer and variables
         self._reset_attack(X, y)
@@ -259,13 +306,11 @@ class OptimizerLp(object):
 
         # finetune for 1/10 iterations
         if self.finetune:
+            restart_step(X)
             r.assign(attack - X)
-            state.assign(self.state0)
+            state.assign(beststate)
             for iteration in range(1, self.max_iterations // 10 + 1):
-                optim_step(X,
-                           y_onehot,
-                           targeted=self.targeted,
-                           finetune=True)
+                optim_step(X, y_onehot, targeted=self.targeted, finetune=True)
 
         return attack.read_value()
 
