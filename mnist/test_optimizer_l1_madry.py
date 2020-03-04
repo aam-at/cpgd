@@ -35,7 +35,6 @@ flags.DEFINE_bool("attack_gradient_normalize", False, "normalize the gradient of
 flags.DEFINE_string("attack_optimizer", "adam", "optimizer for the attack")
 flags.DEFINE_float("attack_primal_lr", 5e-2, "learning rate for primal variables")
 flags.DEFINE_bool("attack_finetune", True, "attack finetune")
-flags.DEFINE_float("attack_primal_fn_lr", 1e-2, "learning rate for primal variables (finetune)")
 flags.DEFINE_float("attack_dual_lr", 1e-1, "learning rate for dual variables")
 flags.DEFINE_integer("attack_iter", 100, "iterations before restart")
 flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
@@ -93,7 +92,6 @@ def main(unused_args):
                       optimizer=FLAGS.attack_optimizer,
                       primal_lr=FLAGS.attack_primal_lr,
                       finetune=FLAGS.attack_finetune,
-                      primal_fn_lr=FLAGS.attack_primal_fn_lr,
                       dual_lr=FLAGS.attack_dual_lr,
                       iterations=FLAGS.attack_iter,
                       max_iterations=FLAGS.attack_max_iter,

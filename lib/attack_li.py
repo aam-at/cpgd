@@ -30,4 +30,4 @@ class OptimizerLi(OptimizerLp):
             # gradient momentum can interfere (project again)
             r.assign(proximal_linf(r, tl))
             # final projection
-            r.assign(project_box(X, r, self.boxmin, self.boxmax))
+            r.assign(self.project_box(X, r))

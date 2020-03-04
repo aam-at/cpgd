@@ -4,7 +4,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 
 from .attack_lp import OptimizerLp
-from .attack_utils import project_box, proximal_l1
+from .attack_utils import proximal_l1
 from .utils import l1_metric, l1_normalize
 
 tfd = tfp.distributions
@@ -21,16 +21,16 @@ class OptimizerL1(OptimizerLp):
     def lp_normalize(self, g):
         return l1_normalize(g)
 
-    def proximal_step(self, opt, X, g, l):
-        r = self.r
-        # generalized gradient after proximity and projection operator
-        tl = self.primal_lr * l
-        pg = (r - project_box(X, proximal_l1(r - self.primal_lr * g, tl),
-                              self.boxmin, self.boxmax)) / self.primal_lr
+    def proximity_operator(self, u, l):
+        return proximal_l1(u, l)
 
-        with tf.control_dependencies([opt.apply_gradients([(pg, r)])]):
-            # gradient momentum can destroy the sparsity of updates
-            # use hard thresholding to restore the perturbation sparsity
-            r.assign(tf.where(tf.abs(r) <= tl, 0.0, r))
+    def proximal_step(self, opt, X, g, lr, lamb):
+        r = self.r
+        pg = self.proximal_gradient(X, g, lr, lamb)
+        with tf.control_dependencies([opt.apply_gradients([(lr * pg, r)])]):
+            if self.has_momentum:
+                # gradient momentum can change the sparsity:
+                # use hard thresholding to restore the perturbation sparsity
+                r.assign(tf.where(tf.abs(r) <= lamb, 0.0, r))
             # final projection
-            r.assign(project_box(X, r, self.boxmin, self.boxmax))
+            r.assign(self.project_box(X, r))
