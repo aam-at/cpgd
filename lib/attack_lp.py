@@ -75,11 +75,20 @@ class OptimizerLp(object):
             assert sampling_radius >= 0
         self.sampling_radius = sampling_radius
         # parameters for non-convex constrained optimization
-        self.initial_const = (minimal_const
-                              if initial_const is None else initial_const)
-        assert 0 < self.initial_const < 1.0
-        self.minimal_const = minimal_const
+        # initial state for dual variable
+        assert 0 < initial_const < 1.0
+        initial_const = (minimal_const
+                         if initial_const is None else initial_const)
+        initial_zero = np.log(initial_const)
+        initial_one = np.log(1 - initial_const)
+        self.state0 = tf.constant(
+            np.array(np.stack((np.ones(batch_size) * initial_zero,
+                               np.ones(batch_size) * initial_one),
+                              axis=1),
+                     dtype=np.float32))
+        # use proxy constraint
         self.use_proxy_constraint = use_proxy_constraint
+        # box projection
         self.boxmin = boxmin
         self.boxmax = boxmax
 
@@ -88,7 +97,8 @@ class OptimizerLp(object):
     def build(self, inputs_shape):
         assert not self.built
         X_shape, y_shape = inputs_shape
-        batch_size = X_shape[0]
+        batch_size = self.batch_size
+        assert batch_size == X_shape[0]
         assert y_shape.ndims == 2
         # primal and dual variable optimizer
         self.primal_opt = create_optimizer(self.optimizer, self.primal_lr)
@@ -97,13 +107,6 @@ class OptimizerLp(object):
         self.dual_opt = create_optimizer(self.optimizer, self.dual_lr)
         # primal variable
         self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="r")
-        # dual variable
-        initial_zero = np.log(self.initial_const)
-        initial_one = np.log(1 - self.initial_const)
-        self.state0 = np.array(np.stack(
-            (np.ones(batch_size) * initial_zero,
-             np.ones(batch_size) * initial_one),
-            axis=1), dtype=np.float32)
         self.state = tf.Variable(
             tf.zeros((batch_size, 2)),
             trainable=True,
@@ -143,8 +146,10 @@ class OptimizerLp(object):
     def _reset_attack(self, X, y):
         batch_size = X.shape[0]
         assert batch_size == self.batch_size
+        # init optimizer variables
         self.r.assign(self._init_r0(X))
         self.state.assign(self.state0)
+        # reset best solution
         self.attack.assign(X)
         self.bestlp.assign(1e10 * tf.ones(batch_size))
         # indices of the correct predictions
@@ -181,10 +186,20 @@ class OptimizerLp(object):
         primal_opt = self.primal_opt
         primal_fn_opt = self.primal_fn_opt
         dual_opt = self.dual_opt
-        attack = self.attack
+        # optimizer variables
         r = self.r
         state = self.state
+        # best solution
+        attack = self.attack
         bestlp = self.bestlp
+
+        @tf.function
+        def restart_step(X):
+            # reset optimizer and optimization variables
+            r.assign(self._init_r0(X))
+            state.assign(self.state0)
+            reset_optimizer(self.primal_opt)
+            reset_optimizer(self.dual_opt)
 
         @tf.function
         def optim_step(X,
@@ -234,12 +249,7 @@ class OptimizerLp(object):
                               num_classes)
         for iteration in range(1, self.max_iterations + 1):
             if iteration % self.iterations == 0:
-                # reset optimizer and optimization variables
-                r.assign(self._init_r0(X))
-                state.assign(self.state0)
-                reset_optimizer(self.primal_opt)
-                reset_optimizer(self.dual_opt)
-
+                restart_step(X)
                 t_onehot = tf.one_hot(
                     random_targets(num_classes, y_onehot, logits), num_classes)
             if self.multitargeted:
