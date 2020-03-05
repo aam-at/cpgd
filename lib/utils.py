@@ -51,6 +51,19 @@ def flags_to_params(fls):
     return Namespace(**{k: f.value for k, f in fls.__flags.items()})
 
 
+def import_kwargs_as_flags(f, prefix=''):
+    spec = inspect.getfullargspec(f)
+    flag_defines = {
+        str: flags.DEFINE_string,
+        bool: flags.DEFINE_bool,
+        int: flags.DEFINE_integer,
+        float: flags.DEFINE_float
+    }
+    for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
+        kwarg_default = spec.defaults[index]
+        flag_defines[kwarg_type](f"{prefix}{kwarg}", kwarg_default, f"{kwarg}")
+
+
 def prepare_dir(dir_path, subdir_name):
     base = os.path.join(dir_path, subdir_name)
     i = 0
@@ -76,13 +89,13 @@ class NanError(BaseException):
 def select_balanced_subset(X, y, num_classes=10, samples_per_class=10, seed=1):
     total_samples = num_classes * samples_per_class
     X_subset = np.zeros([total_samples] + list(X.shape[1:]), dtype=X.dtype)
-    y_subset = np.zeros((total_samples,), dtype=y.dtype)
+    y_subset = np.zeros((total_samples, ), dtype=y.dtype)
     rng = np.random.RandomState(seed)
     for i in range(num_classes):
         yi_indices = np.where(y == i)[0]
         rng.shuffle(yi_indices)
-        X_subset[samples_per_class * i:(i + 1) *
-                                       samples_per_class, ...] = X[yi_indices[:samples_per_class]]
+        X_subset[samples_per_class * i:(i + 1) * samples_per_class,
+                 ...] = X[yi_indices[:samples_per_class]]
         y_subset[samples_per_class * i:(i + 1) * samples_per_class] = i
     return X_subset, y_subset
 
@@ -99,10 +112,14 @@ def pad_images(images, fltr):
     for i in range(nimages):
         if fltr[i]:
             padded_images.append(
-                np.pad(images[i], [(0, 0), (2, 2), (2, 2)], 'constant', constant_values=1.0))
+                np.pad(images[i], [(0, 0), (2, 2), (2, 2)],
+                       'constant',
+                       constant_values=1.0))
         else:
             padded_images.append(
-                np.pad(images[i], [(0, 0), (2, 2), (2, 2)], 'constant', constant_values=0.0))
+                np.pad(images[i], [(0, 0), (2, 2), (2, 2)],
+                       'constant',
+                       constant_values=0.0))
     return np.vstack(padded_images)[:, np.newaxis, ...]
 
 
@@ -162,7 +179,10 @@ def setup_experiment(default_name, snapshot_files=None):
 
     if snapshot_files is not None:
         for snapshot_file in snapshot_files:
-            copyfile(snapshot_file, os.path.join(FLAGS.working_dir, os.path.basename(snapshot_file)))
+            copyfile(
+                snapshot_file,
+                os.path.join(FLAGS.working_dir,
+                             os.path.basename(snapshot_file)))
 
 
 # tensorflow utils
@@ -256,7 +276,8 @@ def l2_normalize(d, axes=None, epsilon=1e-12):
 
 
 def get_acc_for_lp_threshold(model, image_o, image_m, label, lp, threshold):
-    image_th = tf.where(tf.reshape(lp <= threshold, (-1, 1, 1, 1)), image_m, image_o)
+    image_th = tf.where(tf.reshape(lp <= threshold, (-1, 1, 1, 1)), image_m,
+                        image_o)
     logits_th = model(image_th)
     acc_th = tf.keras.metrics.sparse_categorical_accuracy(label, logits_th)
     return acc_th
@@ -469,9 +490,9 @@ def random_targets(num_labels,
             label_onehot = tf.one_hot(label_onehot, num_labels)
         if logits is None:
             logits = tf.ones_like(label_onehot, dtype=tf.float32)
-        logits = tf.where(tf.cast(label_onehot, dtype=tf.bool),
-                          -np.inf * tf.ones_like(label_onehot, dtype=tf.float32),
-                          logits)
+        logits = tf.where(
+            tf.cast(label_onehot, dtype=tf.bool),
+            -np.inf * tf.ones_like(label_onehot, dtype=tf.float32), logits)
         return tf.reshape(
             tf.random.categorical(logits, num_samples=1, dtype=dtype), (-1, ))
 

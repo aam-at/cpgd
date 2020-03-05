@@ -11,12 +11,12 @@ def margin(logits, y_onehot, delta=0.0, targeted=False):
     if targeted:
         # if targetted, optimize for making the other class
         # most likely
-        cls_con = other - real + delta
+        margin = other - real + delta
     else:
         # if untargeted, optimize for making this class least
         # likely.
-        cls_con = real - other + delta
-    return cls_con
+        margin = real - other + delta
+    return margin
 
 
 def proximal_l0(u, lambd):
