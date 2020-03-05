@@ -14,10 +14,12 @@ from tensorboard.plugins.hparams import api as hp
 import lib
 from data import load_mnist
 from lib.attack_l1 import OptimizerL1
-from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold, l1_metric,
-                       log_metrics, make_input_pipeline,
-                       register_experiment_flags, reset_metrics, save_images,
-                       select_balanced_subset, setup_experiment)
+from lib.attack_lp import OptimizerLp
+from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
+                       import_kwargs_as_flags, l1_metric, log_metrics,
+                       make_input_pipeline, register_experiment_flags,
+                       reset_metrics, save_images, select_balanced_subset,
+                       setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
@@ -31,18 +33,7 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 flags.DEFINE_bool("sort_labels", False, "sort labels")
 
 # attack parameters
-flags.DEFINE_bool("attack_gradient_normalize", False, "normalize the gradient of the model")
-flags.DEFINE_string("attack_optimizer", "adam", "optimizer for the attack")
-flags.DEFINE_float("attack_primal_lr", 5e-2, "learning rate for primal variables")
-flags.DEFINE_bool("attack_finetune", True, "attack finetune")
-flags.DEFINE_float("attack_dual_lr", 1e-1, "learning rate for dual variables")
-flags.DEFINE_integer("attack_iter", 100, "iterations before restart")
-flags.DEFINE_integer("attack_max_iter", 1000, "max iterations")
-flags.DEFINE_string("attack_r0_init", "sign", "attack r0 init")
-flags.DEFINE_float("attack_sampling_radius", None, "attack sampling radius")
-flags.DEFINE_float("attack_confidence", 0, "margin confidence of adversarial examples")
-flags.DEFINE_float("attack_initial_const", 0.1, "initial const for attack")
-flags.DEFINE_bool("attack_proxy_constrain", True, "use proxy for lagrange multiplier maximization")
+import_kwargs_as_flags(OptimizerLp.__init__, 'attack_')
 
 flags.DEFINE_boolean("generate_summary", False, "generate summary images")
 flags.DEFINE_integer("summary_frequency", 1, "summarize frequency (in batches)")
@@ -86,21 +77,13 @@ def main(unused_args):
     load_madry(FLAGS.load_from, classifier.trainable_variables)
 
     # attacks
+    attack_kwargs = {
+        kwarg.replace('attack_', ''): getattr(FLAGS, kwarg)
+        for kwarg in dir(FLAGS) if kwarg.startswith('attack_')
+    }
     ol1 = OptimizerL1(lambda x: test_classifier(x)["logits"],
                       batch_size=FLAGS.batch_size,
-                      gradient_normalize=FLAGS.attack_gradient_normalize,
-                      optimizer=FLAGS.attack_optimizer,
-                      primal_lr=FLAGS.attack_primal_lr,
-                      finetune=FLAGS.attack_finetune,
-                      dual_lr=FLAGS.attack_dual_lr,
-                      iterations=FLAGS.attack_iter,
-                      max_iterations=FLAGS.attack_max_iter,
-                      confidence=FLAGS.attack_confidence,
-                      targeted=False,
-                      r0_init=FLAGS.attack_r0_init,
-                      sampling_radius=FLAGS.attack_sampling_radius,
-                      initial_const=FLAGS.attack_initial_const,
-                      use_proxy_constraint=FLAGS.attack_proxy_constrain)
+                      **attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy

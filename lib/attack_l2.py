@@ -21,13 +21,5 @@ class OptimizerL2(OptimizerLp):
     def lp_normalize(self, g):
         return l2_normalize(g)
 
-    def proximal_step(self, opt, X, g, l):
-        r = self.r
-        # generalized gradient after proximity and projection operator
-        tl = self.primal_lr * l
-        pg = (r - project_box(X, proximal_l2(r - self.primal_lr * g, tl),
-                              self.boxmin, self.boxmax)) / self.primal_lr
-
-        with tf.control_dependencies([opt.apply_gradients([(pg, r)])]):
-            # final projection
-            r.assign(self.project_box(X, r))
+    def proximity_operator(self, u, l):
+        return proximal_l2(u, l)

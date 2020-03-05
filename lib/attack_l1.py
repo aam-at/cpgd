@@ -1,6 +1,5 @@
 from __future__ import absolute_import, division, print_function
 
-import tensorflow as tf
 import tensorflow_probability as tfp
 
 from .attack_lp import OptimizerLp
@@ -23,14 +22,3 @@ class OptimizerL1(OptimizerLp):
 
     def proximity_operator(self, u, l):
         return proximal_l1(u, l)
-
-    def proximal_step(self, opt, X, g, lr, lamb):
-        r = self.r
-        pg = self.proximal_gradient(X, g, lr, lamb)
-        with tf.control_dependencies([opt.apply_gradients([(lr * pg, r)])]):
-            if self.has_momentum:
-                # gradient momentum can change the sparsity:
-                # use hard thresholding to restore the perturbation sparsity
-                r.assign(tf.where(tf.abs(r) <= lamb, 0.0, r))
-            # final projection
-            r.assign(self.project_box(X, r))
