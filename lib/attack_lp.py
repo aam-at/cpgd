@@ -145,7 +145,7 @@ class OptimizerLp(object):
         batch_size = X.shape[0]
         assert batch_size == self.batch_size
         self.attack.assign(X)
-        self.beststate.assign(1e10 * tf.ones_like(self.beststate))
+        self.beststate.assign(self.state0)
         self.bestlp.assign(1e10 * tf.ones_like(self.bestlp))
         # indices of the correct predictions
         assert y.ndim == 1
@@ -180,6 +180,15 @@ class OptimizerLp(object):
                     y_onehot, logits)
         return cls_constraint, cls_loss
 
+    def total_loss(self, X, y_onehot, r):
+        _, cls_loss = self.cls_constraint_and_loss(X + r,
+                                                   y_onehot,
+                                                   targeted=self.targeted)
+        lp_loss = self.lp_metric(r)
+        state_distr = tf.exp(self.state)
+        losses = tf.stack((cls_loss, lp_loss), axis=1)
+        return tf.reduce_sum(losses * state_distr, axis=1)
+
     @abstractmethod
     def proximity_operator(self, u, l):
         pass
@@ -194,8 +203,11 @@ class OptimizerLp(object):
     def proximal_step(self, X, g, lr, lamb):
         r = self.r
         pg = self.proximal_gradient(X, g, lr, lamb)
+        r_v = r.read_value()
         with tf.control_dependencies(
             [self.primal_opt.apply_gradients([(pg, r)])]):
+            # r.assign(tf.where(l2_metric(g, keepdims=True) <= 1e-6, r_v, r))
+            r.assign(self.proximity_operator(r, lr * lamb))
             r.assign(self.project_box(X, r))
 
     def project_state(self, u):
@@ -276,6 +288,11 @@ class OptimizerLp(object):
         # reset optimizer and variables
         self._reset_attack(X, y)
         for iteration in range(self.max_iterations):
+            if self.lr_decay:
+                min_lr = 0.001
+                primal_opt.lr = (
+                    min_lr + (self.primal_lr - min_lr) *
+                    (1 - iteration % self.iterations / self.iterations))
             if iteration % self.iterations == 0:
                 restart_step(X)
                 t_onehot = tf.one_hot(
@@ -290,8 +307,10 @@ class OptimizerLp(object):
             restart_step(X)
             r.assign(attack - X)
             state.assign(beststate)
+            primal_opt.lr = 0.01
             for iteration in range(1, self.max_iterations // 10 + 1):
                 optim_step(X, y_onehot, targeted=self.targeted, finetune=True)
+            primal_opt.lr = self.primal_lr
 
         return attack.read_value()
 
