@@ -1,14 +1,12 @@
 #+TITLE: Todos for cpgd project
 
 * TODOs
-** Mnist experiments
-*** DONE Import MNIST challenge model
-CLOSED: [2020-02-07 Fri 17:22]
-This model was already used in fab-paper.
-** General algorithm
-*** TODO Test different schedules to reduce sampling radius
+** General algorithm [8/8]
+*** DONE Test different schedules to reduce sampling radius
+CLOSED: [2020-02-28 Fri 04:28]
 Plot with summary the average perturbation norm and observe what is crucial
 (rapid decay of the radius or having a search within large radius)
+Use simple random sampling (random random fixed radius)
 **** Test the strategy where we decrease the radius and where we keep radius constant
 Fab used the fixed radius for sampling
 **** TODO Implement where initial const is computed on a random batch from the dataset
@@ -17,17 +15,32 @@ consecutive runs
 **** TODO Compare different stopping thresholds
 Experiments how does the stopping thresholds impacts the performance vs
 different number of iterations
-*** TODO Implement Projected FISTA algorithm for l1 optimization
-*** TODO Implement linf algorithm
-*** TODO Use iterative thresholding algorithm instead of previous clipping
-*** TODO Set initial const on the warm up batch
-Does not help or helps only slightly. Make whole algorithm a little bit more
+*** DONE Implement Projected FISTA algorithm for l1 optimization
+CLOSED: [2020-03-26 Thu 15:06]
+Implemented accelerated proximal gradient
+*** DONE Implement linf algorithm
+CLOSED: [2020-02-28 Fri 04:28]
+*** DONE Use iterative thresholding algorithm instead of previous clipping
+CLOSED: [2020-02-28 Fri 04:28]
+*** DONE Implement tuning for specific thresholds
+CLOSED: [2020-03-26 Thu 15:06]
+Doesn't work well  Make whole algorithm a little bit more
 complicated.
 Set it instead to the small value, like the problem is unconstrained
-*** TODO Make a connection to multiplicative updates external regret minimization
-** TODO Cifar10 experiments
-*** TODO Import Cifar10 challenge model
-** TODO Imagenet experiments
+*** DONE Implement fista with sgd
+CLOSED: [2020-03-26 Thu 15:06]
+*** DONE Implement fista with backtracking
+CLOSED: [2020-03-26 Thu 15:06]
+*** DONE Make a connection to multiplicative updates external regret minimization
+CLOSED: [2020-03-26 Thu 15:06]
+** Mnist experiments
+*** DONE Import MNIST challenge model
+CLOSED: [2020-02-07 Fri 17:22]
+This model was already used in fab-paper.
+** TODO Cifar10 experiments [1/1]
+*** DONE Import Cifar10 challenge model
+CLOSED: [2020-03-26 Thu 15:38]
+** TODO Imagenet experiments [0/1]
 *** TODO Import robust model trained on Restricted Imagenet
 ** Main parameters of the algorithm
 - Number of iterations
