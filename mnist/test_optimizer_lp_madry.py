@@ -166,7 +166,7 @@ def main(unused_args):
     try:
         is_completed = False
         for batch_index, (image, label, indx) in enumerate(test_ds, 1):
-            X_lp = test_step(image, label, batch_index)
+            X_lp = test_step(image, label)
             save_path = os.path.join(FLAGS.samples_dir,
                                      "epoch_orig-%d.png" % batch_index)
             save_images(image, save_path, data_format="NHWC")
