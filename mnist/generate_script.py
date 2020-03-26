@@ -16,18 +16,8 @@ models = [
 hostname = subprocess.getoutput('hostname')
 
 
-def generate_test_optimizer_l2(load_from, **kwargs):
-    return generate_test_optimizer('test_optimizer_l2_madry', load_from,
-                                   **kwargs)
-
-
-def generate_test_optimizer_l1(load_from, **kwargs):
-    return generate_test_optimizer('test_optimizer_l1_madry', load_from,
-                                   **kwargs)
-
-
-def generate_test_optimizer_li(load_from, **kwargs):
-    return generate_test_optimizer('test_optimizer_li_madry', load_from,
+def generate_test_optimizer_lp(norm, norm, load_from, **kwargs):
+    return generate_test_optimizer('test_optimizer_lp_madry', load_from,
                                    **kwargs)
 
 

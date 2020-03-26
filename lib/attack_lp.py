@@ -7,7 +7,7 @@ import tensorflow as tf
 
 from .attack_utils import (margin, project_log_distribution_wrt_kl_divergence,
                            random_lp_vector, project_box)
-from .utils import l2_metric, prediction, random_targets, to_indexed_slices
+from .utils import prediction, random_targets, to_indexed_slices
 
 
 def create_optimizer(opt, lr, **kwargs):
@@ -25,7 +25,6 @@ class OptimizerLp(object):
     multiplicative updates).
 
     """
-
     def __init__(
         self,
         model,
@@ -33,10 +32,13 @@ class OptimizerLp(object):
         # parameters for the optimizer
         loss: str = 'cw',
         optimizer: str = 'sgd',
+        gradient_normalize: bool = True,
+        accelerated: bool = False,
+        momentum: float = 0.9,
         iterations: int = 100,
         max_iterations: int = 10000,
         primal_lr: float = 1e-1,
-        primal_min_lr: float = 1e-2,
+        primal_min_lr: float = None,
         dual_lr: float = 1e-2,
         targeted: bool = False,
         multitargeted: bool = False,
@@ -53,19 +55,50 @@ class OptimizerLp(object):
         use_proxy_constraint: bool = True,
         boxmin: float = 0.0,
         boxmax: float = 1.0):
+        """
+
+        :param model: the function to call which returns logits.
+        :param batch_size: batch size.
+        :param loss: loss one of 'cw', 'logit_diff', 'ce'
+        :param optimizer: optimizer of the primal loss
+        :param gradient_normalize: normalize the gradient before computing the update
+        :param accelerated: use accelerated proximal gradient descent with adaptive momentum from https://arxiv.org/pdf/1705.04925.pdf
+        :param momentum: momentum for APGnc
+        :param iterations: minimal number of iterations before random restart
+        :param max_iterations: maximum number of iterations
+        :param primal_lr: learning rate for primal variables
+        :param primal_min_lr: minimal learning for primal variables for lr decay or for finetuning
+        :param dual_lr: learning rate for dual variables
+        :param targeted: if the attack is targeted
+        :param multitargeted: if the attack is multitargeted
+        :param lr_decay: use learning rate decay
+        :param finetune: finetune perturbation with primal_min_lr
+        :param confidence: target attack confidence for 'cw' loss
+        :param r0_init: random initialization for perturbation
+        :param sampling_radius: sampling radius for random initialization
+        :param initial_const: initial const for the constraint weight
+        :param minimal_const: minimal constraint weight
+        :param use_proxy_constraint: use proxy Lagrangian formulation (https://arxiv.org/abs/1804.06500) to update constraints weight
+        :param boxmin: box constraint minimum
+        :param boxmax: box constraint maximum
+        """
         super(OptimizerLp, self).__init__()
         self.model = model
         self.batch_size = batch_size
         self.batch_indices = tf.range(batch_size)
         # parameters for the optimizer
         self.optimizer = optimizer
+        self.gradient_normalize = gradient_normalize
+        self.accelerated = accelerated
+        self.momentum = momentum
         self.lr_decay = lr_decay
         assert loss in ['logit_diff', 'cw', 'ce']
         self.loss = loss
         self.iterations = iterations
         self.max_iterations = max_iterations
         self.primal_lr = primal_lr
-        self.primal_min_lr = primal_min_lr
+        self.primal_min_lr = (primal_min_lr if primal_min_lr is not None else
+                              primal_lr / 10.0)
         self.dual_lr = dual_lr
         # parameters for the attack
         self.targeted = targeted
@@ -107,12 +140,13 @@ class OptimizerLp(object):
         self.primal_opt = create_optimizer(self.optimizer, self.primal_lr)
         self.dual_opt = create_optimizer(self.optimizer, self.dual_lr)
         # primal and dual variable
-        self.r = tf.Variable(tf.zeros(X_shape), trainable=True, name="r")
-        self.state = tf.Variable(
-            tf.zeros((batch_size, 2)),
-            trainable=True,
-            constraint=self.project_state,
-            name="dual_state")
+        self.rx = tf.Variable(tf.zeros(X_shape), trainable=True, name="rx")
+        self.ry = tf.Variable(tf.zeros(X_shape), trainable=True, name="ry")
+        self.state = tf.Variable(tf.zeros((batch_size, 2)),
+                                 trainable=True,
+                                 constraint=self.project_state,
+                                 name="dual_state")
+        self.beta = tf.Variable(tf.ones((batch_size, )))
         # create other attack variables
         self.attack = tf.Variable(tf.zeros(X_shape),
                                   trainable=False,
@@ -154,14 +188,20 @@ class OptimizerLp(object):
         self.bestlp.scatter_update(
             to_indexed_slices(tf.zeros_like(self.bestlp), self.batch_indices,
                               corr))
-        # reset optimizer and optimizer variables
-        self.r.assign(self._init_r0(X))
+        # reset optimizer variables
+        self.rx.assign(self._init_r0(X))
+        self.ry.assign(self.rx)
         self.state.assign(self.state0)
+        self.beta.assign(tf.ones_like(self.beta) * self.momentum)
         reset_optimizer(self.primal_opt)
         reset_optimizer(self.dual_opt)
 
     @abstractmethod
     def lp_metric(self, u, keepdims=False):
+        pass
+
+    @abstractmethod
+    def lp_normalize(self, u):
         pass
 
     def cls_constraint_and_loss(self, X, y_onehot, targeted=False):
@@ -180,6 +220,24 @@ class OptimizerLp(object):
                     y_onehot, logits)
         return cls_constraint, cls_loss
 
+    def line_search(self, X, y_onehot, r, g, lamb):
+        lr = tf.ones((self.batch_size, 1, 1, 1))
+        _, cls_loss0 = self.cls_constraint_and_loss(X + r,
+                                                    y_onehot,
+                                                    targeted=self.targeted)
+        for i in range(5):
+            pg = self.proximal_gradient(X, g, r, lr, lamb)
+            r_i = r - pg * lr
+            _, cls_loss = self.cls_constraint_and_loss(X + r_i,
+                                                       y_onehot,
+                                                       targeted=self.targeted)
+            lrf = tf.reshape(lr, (-1, ))
+            rhs = cls_loss0 - lrf * tf.reduce_sum(g * pg, axis=(
+                1, 2, 3)) + lrf / 2 * tf.reduce_sum(pg**2, axis=(1, 2, 3))
+            cond = cls_loss > rhs
+            lr = tf.where(tf.reshape(cond, (-1, 1, 1, 1)), 0.8 * lr, lr)
+        return lr
+
     def total_loss(self, X, y_onehot, r):
         _, cls_loss = self.cls_constraint_and_loss(X + r,
                                                    y_onehot,
@@ -193,22 +251,11 @@ class OptimizerLp(object):
     def proximity_operator(self, u, l):
         pass
 
-    def proximal_gradient(self, X, g, lr, lamb):
-        r = self.r
+    def proximal_gradient(self, X, g, r, lr, lamb):
         # composition of proximity and projection operator
-        rnew = self.project_box(
-            X, self.proximity_operator(r - lr * g, lr * lamb))
+        rnew = self.project_box(X,
+                                self.proximity_operator(r - lr * g, lr * lamb))
         return (r - rnew) / lr
-
-    def proximal_step(self, X, g, lr, lamb):
-        r = self.r
-        pg = self.proximal_gradient(X, g, lr, lamb)
-        r_v = r.read_value()
-        with tf.control_dependencies(
-            [self.primal_opt.apply_gradients([(pg, r)])]):
-            # r.assign(tf.where(l2_metric(g, keepdims=True) <= 1e-6, r_v, r))
-            r.assign(self.proximity_operator(r, lr * lamb))
-            r.assign(self.project_box(X, r))
 
     def project_state(self, u):
         return tf.maximum(tf.math.log(1e-3),
@@ -218,38 +265,44 @@ class OptimizerLp(object):
         return project_box(X, u, self.boxmin, self.boxmax)
 
     def _call(self, X, y_onehot):
+        batch_indices = self.batch_indices
         # correct prediction
         logits = self.model(X)
         num_classes = y_onehot.shape[1]
         y = tf.argmax(y_onehot, axis=-1)
 
-        # get variables
+        # primal and dual optimizers
         primal_opt = self.primal_opt
         dual_opt = self.dual_opt
-        # optimizer variables
-        r = self.r
+        # optimization variables
+        rx = self.rx
+        ry = self.ry
         state = self.state
+        beta = self.beta
         # best solution
         attack = self.attack
         beststate = self.beststate
         bestlp = self.bestlp
 
         @tf.function
-        def restart_step(X):
-            # reset optimizer and optimization variables
-            r.assign(self._init_r0(X))
+        def restart_step(X, y_onehot):
+            # reset primal optimizer and primal variables
             reset_optimizer(self.primal_opt)
-            # NOTE: remove it as it helps to not reset dual variables
-            state.assign(self.state0)
+            rx.assign(self._init_r0(X))
+            ry.assign(rx)
+            # reset dual optimizer and dual variables to best solution
             reset_optimizer(self.dual_opt)
+            # state.assign(self.state0)
+            state.assign(beststate)
+            beta.assign(tf.ones_like(beta) * self.momentum)
 
         @tf.function
         def optim_step(X, y_onehot, targeted=False, finetune=False):
             with tf.GradientTape() as find_r_tape:
-                X_hat = X + r
+                X_hat = X + ry
                 logits_hat = self.model(X_hat)
                 # Part 1: lp loss
-                lp_loss = self.lp_metric(r)
+                lp_loss = self.lp_metric(ry)
                 # Part 2: classification loss
                 cls_constraint, cls_loss = self.cls_constraint_and_loss(
                     X_hat, y_onehot, targeted=targeted)
@@ -259,13 +312,44 @@ class OptimizerLp(object):
             lamb = state_distr[:, 0] / state_distr[:, 1]
             lamb = tf.reshape(lamb, (-1, 1, 1, 1))
 
-            # optimize primal variables (proximal gradient)
-            fg = find_r_tape.gradient(cls_loss, r)
-            if finetune:
-                lr = self.primal_lr / 10.0
+            # optimize primal variables (PG or APG)
+            fg = find_r_tape.gradient(cls_loss, ry)
+            if self.gradient_normalize:
+                fg = tf.where(
+                    tf.reshape(cls_loss, (-1, 1, 1, 1)) > 0,
+                    self.lp_normalize(fg), fg)
+            lr = primal_opt.lr
+            # lr = self.line_search(X, y_onehot, ry, fg, lamb)
+            if self.accelerated:
+                # proximal gradient with adaptive momentum
+                rx_v = rx.read_value()
+                rx.assign(
+                    self.project_box(
+                        X, self.proximity_operator(ry - lr * fg, lr * lamb)))
+                rv = rx + tf.reshape(beta, (-1, 1, 1, 1)) * (rx - rx_v)
+                rv = self.project_box(X,
+                                      self.proximity_operator(rv, lr * lamb))
+                F_x = self.total_loss(X, y_onehot, rx)
+                F_v = self.total_loss(X, y_onehot, rv)
+                ry.assign(
+                    tf.where(tf.reshape(F_x <= F_v, (-1, 1, 1, 1)), rx, rv))
+                beta.assign(
+                    tf.minimum(tf.where(F_x <= F_v, 0.8, 1.25) * beta, 1.0))
             else:
-                lr = self.primal_lr
-            self.proximal_step(X, fg, lr, lamb)
+                rx.assign(ry - lr * fg)
+                with tf.control_dependencies(
+                    [self.primal_opt.apply_gradients([(fg, ry)])]):
+                    rx.assign(
+                        self.project_box(
+                            X, self.proximity_operator(rx, lr * lamb)))
+                    ry.assign(
+                        self.project_box(
+                            X, self.proximity_operator(ry, lr * lamb)))
+                    F_x = self.total_loss(X, y_onehot, rx)
+                    F_y = self.total_loss(X, y_onehot, ry)
+                    ry.assign(
+                        tf.where(tf.reshape(F_x <= F_y, (-1, 1, 1, 1)), rx,
+                                 ry))
 
             # optimize dual variables
             if self.use_proxy_constraint:
@@ -289,12 +373,12 @@ class OptimizerLp(object):
         self._reset_attack(X, y)
         for iteration in range(self.max_iterations):
             if self.lr_decay:
-                min_lr = 0.001
+                min_lr = self.primal_min_lr
                 primal_opt.lr = (
                     min_lr + (self.primal_lr - min_lr) *
                     (1 - iteration % self.iterations / self.iterations))
             if iteration % self.iterations == 0:
-                restart_step(X)
+                restart_step(X, y_onehot)
                 t_onehot = tf.one_hot(
                     random_targets(num_classes, y_onehot, logits), num_classes)
             if self.multitargeted:
@@ -304,13 +388,14 @@ class OptimizerLp(object):
 
         # finetune for 1/10 iterations
         if self.finetune:
-            restart_step(X)
-            r.assign(attack - X)
+            restart_step(X, y_onehot)
+            rx.assign(attack - X)
+            ry.assign(rx)
             state.assign(beststate)
-            primal_opt.lr = 0.01
+            primal_opt.lr.assign(self.primal_min_lr)
             for iteration in range(1, self.max_iterations // 10 + 1):
                 optim_step(X, y_onehot, targeted=self.targeted, finetune=True)
-            primal_opt.lr = self.primal_lr
+            primal_opt.lr.assign(self.primal_lr)
 
         return attack.read_value()
 

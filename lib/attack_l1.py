@@ -4,7 +4,7 @@ import tensorflow_probability as tfp
 
 from .attack_lp import OptimizerLp
 from .attack_utils import proximal_l1
-from .utils import l1_metric, l1_normalize
+from .utils import l1_metric, l2_normalize
 
 tfd = tfp.distributions
 
@@ -18,7 +18,7 @@ class OptimizerL1(OptimizerLp):
         return l1_metric(u, keepdims=keepdims)
 
     def lp_normalize(self, g):
-        return l1_normalize(g)
+        return l2_normalize(g)
 
     def proximity_operator(self, u, l):
         return proximal_l1(u, l)
