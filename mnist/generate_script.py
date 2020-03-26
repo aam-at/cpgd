@@ -16,8 +16,8 @@ models = [
 hostname = subprocess.getoutput('hostname')
 
 
-def generate_test_optimizer_lp(norm, norm, load_from, **kwargs):
-    return generate_test_optimizer('test_optimizer_lp_madry', load_from,
+def generate_test_optimizer_lp(norm, load_from, **kwargs):
+    return generate_test_optimizer('test_optimizer_lp_madry', norm, load_from,
                                    **kwargs)
 
 

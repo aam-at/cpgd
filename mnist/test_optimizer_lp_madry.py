@@ -13,13 +13,14 @@ from tensorboard.plugins.hparams import api as hp
 
 import lib
 from data import load_mnist
+from lib.attack_l0 import OptimizerL0
 from lib.attack_l1 import OptimizerL1
 from lib.attack_l2 import OptimizerL2
 from lib.attack_li import OptimizerLi
 from lib.attack_lp import OptimizerLp
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
-                       import_kwargs_as_flags, l1_metric, l2_metric, li_metric,
-                       log_metrics, make_input_pipeline,
+                       import_kwargs_as_flags, l0_metric, l1_metric, l2_metric,
+                       li_metric, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
                        select_balanced_subset, setup_experiment)
 from models import MadryCNN
@@ -47,7 +48,7 @@ FLAGS = flags.FLAGS
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-    assert FLAGS.norm in ['l1', 'l2', 'li']
+    assert FLAGS.norm in ['l0', 'l1', 'l2', 'li']
     assert FLAGS.load_from is not None
     setup_experiment(f"madry_{FLAGS.norm}_test", [
         lib.attack_lp.__file__,
@@ -82,9 +83,20 @@ def main(unused_args):
     classifier(np.zeros([1, 28, 28, 1], dtype=np.float32))
     load_madry(FLAGS.load_from, classifier.trainable_variables)
 
-    lp_attacks = {'l1': OptimizerL1, 'l2': OptimizerL2, 'li': OptimizerLi}
-    lp_metrics = {'l1': l1_metric, 'l2': l2_metric, 'li': li_metric}
+    lp_attacks = {
+        'l0': OptimizerL0,
+        'l1': OptimizerL1,
+        'l2': OptimizerL2,
+        'li': OptimizerLi
+    }
+    lp_metrics = {
+        'l0': l0_metric,
+        'l1': l1_metric,
+        'l2': l2_metric,
+        'li': li_metric
+    }
     test_thresholds = {
+        'l0': [10, 30, 50, 80, 100],
         'l1':
         [2.0, 2.5, 4.0, 5.0, 6.0, 7.5, 8.0, 8.75, 10.0, 12.5, 16.25, 20.0],
         'l2': [0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
