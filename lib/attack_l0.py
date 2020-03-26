@@ -18,16 +18,8 @@ class OptimizerL0(OptimizerLp):
     def lp_metric(self, u, keepdims=False):
         return l0_metric(u, keepdims=keepdims)
 
-    def proximal_step(self, opt, X, g, l):
-        r = self.r
-        # generalized gradient after proximity and projection operator
-        tl = self.primal_lr * l
-        pg = (r - project_box(X, proximal_l0(r - self.primal_lr * g, tl),
-                              self.boxmin, self.boxmax)) / self.primal_lr
+    def lp_normalize(self, g):
+        return l2_normalize(g)
 
-        with tf.control_dependencies([opt.apply_gradients([(pg, r)])]):
-            # gradient momentum can destroy the sparsity of updates
-            # use hard thresholding to restore the perturbation sparsity
-            r.assign(proximal_l0(r, tl))
-            # final projection
-            r.assign(project_box(X, r, self.boxmin, self.boxmax))
+    def proximity_operator(self, u, l):
+        return proximal_l0(u, l)
