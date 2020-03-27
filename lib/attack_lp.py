@@ -38,7 +38,7 @@ class OptimizerLp(object):
         iterations: int = 100,
         max_iterations: int = 10000,
         primal_lr: float = 1e-1,
-        primal_min_lr: float = None,
+        primal_min_lr: float = 1e-2,
         dual_lr: float = 1e-2,
         targeted: bool = False,
         multitargeted: bool = False,
