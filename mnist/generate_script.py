@@ -21,85 +21,89 @@ def generate_test_optimizer_lp(norm, load_from, **kwargs):
                                    **kwargs)
 
 
-def test_l1_config(runs=1, master_seed=1):
-    for (model, max_iter, opt, tol,
-         sampling_radius) in itertools.product(models, [10000],
-                                               ["sgd", "adam"], [0.005],
-                                               [250, 300]):
+def test_lp_config(norm, runs=1, master_seed=1):
+    assert norm in ['l0', 'li', 'l1', 'l2']
+    num_batches = {'li': 10, 'l1': 10, 'l2': 5}[norm]
+    attack_args = {'norm': norm, 'num_batches': num_batches}
+    name = "mnist_"
+    for (model, iterations, max_iterations, loss, optimizer, accelerated,
+         gradient_normalize,
+         use_sign) in itertools.product(models, [100], [1000], ["cw"],
+                                        ["adam"], [True, False], [True, False],
+                                        [True, False]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_final/test_l1_{type}"
-        attack_max_iter = max_iter
-        finetune = True
-        finetunestr = "finetune" if finetune else "nofinetune"
-        for lr, llr, r0_init, C0 in itertools.product([0.1, 0.05], [0.1],
-                                                      ["sign"], [0.1]):
-            np.random.seed(master_seed)
-            name = f"mnist_l1_{type}_{attack_max_iter//1000}k_{opt}_lr{lr}_llr{llr}_C{C0}_tol{tol}_r{r0_init}_R{sampling_radius}_{finetunestr}_{hostname}_"
-            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-            if name in p:
+        working_dir = f"../results/mnist/test_{norm}_{type}"
+        name0 = name + f"{norm}_{type}_{iterations}_{max_iterations // 1000}k_"
+        name0 = name0 + f"{optimizer if not accelerated else 'apg'}_{loss}_"
+        name0 = name0 + f"{'gnorm' if gradient_normalize else 'nognorm'}_"
+        attack_args0 = attack_args.copy()
+        attack_args0.update({
+            'load_from': model,
+            'attack_iterations': iterations,
+            'attack_max_iterations': max_iterations,
+            'attack_loss': loss,
+            'attack_optimizer': optimizer,
+            'attack_accelerated': accelerated,
+            'attack_gradient_normalize': gradient_normalize,
+            'working_dir': working_dir
+        })
+        if norm == 'li':
+            attack_args0.update({'attack_use_sign': use_sign})
+            if not gradient_normalize and use_sign:
                 continue
-            for i in range(runs):
-                seed = np.random.randint(1e6)
-                print(
-                    generate_test_optimizer_l1(
-                        load_from=model,
-                        attack_finetune=finetune,
-                        attack_optimizer=opt,
-                        attack_max_iter=attack_max_iter,
-                        attack_min_iter_per_start=0,
-                        attack_max_iter_per_start=100,
-                        attack_r0_init=r0_init,
-                        attack_sampling_radius=sampling_radius,
-                        attack_primal_lr=lr,
-                        attack_dual_lr=llr,
-                        attack_tol=tol,
-                        attack_initial_const=C0,
-                        num_batches=10,
-                        working_dir=working_dir,
-                        name=name,
-                        seed=seed))
+            elif gradient_normalize and use_sign:
+                name0 = name0[:-1] + "sign_"
+        elif use_sign:
+            continue
+        if gradient_normalize and use_sign and norm == 'li':
+            name0 = name0[:-1] + "sign_"
+        for lr, llr, C0 in itertools.product(np.linspace(0.05, 0.5, 10),
+                                             [0.1, 0.05, 0.01], [0.1, 0.5]):
+            attack_args1 = attack_args0.copy()
+            attack_args1.update({
+                'attack_primal_lr': lr,
+                'attack_primal_min_lr': lr / 10.0,
+                'attack_dual_lr': llr,
+                'attack_initial_const': C0
+            })
+            name1 = name0 + f"lr{lr:.2}_llr{llr:.2}_C{C0}_"
+            for sampling_radius, sampling_algorithm in itertools.product(
+                [0.5], ["uniform"]):
+                attack_args2 = attack_args1.copy()
+                attack_args2.update({
+                    'attack_r0_init': sampling_algorithm,
+                    'attack_sampling_radius': sampling_radius
+                })
+                name2 = name1 + f"{sampling_algorithm}_R{sampling_radius}_"
+                for lr_decay, finetune, use_proxy in itertools.product(
+                    [True, False], [True, False], [True, False]):
+                    attack_args3 = attack_args2.copy()
+                    attack_args3.update({
+                        'attack_lr_decay':
+                        lr_decay,
+                        'attack_finetune':
+                        finetune,
+                        'attack_use_proxy_constraint':
+                        use_proxy
+                    })
+                    name3 = name2 + f"{'decay' if lr_decay else 'nodecay'}_"
+                    name3 = name3 + f"{'finetune' if finetune else 'nofinetune'}_"
+                    name3 = name3 + f"{'proxy' if use_proxy else 'noproxy'}_"
+                    np.random.seed(master_seed)
+                    p = [
+                        s.name[:-1] for s in list(Path(working_dir).glob("*"))
+                    ]
+                    if name3 in p:
+                        continue
+                    for i in range(runs):
+                        seed = np.random.randint(1000)
+                        print(
+                            generate_test_optimizer_lp(
+                                name=name3,
+                                seed=seed,
+                                ignored_flags=['attack_use_sign'],
+                                **attack_args3))
 
-
-def test_l2_config(runs=1, master_seed=1):
-    for (model, max_iter, opt, tol,
-         sampling_radius) in itertools.product(models, [1000], ["adam"],
-                                               [0.005], [4, 10]):
-        type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_temp/test_l2_{type}"
-        attack_max_iter = max_iter
-        finetune = True
-        finetunestr = "finetune" if finetune else "nofinetune"
-        for lr, llr, r0_init, C0 in itertools.product([0.01], [0.1],
-                                                      ["sign", "uniform"],
-                                                      [0.1]):
-            np.random.seed(master_seed)
-            name = f"mnist_l2_{type}_{attack_max_iter//1000}k_g{opt}_lr{lr}_llr{llr}_C{C0}_tol{tol}_r{r0_init}_R{sampling_radius}_{finetunestr}_{hostname}_"
-            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-            if name in p:
-                continue
-            for i in range(runs):
-                seed = np.random.randint(1e6)
-                print(
-                    generate_test_optimizer_l2(
-                        load_from=model,
-                        attack_finetune=finetune,
-                        attack_optimizer=opt,
-                        attack_max_iter=attack_max_iter,
-                        attack_min_iter_per_start=0,
-                        attack_max_iter_per_start=100,
-                        attack_r0_init=r0_init,
-                        attack_sampling_radius=sampling_radius,
-                        attack_primal_lr=lr,
-                        attack_dual_lr=llr,
-                        attack_tol=tol,
-                        attack_initial_const=C0,
-                        num_batches=5,
-                        working_dir=working_dir,
-                        name=name,
-                        seed=seed))
-
-
-def test_l2_config_custom(runs=1, master_seed=1):
     df = parse_test_optimizer_log(
         "../results/mnist_final/test_l2_plain",
         export_test_params=[
@@ -196,4 +200,5 @@ def test_li_config(runs=1, master_seed=1):
 
 
 if __name__ == '__main__':
-    test_li_config()
+    for norm in ['l1', 'l2', 'li']:
+        test_lp_config(norm)
