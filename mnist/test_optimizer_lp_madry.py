@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
+import argparse
 import logging
 import os
 import time
@@ -204,8 +205,8 @@ def main(unused_args):
             with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
                 # hyperparameters
                 hp_param_names = [
-                    'attack_iter', 'attack_max_iter', 'attack_primal_lr',
-                    'attack_dual_lr', 'attack_initial_const'
+                    kwarg for kwarg in dir(FLAGS)
+                    if kwarg.startswith('attack_')
                 ]
                 hp_metric_names = [
                     f"final_{FLAGS.norm}", f"final_{FLAGS.norm}_corr"
@@ -247,4 +248,9 @@ def main(unused_args):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--norm", default=None, type=str)
+    args, _ = parser.parse_known_args()
+    if args.norm == 'li':
+        import_kwargs_as_flags(OptimizerLi.__init__, 'attack_')
     absl.app.run(main)
