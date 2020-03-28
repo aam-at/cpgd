@@ -55,8 +55,6 @@ def test_lp_config(norm, runs=1, master_seed=1):
                 name0 = name0[:-1] + "sign_"
         elif use_sign:
             continue
-        if gradient_normalize and use_sign and norm == 'li':
-            name0 = name0[:-1] + "sign_"
         for lr, llr, C0 in itertools.product(np.linspace(0.05, 0.5, 10),
                                              [0.1, 0.05, 0.01], [0.1, 0.5]):
             attack_args1 = attack_args0.copy()
@@ -200,5 +198,5 @@ def test_li_config(runs=1, master_seed=1):
 
 
 if __name__ == '__main__':
-    for norm in ['l1', 'l2', 'li']:
+    for norm in ['l0', 'l1', 'l2', 'li']:
         test_lp_config(norm)
