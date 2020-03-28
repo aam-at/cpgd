@@ -1,11 +1,10 @@
 from __future__ import absolute_import, division, print_function
 
-import tensorflow as tf
 import tensorflow_probability as tfp
 
 from .attack_lp import OptimizerLp
-from .attack_utils import project_box, proximal_l0
-from .utils import l0_metric
+from .attack_utils import proximal_l0
+from .utils import l0_metric, l2_normalize
 
 tfd = tfp.distributions
 
