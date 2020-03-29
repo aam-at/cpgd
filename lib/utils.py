@@ -216,7 +216,9 @@ def l0_metric(x, axes=None, keepdims=False):
     if axes is None:
         axes = list(range(1, x.shape.ndims))
     x = tf.convert_to_tensor(x, name="x")
-    return tf.reduce_sum(tf.abs(x) > 0, axes, keepdims=keepdims)
+    return tf.reduce_sum(tf.cast(tf.abs(x) > 0, x.dtype),
+                         axes,
+                         keepdims=keepdims)
 
 
 def li_metric(x, axes=None, keepdims=False):
