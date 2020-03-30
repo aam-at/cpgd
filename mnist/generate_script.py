@@ -34,7 +34,9 @@ def test_lp_config(norm, runs=1, master_seed=1):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist/test_{norm}_{type}"
         name0 = name + f"{norm}_{type}_{iterations}_{max_iterations // 1000}k_"
-        name0 = name0 + f"{optimizer if not accelerated else 'apg'}_{loss}_"
+        if accelerated:
+            optimizer = "sgd"
+        name0 = name0 + f"{optimizer if not accelerated else 'apg_sgd'}_{loss}_"
         name0 = name0 + f"{'gnorm' if gradient_normalize else 'nognorm'}_"
         attack_args0 = attack_args.copy()
         attack_args0.update({
