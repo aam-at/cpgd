@@ -147,7 +147,10 @@ def register_experiment_flags(working_dir="runs", seed=1):
 def setup_experiment(default_name, snapshot_files=None):
     from logging import FileHandler, Formatter, StreamHandler
     np.random.seed(FLAGS.seed)
-    tf.random.set_seed(FLAGS.seed)
+    if tf.version.VERSION.startswith("1."):
+        tf.compat.v1.set_random_seed(FLAGS.seed)
+    else:
+        tf.random.set_seed(FLAGS.seed)
 
     dict_values = {k: v.value for k, v in FLAGS._flags().items()}
     if FLAGS.name is None:
@@ -459,19 +462,6 @@ def multiclass_margin(onehot_labels, logits, delta=1.0):
     margin = compute_margin(onehot_labels, logits)
     loss = tf.nn.relu(delta - margin)
     return loss
-
-
-class MulticlassMarginLoss(tf.keras.losses.Loss):
-    def __init__(self,
-                 delta=1.0,
-                 reduction=tf.keras.losses.Reduction.SUM_OVER_BATCH_SIZE,
-                 name=None):
-        super(MulticlassMarginLoss, self).__init__(reduction=reduction,
-                                                   name=name)
-        self.delta = delta
-
-    def call(self, y_true, logits):
-        return multiclass_margin(y_true, logits, delta=self.delta)
 
 
 def random_targets(num_labels,

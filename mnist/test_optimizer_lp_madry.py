@@ -35,13 +35,10 @@ flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
-flags.DEFINE_bool("sort_labels", False, "sort labels")
 
 # attack parameters
 import_kwargs_as_flags(OptimizerLp.__init__, 'attack_')
 
-flags.DEFINE_boolean("generate_summary", False, "generate summary images")
-flags.DEFINE_integer("summary_frequency", 1, "summarize frequency (in batches)")
 flags.DEFINE_integer("print_frequency", 1, "summarize frequency")
 
 FLAGS = flags.FLAGS
@@ -57,18 +54,10 @@ def main(unused_args):
     ])
 
     # data
-    _, _, test_ds = load_mnist(FLAGS.validation_size, seed=FLAGS.data_seed)
-    x_test, y_test = test_ds._tensors
-    x_test, y_test = x_test.numpy(), y_test.numpy()
-    x_test = x_test.transpose(0, 2, 3, 1)
-    indices = np.arange(x_test.shape[0])
-    if FLAGS.sort_labels:
-        ys_indices = np.argsort(y_test)
-        x_test = x_test[ys_indices]
-        y_test = y_test[ys_indices]
-        indices = indices[ys_indices]
-
-    test_ds = tf.data.Dataset.from_tensor_slices((x_test, y_test, indices))
+    _, _, test_ds = load_mnist(FLAGS.validation_size,
+                               data_format="NHWC",
+                               seed=FLAGS.data_seed)
+    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
     test_ds = make_input_pipeline(test_ds,
                                   shuffle=False,
                                   batch_size=FLAGS.batch_size)
@@ -152,33 +141,14 @@ def main(unused_args):
 
         return image_lp
 
-    if FLAGS.generate_summary:
-        start_time = time.time()
-        logging.info("Generating samples...")
-        summary_images, summary_labels = select_balanced_subset(
-            x_test, y_test, num_classes, num_classes)
-        summary_images = tf.convert_to_tensor(summary_images)
-        summary_labels = tf.convert_to_tensor(summary_labels)
-        summary_lp_imgs = test_step(summary_images, summary_labels, -1)
-        save_path = os.path.join(FLAGS.samples_dir, "orig.png")
-        save_images(summary_images, save_path, data_format="NHWC")
-        save_path = os.path.join(FLAGS.samples_dir, f"{FLAGS.norm}.png")
-        save_images(summary_lp_imgs, save_path, data_format="NHWC")
-        log_metrics(
-            test_metrics,
-            "Summary results [{:.2f}s]:".format(time.time() - start_time))
-    else:
-        logging.debug("Skipping summary...")
-
     # reset metrics
     reset_metrics(test_metrics)
     X_lp_list = []
     y_list = []
-    indx_list = []
     start_time = time.time()
     try:
         is_completed = False
-        for batch_index, (image, label, indx) in enumerate(test_ds, 1):
+        for batch_index, (image, label) in enumerate(test_ds, 1):
             X_lp = test_step(image, label)
             save_path = os.path.join(FLAGS.samples_dir,
                                      "epoch_orig-%d.png" % batch_index)
@@ -189,7 +159,6 @@ def main(unused_args):
             # save adversarial data
             X_lp_list.append(X_lp)
             y_list.append(label)
-            indx_list.append(indx)
             if batch_index % FLAGS.print_frequency == 0:
                 log_metrics(
                     test_metrics, "Batch results [{}, {:.2f}s]:".format(
@@ -240,11 +209,7 @@ def main(unused_args):
                                                  batch_index))
         X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
         y_all = tf.concat(y_list, axis=0).numpy()
-        indx_list = tf.concat(indx_list, axis=0).numpy()
-        np.savez(Path(FLAGS.working_dir) / 'X_adv',
-                 X_adv=X_lp_all,
-                 y=y_all,
-                 indices=indx_list)
+        np.savez(Path(FLAGS.working_dir) / 'X_adv', X_adv=X_lp_all, y=y_all)
 
 
 if __name__ == "__main__":
