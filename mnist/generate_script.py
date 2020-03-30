@@ -23,7 +23,7 @@ def generate_test_optimizer_lp(norm, load_from, **kwargs):
 
 def test_lp_config(norm, runs=1, master_seed=1):
     assert norm in ['l0', 'li', 'l1', 'l2']
-    num_batches = {'li': 10, 'l1': 10, 'l2': 5}[norm]
+    num_batches = {'l0': 10, 'li': 10, 'l1': 10, 'l2': 5}[norm]
     attack_args = {'norm': norm, 'num_batches': num_batches}
     name = "mnist_"
     for (model, iterations, max_iterations, loss, optimizer, accelerated,
