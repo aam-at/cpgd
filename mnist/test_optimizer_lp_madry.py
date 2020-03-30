@@ -23,7 +23,7 @@ from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
                        import_kwargs_as_flags, l0_metric, l1_metric, l2_metric,
                        li_metric, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
-                       select_balanced_subset, setup_experiment)
+                       setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
