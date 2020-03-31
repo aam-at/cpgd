@@ -28,14 +28,15 @@ def test_lp_config(norm, runs=1, master_seed=1):
     name = "mnist_"
     for (model, iterations, max_iterations, loss, optimizer, accelerated,
          gradient_normalize,
-         use_sign) in itertools.product(models, [100], [1000], ["cw"],
-                                        ["adam"], [True, False], [True, False],
+         use_sign) in itertools.product(models, [100], [100], ["cw"],
+                                        ["adam", "adagrad", "rmsprop", "sgd"],
+                                        [True, False], [True, False],
                                         [True, False]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist/test_{norm}_{type}"
+        working_dir = f"../results/mnist_hs/test_{norm}_{type}"
         name0 = name + f"{norm}_{type}_{iterations}_{max_iterations // 1000}k_"
-        if accelerated:
-            optimizer = "sgd"
+        if accelerated and optimizer != 'sgd':
+            continue
         name0 = name0 + f"{optimizer if not accelerated else 'apg_sgd'}_{loss}_"
         name0 = name0 + f"{'gnorm' if gradient_normalize else 'nognorm'}_"
         attack_args0 = attack_args.copy()
@@ -57,8 +58,11 @@ def test_lp_config(norm, runs=1, master_seed=1):
                 name0 = name0[:-1] + "sign_"
         elif use_sign:
             continue
-        for lr, llr, C0 in itertools.product(np.linspace(0.05, 0.5, 10),
-                                             [0.1, 0.05, 0.01], [0.1, 0.5]):
+        if norm in ['li']:
+            lr_space = np.linspace(0.05, 0.5, 10)
+        else:
+            lr_space = np.linspace(0.1, 1.0, 10)
+        for lr, llr, C0 in itertools.product(lr_space, [0.1], [0.1]):
             attack_args1 = attack_args0.copy()
             attack_args1.update({
                 'attack_primal_lr': lr,
@@ -76,7 +80,7 @@ def test_lp_config(norm, runs=1, master_seed=1):
                 })
                 name2 = name1 + f"{sampling_algorithm}_R{sampling_radius}_"
                 for lr_decay, finetune, use_proxy in itertools.product(
-                    [True, False], [True, False], [True, False]):
+                    [True, False], [True], [True, False]):
                     attack_args3 = attack_args2.copy()
                     attack_args3.update({
                         'attack_lr_decay':
