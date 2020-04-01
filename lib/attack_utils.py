@@ -20,7 +20,7 @@ def margin(logits, y_onehot, delta=0.0, targeted=False):
 
 
 def proximal_l0(u, lambd):
-    return tf.where(u**2 <= lambd, 0.0, u)
+    return tf.where(tf.abs(u) <= tf.sqrt(2 * lambd), 0.0, u)
 
 
 def proximal_l1(u, lambd):
