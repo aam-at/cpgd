@@ -2,7 +2,6 @@ from __future__ import absolute_import, division, print_function
 
 from abc import abstractmethod
 
-import numpy as np
 import tensorflow as tf
 
 from .attack_utils import (margin, project_log_distribution_wrt_kl_divergence,
@@ -115,13 +114,7 @@ class OptimizerLp(object):
         assert 0 < initial_const < 1.0
         initial_const = (minimal_const
                          if initial_const is None else initial_const)
-        initial_zero = np.log(initial_const / (1 + initial_const))
-        initial_one = np.log(1 / (1 + initial_const))
-        self.state0 = tf.constant(
-            np.array(np.stack((np.ones(batch_size) * initial_zero,
-                               np.ones(batch_size) * initial_one),
-                              axis=1),
-                     dtype=np.float32))
+        self.initial_const = initial_const
         # use proxy constraint
         self.use_proxy_constraint = use_proxy_constraint
         # box projection
@@ -151,9 +144,9 @@ class OptimizerLp(object):
         self.attack = tf.Variable(tf.zeros(X_shape),
                                   trainable=False,
                                   name="x_hat")
-        self.beststate = tf.Variable(self.state0,
-                                     trainable=False,
-                                     name="best_state")
+        self.bestlambd = tf.Variable(tf.ones(batch_size) * self.initial_const,
+                                    trainable=False,
+                                    name="best_lmbd")
         self.bestlp = tf.Variable(tf.zeros(batch_size),
                                   trainable=False,
                                   name="best_lp")
@@ -175,26 +168,43 @@ class OptimizerLp(object):
             r0 = tf.zeros(X.shape)
         return self.project_box(X, r0)
 
-    def _reset_attack(self, X, y):
+    def _init_state(self, ratio):
+        batch_size = self.batch_size
+        condition = tf.reduce_all(ratio > 0)
+        assert_op = tf.Assert(condition, [ratio])
+        with tf.control_dependencies([assert_op]):
+            initial_zero = tf.math.log(ratio / (1 + ratio))
+            initial_one = tf.math.log(1 / (1 + ratio))
+            state = tf.stack((tf.ones(batch_size) * initial_zero,
+                              tf.ones(batch_size) * initial_one),
+                             axis=1)
+        return state
+
+    @tf.function
+    def _reset_attack(self, X, y_onehot):
         batch_size = X.shape[0]
         assert batch_size == self.batch_size
         self.attack.assign(X)
-        self.beststate.assign(self.state0)
+        self.bestlambd.assign(tf.ones(self.batch_size) * self.initial_const)
         self.bestlp.assign(1e10 * tf.ones_like(self.bestlp))
-        # indices of the correct predictions
-        assert y.ndim == 1
         # only compute perturbation for correctly classified inputs
-        corr = prediction(self.model(X)) != y
+        with tf.control_dependencies([tf.assert_rank(y_onehot, 2)]):
+            y = tf.argmax(y_onehot, axis=-1)
+            corr = prediction(self.model(X)) != y
         self.bestlp.scatter_update(
             to_indexed_slices(tf.zeros_like(self.bestlp), self.batch_indices,
                               corr))
-        # reset optimizer variables
+
+    @tf.function
+    def _restart_step(self, X, y_onehot):
+        # reset primal optimizer and primal variables
+        reset_optimizer(self.primal_opt)
         self.rx.assign(self._init_r0(X))
         self.ry.assign(self.rx)
-        self.state.assign(self.state0)
-        self.beta.assign(tf.ones_like(self.beta) * self.momentum)
-        reset_optimizer(self.primal_opt)
+        # reset dual optimizer and dual variables to best solution
         reset_optimizer(self.dual_opt)
+        self.state.assign(self._init_state(self.initial_const))
+        self.beta.assign(tf.ones_like(self.beta) * self.momentum)
 
     @abstractmethod
     def lp_metric(self, u, keepdims=False):
@@ -220,13 +230,13 @@ class OptimizerLp(object):
                     y_onehot, logits)
         return cls_constraint, cls_loss
 
-    def line_search(self, X, y_onehot, r, g, lamb):
+    def line_search(self, X, y_onehot, r, g, lambd):
         lr = tf.ones((self.batch_size, 1, 1, 1))
         _, cls_loss0 = self.cls_constraint_and_loss(X + r,
                                                     y_onehot,
                                                     targeted=self.targeted)
         for i in range(5):
-            pg = self.proximal_gradient(X, g, r, lr, lamb)
+            pg = self.proximal_gradient(X, g, r, lr, lambd)
             r_i = r - pg * lr
             _, cls_loss = self.cls_constraint_and_loss(X + r_i,
                                                        y_onehot,
@@ -251,10 +261,10 @@ class OptimizerLp(object):
     def proximity_operator(self, u, l):
         pass
 
-    def proximal_gradient(self, X, g, r, lr, lamb):
+    def proximal_gradient(self, X, g, r, lr, lambd):
         # composition of proximity and projection operator
         rnew = self.project_box(X,
-                                self.proximity_operator(r - lr * g, lr * lamb))
+                                self.proximity_operator(r - lr * g, lr * lambd))
         return (r - rnew) / lr
 
     def project_state(self, u):
@@ -281,20 +291,8 @@ class OptimizerLp(object):
         beta = self.beta
         # best solution
         attack = self.attack
-        beststate = self.beststate
+        bestlambd = self.bestlambd
         bestlp = self.bestlp
-
-        @tf.function
-        def restart_step(X, y_onehot):
-            # reset primal optimizer and primal variables
-            reset_optimizer(self.primal_opt)
-            rx.assign(self._init_r0(X))
-            ry.assign(rx)
-            # reset dual optimizer and dual variables to best solution
-            reset_optimizer(self.dual_opt)
-            # state.assign(self.state0)
-            state.assign(beststate)
-            beta.assign(tf.ones_like(beta) * self.momentum)
 
         @tf.function
         def optim_step(X, y_onehot, targeted=False, finetune=False):
@@ -309,8 +307,8 @@ class OptimizerLp(object):
 
             # lambda for proximity operator
             state_distr = tf.exp(state)
-            lamb = state_distr[:, 0] / state_distr[:, 1]
-            lamb = tf.reshape(lamb, (-1, 1, 1, 1))
+            lambd_f = state_distr[:, 0] / state_distr[:, 1]
+            lambd = tf.reshape(lambd_f, (-1, 1, 1, 1))
 
             # optimize primal variables (PG or APG)
             fg = find_r_tape.gradient(cls_loss, ry)
@@ -319,16 +317,16 @@ class OptimizerLp(object):
                     tf.reshape(cls_loss, (-1, 1, 1, 1)) > 0,
                     self.lp_normalize(fg), fg)
             lr = primal_opt.lr
-            # lr = self.line_search(X, y_onehot, ry, fg, lamb)
+            # lr = self.line_search(X, y_onehot, ry, fg, lambd)
             if self.accelerated:
                 # proximal gradient with adaptive momentum
                 rx_v = rx.read_value()
                 rx.assign(
                     self.project_box(
-                        X, self.proximity_operator(ry - lr * fg, lr * lamb)))
+                        X, self.proximity_operator(ry - lr * fg, lr * lambd)))
                 rv = rx + tf.reshape(beta, (-1, 1, 1, 1)) * (rx - rx_v)
                 rv = self.project_box(X,
-                                      self.proximity_operator(rv, lr * lamb))
+                                      self.proximity_operator(rv, lr * lambd))
                 F_x = self.total_loss(X, y_onehot, rx)
                 F_v = self.total_loss(X, y_onehot, rv)
                 ry.assign(
@@ -341,10 +339,10 @@ class OptimizerLp(object):
                     [self.primal_opt.apply_gradients([(fg, ry)])]):
                     rx.assign(
                         self.project_box(
-                            X, self.proximity_operator(rx, lr * lamb)))
+                            X, self.proximity_operator(rx, lr * lambd)))
                     ry.assign(
                         self.project_box(
-                            X, self.proximity_operator(ry, lr * lamb)))
+                            X, self.proximity_operator(ry, lr * lambd)))
                     F_x = self.total_loss(X, y_onehot, rx)
                     F_y = self.total_loss(X, y_onehot, ry)
                     ry.assign(
@@ -364,13 +362,13 @@ class OptimizerLp(object):
             is_best_attack = tf.logical_and(is_adv, lp_loss < bestlp)
             attack.scatter_update(
                 to_indexed_slices(X_hat, self.batch_indices, is_best_attack))
-            beststate.scatter_update(
-                to_indexed_slices(state, self.batch_indices, is_best_attack))
+            bestlambd.scatter_update(
+                to_indexed_slices(lambd_f, self.batch_indices, is_best_attack))
             bestlp.scatter_update(
                 to_indexed_slices(lp_loss, self.batch_indices, is_best_attack))
 
         # reset optimizer and variables
-        self._reset_attack(X, y)
+        self._reset_attack(X, y_onehot)
         for iteration in range(self.max_iterations):
             if self.lr_decay:
                 min_lr = self.primal_min_lr
@@ -378,7 +376,7 @@ class OptimizerLp(object):
                     min_lr + (self.primal_lr - min_lr) *
                     (1 - iteration % self.iterations / self.iterations))
             if iteration % self.iterations == 0:
-                restart_step(X, y_onehot)
+                self._restart_step(X, y_onehot)
                 t_onehot = tf.one_hot(
                     random_targets(num_classes, y_onehot, logits), num_classes)
             if self.multitargeted:
@@ -386,13 +384,13 @@ class OptimizerLp(object):
             else:
                 optim_step(X, y_onehot, targeted=self.targeted)
 
-        # finetune for 1/10 iterations
         if self.finetune:
-            restart_step(X, y_onehot)
+            self._restart_step(X, y_onehot)
             rx.assign(attack - X)
             ry.assign(rx)
-            state.assign(beststate)
+            state.assign(self._init_state(bestlambd))
             primal_opt.lr.assign(self.primal_min_lr)
+            # finetune for 1/10 iterations
             for iteration in range(1, self.max_iterations // 10 + 1):
                 optim_step(X, y_onehot, targeted=self.targeted, finetune=True)
             primal_opt.lr.assign(self.primal_lr)
