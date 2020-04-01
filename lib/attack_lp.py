@@ -115,8 +115,8 @@ class OptimizerLp(object):
         assert 0 < initial_const < 1.0
         initial_const = (minimal_const
                          if initial_const is None else initial_const)
-        initial_zero = np.log(initial_const)
-        initial_one = np.log(1 - initial_const)
+        initial_zero = np.log(initial_const / (1 + initial_const))
+        initial_one = np.log(1 / (1 + initial_const))
         self.state0 = tf.constant(
             np.array(np.stack((np.ones(batch_size) * initial_zero,
                                np.ones(batch_size) * initial_one),
