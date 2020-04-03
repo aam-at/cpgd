@@ -215,6 +215,35 @@ def log_tensorboard_metrics(metrics, prefix=None, step=None):
         tf.summary.scalar(f"{prefix}{metric_name}", metric_value, step)
 
 
+def kl_with_logits(q_logits, p_logits):
+    q = tf.nn.softmax(q_logits)
+    q_log = tf.nn.log_softmax(q_logits)
+    p_log = tf.nn.log_softmax(p_logits)
+    return tf.reduce_sum(q * (q_log - p_log), axis=1)
+
+
+def Hv_finite(f, g, x, v, xi=1e-6):
+    """Multiply the Hessian of `f` wrt `x` by `v` (using finite difference).
+    """
+    v *= xi
+    with tf.GradientTape(persistent=True) as tape:
+        # First backprop
+        tape.watch(v)
+        y = f(x)
+        y_v = f(x + v)
+        loss = g(y, y_v)
+    return tape.gradient(loss, v) / xi
+
+
+def power_iteration(Ax, x0, num_iterations):
+    xk = l2_normalize(x0)
+    for i in range(num_iterations):
+        xk = Ax(xk)
+        xk = l2_normalize(xk)
+        xk = tf.stop_gradient(xk)
+    return xk
+
+
 def l0_metric(x, axes=None, keepdims=False):
     if axes is None:
         axes = list(range(1, x.shape.ndims))
