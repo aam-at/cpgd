@@ -5,7 +5,7 @@ from abc import abstractmethod
 import tensorflow as tf
 
 from .attack_utils import (margin, project_log_distribution_wrt_kl_divergence,
-                           random_lp_vector, project_box)
+                           random_lp_vector, project_box, l2_metric)
 from .utils import prediction, random_targets, to_indexed_slices
 
 
@@ -30,7 +30,8 @@ class OptimizerLp(object):
         batch_size,
         # parameters for the optimizer
         loss: str = 'cw',
-        optimizer: str = 'sgd',
+        primal_optimizer: str = 'sgd',
+        dual_optimizer: str = 'sgd',
         gradient_normalize: bool = True,
         accelerated: bool = False,
         momentum: float = 0.9,
@@ -50,7 +51,6 @@ class OptimizerLp(object):
         sampling_radius: float = 0.5,
         # parameters for non-convex constrained minimization
         initial_const: float = 0.1,
-        minimal_const: float = 1e-6,
         use_proxy_constraint: bool = True,
         boxmin: float = 0.0,
         boxmax: float = 1.0):
@@ -86,7 +86,9 @@ class OptimizerLp(object):
         self.batch_size = batch_size
         self.batch_indices = tf.range(batch_size)
         # parameters for the optimizer
-        self.optimizer = optimizer
+        self.primal_opt = create_optimizer(primal_optimizer, primal_lr)
+        self.dual_opt = create_optimizer(dual_optimizer, dual_lr)
+        self.ema = tf.train.ExponentialMovingAverage(decay=0.9)
         self.gradient_normalize = gradient_normalize
         self.accelerated = accelerated
         self.momentum = momentum
@@ -111,9 +113,7 @@ class OptimizerLp(object):
         self.sampling_radius = sampling_radius
         # parameters for non-convex constrained optimization
         # initial state for dual variable
-        assert 0 < initial_const < 1.0
-        initial_const = (minimal_const
-                         if initial_const is None else initial_const)
+        assert initial_const is not None
         self.initial_const = initial_const
         # use proxy constraint
         self.use_proxy_constraint = use_proxy_constraint
@@ -129,9 +129,6 @@ class OptimizerLp(object):
         batch_size = self.batch_size
         assert batch_size == X_shape[0]
         assert y_shape.ndims == 2
-        # primal and dual variable optimizer
-        self.primal_opt = create_optimizer(self.optimizer, self.primal_lr)
-        self.dual_opt = create_optimizer(self.optimizer, self.dual_lr)
         # primal and dual variable
         self.rx = tf.Variable(tf.zeros(X_shape), trainable=True, name="rx")
         self.ry = tf.Variable(tf.zeros(X_shape), trainable=True, name="ry")
@@ -144,14 +141,19 @@ class OptimizerLp(object):
         self.attack = tf.Variable(tf.zeros(X_shape),
                                   trainable=False,
                                   name="x_hat")
-        self.bestlambd = tf.Variable(tf.ones(batch_size) * self.initial_const,
+        self.lambd_mu = tf.Variable(tf.ones(batch_size) * self.initial_const,
                                     trainable=False,
-                                    name="best_lmbd")
+                                    name="lambd_mu")
+        self.ema.apply([self.lambd_mu])
+        self.bestlambd = tf.Variable(tf.ones(batch_size) * self.initial_const,
+                                     trainable=False,
+                                     name="best_lmbd")
         self.bestlp = tf.Variable(tf.zeros(batch_size),
                                   trainable=False,
                                   name="best_lp")
         self.built = True
 
+    @tf.function
     def _init_r0(self, X):
         if self.sampling_radius is not None and self.sampling_radius > 0:
             if self.r0_init == 'sign':
@@ -168,6 +170,7 @@ class OptimizerLp(object):
             r0 = tf.zeros(X.shape)
         return self.project_box(X, r0)
 
+    @tf.function
     def _init_state(self, ratio):
         batch_size = self.batch_size
         condition = tf.reduce_all(ratio > 0)
@@ -187,6 +190,7 @@ class OptimizerLp(object):
         self.attack.assign(X)
         self.bestlambd.assign(tf.ones(self.batch_size) * self.initial_const)
         self.bestlp.assign(1e10 * tf.ones_like(self.bestlp))
+        self.lambd_mu.assign(self.bestlambd)
         # only compute perturbation for correctly classified inputs
         with tf.control_dependencies([tf.assert_rank(y_onehot, 2)]):
             y = tf.argmax(y_onehot, axis=-1)
@@ -197,14 +201,19 @@ class OptimizerLp(object):
 
     @tf.function
     def _restart_step(self, X, y_onehot):
-        # reset primal optimizer and primal variables
-        reset_optimizer(self.primal_opt)
+        # NOTE: disable random restart of optimizers as it helps because
+        # optimizers contains information about the curvature of the surface
+        # which may be useful even at different starting point
+        ## reset primal optimizer and primal variables
+        # reset_optimizer(self.primal_opt)
         self.rx.assign(self._init_r0(X))
         self.ry.assign(self.rx)
-        # reset dual optimizer and dual variables to best solution
-        reset_optimizer(self.dual_opt)
+        ## reset dual optimizer and dual variables to best solution
+        # reset_optimizer(self.dual_opt)
         self.state.assign(self._init_state(self.initial_const))
         self.beta.assign(tf.ones_like(self.beta) * self.momentum)
+        self.lambd_mu.assign(tf.ones_like(self.lambd_mu) * self.initial_const)
+        self.ema.average(self.lambd_mu).assign(self.lambd_mu)
 
     @abstractmethod
     def lp_metric(self, u, keepdims=False):
@@ -293,6 +302,8 @@ class OptimizerLp(object):
         attack = self.attack
         bestlambd = self.bestlambd
         bestlp = self.bestlp
+        lambd_mu = self.lambd_mu
+        ema = self.ema
 
         @tf.function
         def optim_step(X, y_onehot, targeted=False, finetune=False):
@@ -305,9 +316,14 @@ class OptimizerLp(object):
                 cls_constraint, cls_loss = self.cls_constraint_and_loss(
                     X_hat, y_onehot, targeted=targeted)
 
-            # lambda for proximity operator
+            # lambda for proximity operator (EMA)
             state_distr = tf.exp(state)
-            lambd_f = state_distr[:, 0] / state_distr[:, 1]
+            lambda_curr = state_distr[:, 0] / state_distr[:, 1]
+            with tf.control_dependencies(
+                [lambd_mu.assign(lambda_curr)]):
+                ema.apply([lambd_mu])
+            lambd_f = ema.average(lambd_mu)
+            # lambd_f = lambda_curr
             lambd = tf.reshape(lambd_f, (-1, 1, 1, 1))
 
             # optimize primal variables (PG or APG)
@@ -317,7 +333,8 @@ class OptimizerLp(object):
                     tf.reshape(cls_loss, (-1, 1, 1, 1)) > 0,
                     self.lp_normalize(fg), fg)
             lr = primal_opt.lr
-            # lr = self.line_search(X, y_onehot, ry, fg, lambd)
+            # lr = self.line_search(X, y_onehot, ry, fg, primal_opt.lr, lambd)
+            # lr = tf.reshape(lr, (-1, 1, 1, 1))
             if self.accelerated:
                 # proximal gradient with adaptive momentum
                 rx_v = rx.read_value()
