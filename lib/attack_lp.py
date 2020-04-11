@@ -39,6 +39,7 @@ class OptimizerLp(object):
         dual_optimizer: str = 'sgd',
         gradient_normalize: bool = True,
         accelerated: bool = False,
+        adaptive_momentum: bool = False,
         momentum: float = 0.9,
         iterations: int = 100,
         max_iterations: int = 10000,
@@ -66,7 +67,8 @@ class OptimizerLp(object):
         :param loss: loss one of 'cw', 'logit_diff', 'ce'
         :param optimizer: optimizer of the primal loss
         :param gradient_normalize: normalize the gradient before computing the update
-        :param accelerated: use accelerated proximal gradient descent with adaptive momentum from https://arxiv.org/pdf/1705.04925.pdf
+        :param accelerated: use accelerated proximal gradient descent from https://arxiv.org/pdf/1705.04925.pdf
+        :param adaptive_momentum: use adaptive momentum
         :param momentum: momentum for APGnc
         :param iterations: minimal number of iterations before random restart
         :param max_iterations: maximum number of iterations
@@ -96,6 +98,7 @@ class OptimizerLp(object):
         self.ema = tf.train.ExponentialMovingAverage(decay=0.9)
         self.gradient_normalize = gradient_normalize
         self.accelerated = accelerated
+        self.adaptive_momentum = adaptive_momentum
         self.momentum = momentum
         self.lr_decay = lr_decay
         assert loss in ['logit_diff', 'cw', 'ce']
@@ -141,16 +144,19 @@ class OptimizerLp(object):
                                  trainable=True,
                                  constraint=self.project_state,
                                  name="dual_state")
-        self.beta = tf.Variable(tf.ones((batch_size, )))
+        # create optimizer variables
+        self.primal_opt.apply_gradients([(tf.zeros_like(self.ry), self.ry)])
+        # momentum for accelerated gradient
+        self.beta = tf.Variable(tf.zeros(batch_size))
         # create other attack variables
         self.attack = tf.Variable(tf.zeros(X_shape),
                                   trainable=False,
                                   name="x_hat")
-        self.lambd_mu = tf.Variable(tf.ones(batch_size) * self.initial_const,
+        self.lambd_mu = tf.Variable(tf.zeros(batch_size),
                                     trainable=False,
                                     name="lambd_mu")
         self.ema.apply([self.lambd_mu])
-        self.bestlambd = tf.Variable(tf.ones(batch_size) * self.initial_const,
+        self.bestlambd = tf.Variable(tf.zeros(batch_size),
                                      trainable=False,
                                      name="best_lmbd")
         self.bestlp = tf.Variable(tf.zeros(batch_size),
@@ -191,33 +197,34 @@ class OptimizerLp(object):
     @tf.function
     def _reset_attack(self, X, y_onehot):
         batch_size = X.shape[0]
-        assert batch_size == self.batch_size
+        batch_indices = tf.range(batch_size)
         self.attack.assign(X)
-        self.bestlambd.assign(tf.ones(self.batch_size) * self.initial_const)
-        self.bestlp.assign(1e10 * tf.ones_like(self.bestlp))
+        self.bestlambd.assign(tf.ones(batch_size) * self.initial_const)
+        self.bestlp.assign(1e10 * tf.ones(batch_size))
         self.lambd_mu.assign(self.bestlambd)
         # only compute perturbation for correctly classified inputs
         with tf.control_dependencies([tf.assert_rank(y_onehot, 2)]):
             y = tf.argmax(y_onehot, axis=-1)
             corr = prediction(self.model(X)) != y
         self.bestlp.scatter_update(
-            to_indexed_slices(tf.zeros_like(self.bestlp), self.batch_indices,
+            to_indexed_slices(tf.zeros_like(self.bestlp), batch_indices,
                               corr))
 
     @tf.function
     def _restart_step(self, X, y_onehot):
-        # NOTE: disable random restart of optimizers as it helps because
+        batch_size = X.shape[0]
+        # NOTE: disabling random restart of optimizers sometimes helps because
         # optimizers contains information about the curvature of the surface
         # which may be useful even at different starting point
         ## reset primal optimizer and primal variables
-        # reset_optimizer(self.primal_opt)
+        reset_optimizer(self.primal_opt)
         self.rx.assign(self._init_r0(X))
         self.ry.assign(self.rx)
         ## reset dual optimizer and dual variables to best solution
-        # reset_optimizer(self.dual_opt)
+        reset_optimizer(self.dual_opt)
         self.state.assign(self._init_state(self.initial_const))
-        self.beta.assign(tf.ones_like(self.beta) * self.momentum)
-        self.lambd_mu.assign(tf.ones_like(self.lambd_mu) * self.initial_const)
+        self.beta.assign(tf.ones(batch_size) * self.momentum)
+        self.lambd_mu.assign(tf.ones(batch_size) * self.initial_const)
         self.ema.average(self.lambd_mu).assign(self.lambd_mu)
 
     @abstractmethod
@@ -262,14 +269,13 @@ class OptimizerLp(object):
             lr = tf.where(tf.reshape(cond, (-1, 1, 1, 1)), 0.8 * lr, lr)
         return lr
 
-    def total_loss(self, X, y_onehot, r):
+    def total_loss(self, X, y_onehot, r, lambd):
         _, cls_loss = self.cls_constraint_and_loss(X + r,
                                                    y_onehot,
                                                    targeted=self.targeted)
         lp_loss = self.lp_metric(r)
         state_distr = tf.exp(self.state)
-        losses = tf.stack((cls_loss, lp_loss), axis=1)
-        return tf.reduce_sum(losses * state_distr, axis=1)
+        return cls_loss + lambd * lp_loss
 
     @abstractmethod
     def proximity_operator(self, u, l):
@@ -298,6 +304,7 @@ class OptimizerLp(object):
         # primal and dual optimizers
         primal_opt = self.primal_opt
         dual_opt = self.dual_opt
+        ema = self.ema
         # optimization variables
         rx = self.rx
         ry = self.ry
@@ -308,10 +315,10 @@ class OptimizerLp(object):
         bestlambd = self.bestlambd
         bestlp = self.bestlp
         lambd_mu = self.lambd_mu
-        ema = self.ema
 
         @tf.function
         def optim_step(X, y_onehot, targeted=False, finetune=False):
+            # primal optimization step
             with tf.GradientTape() as find_r_tape:
                 X_hat = X + ry
                 logits_hat = self.model(X_hat)
@@ -321,55 +328,54 @@ class OptimizerLp(object):
                 cls_constraint, cls_loss = self.cls_constraint_and_loss(
                     X_hat, y_onehot, targeted=targeted)
 
-            # lambda for proximity operator (EMA)
-            lambd_curr = compute_lambda(state)
-            with tf.control_dependencies(
-                [lambd_mu.assign(lambd_curr)]):
-                ema.apply([lambd_mu])
-            lambd_f = ema.average(lambd_mu)
-            lambd = tf.reshape(lambd_f, (-1, 1, 1, 1))
+            # select only active indices among all examples in the batch
+            update_indxs = batch_indices[cls_constraint > 0]
 
-            # optimize primal variables (PG or APG)
+            # compute gradient for primal variables
             fg = find_r_tape.gradient(cls_loss, ry)
+            fg = tf.gather_nd(fg, tf.expand_dims(update_indxs, axis=1))
             if self.gradient_normalize:
-                fg = tf.where(
-                    tf.reshape(cls_loss, (-1, 1, 1, 1)) > 0,
-                    self.lp_normalize(fg), fg)
-            # lr = self.line_search(X, y_onehot, ry, fg, primal_opt.lr, lambd)
+                fg = self.lp_normalize(fg)
             lr = primal_opt.lr
-            lr = tf.reshape(lr, (-1, 1, 1, 1))
-            if self.accelerated:
-                # proximal gradient with adaptive momentum
-                rx_v = rx.read_value()
-                rx.assign(
-                    self.project_box(
-                        X, self.proximity_operator(ry - lr * fg, lr * lambd)))
-                rv = rx + tf.reshape(beta, (-1, 1, 1, 1)) * (rx - rx_v)
-                rv = self.project_box(X,
-                                      self.proximity_operator(rv, lr * lambd))
-                F_x = self.total_loss(X, y_onehot, rx)
-                F_v = self.total_loss(X, y_onehot, rv)
-                ry.assign(
-                    tf.where(tf.reshape(F_x <= F_v, (-1, 1, 1, 1)), rx, rv))
-                beta.assign(
-                    tf.minimum(tf.where(F_x <= F_v, 0.8, 1.25) * beta, 1.0))
-            else:
-                rx.assign(ry - lr * fg)
-                with tf.control_dependencies(
-                    [self.primal_opt.apply_gradients([(fg, ry)])]):
-                    rx.assign(
-                        self.project_box(
-                            X, self.proximity_operator(rx, lr * lambd)))
-                    ry.assign(
-                        self.project_box(
-                            X, self.proximity_operator(ry, lr * lambd)))
-                    F_x = self.total_loss(X, y_onehot, rx)
-                    F_y = self.total_loss(X, y_onehot, ry)
-                    ry.assign(
-                        tf.where(tf.reshape(F_x <= F_y, (-1, 1, 1, 1)), rx,
-                                 ry))
+            # lr = self.line_search(X, y_onehot, ry, fg, primal_opt.lr, lambd)
 
-            # optimize dual variables
+            # proximal or accelerated proximal gradient
+            rx_v = rx.read_value()
+            sparse_fg = tf.IndexedSlices(fg, update_indxs)
+            # sparse updates does not work correctly and stil update all the statistics
+            # TODO: consider using LazyAdam from tf.addons
+            with tf.control_dependencies(
+                [primal_opt.apply_gradients([(sparse_fg, ry)])]):
+                lambd = ema.average(lambd_mu)
+                mu = tf.reshape(lr * lambd, (-1, 1, 1, 1))
+                self.rx.assign(
+                    self.project_box(X, self.proximity_operator(ry, mu)))
+            if self.accelerated:
+                rv = self.project_box(
+                    X, rx + tf.reshape(beta, (-1, 1, 1, 1)) * (rx - rx_v))
+                F_x = self.total_loss(X, y_onehot, rx, lambd)
+                F_v = self.total_loss(X, y_onehot, rv, lambd)
+                self.ry.assign(
+                    tf.where(tf.reshape(F_x <= F_v, (-1, 1, 1, 1)), rx, rv))
+                if self.adaptive_momentum:
+                    beta.scatter_mul(
+                        tf.IndexedSlices(tf.where(F_x <= F_v, 0.9, 1.0 / 0.9),
+                                         batch_indices))
+                    beta.assign(tf.minimum(beta, 1.0))
+            else:
+                ry.assign(rx)
+
+            # dual gradient ascent step (alternating optimization)
+            # TODO: compare with simultaneous optimization
+            X_hat = X + ry
+            logits_hat = self.model(X_hat)
+            # Part 1: lp loss
+            lp_loss = self.lp_metric(ry)
+            # Part 2: classification loss
+            cls_constraint, _ = self.cls_constraint_and_loss(
+                X_hat, y_onehot, targeted=targeted)
+
+            is_mistake = y != tf.argmax(logits_hat, axis=-1)
             if self.use_proxy_constraint:
                 constraint_gradients = cls_constraint
             else:
@@ -378,14 +384,18 @@ class OptimizerLp(object):
                 (tf.zeros_like(lp_loss), constraint_gradients), axis=1)
             dual_opt.apply_gradients([(multipliers_gradients, state)])
 
-            is_adv = y != tf.argmax(logits_hat, axis=-1)
-            is_best_attack = tf.logical_and(is_adv, lp_loss < bestlp)
+            lambd_new = compute_lambda(state)
+            with tf.control_dependencies([lambd_mu.assign(lambd_new)]):
+                self.ema.apply([lambd_mu])
+
+            # check if it is the best perturbation
+            is_best_attack = tf.logical_and(is_mistake, lp_loss < bestlp)
             attack.scatter_update(
-                to_indexed_slices(X_hat, self.batch_indices, is_best_attack))
+                to_indexed_slices(X_hat, batch_indices, is_best_attack))
             bestlambd.scatter_update(
-                to_indexed_slices(lambd_f, self.batch_indices, is_best_attack))
+                to_indexed_slices(lambd, batch_indices, is_best_attack))
             bestlp.scatter_update(
-                to_indexed_slices(lp_loss, self.batch_indices, is_best_attack))
+                to_indexed_slices(lp_loss, batch_indices, is_best_attack))
 
         # reset optimizer and variables
         self._reset_attack(X, y_onehot)
