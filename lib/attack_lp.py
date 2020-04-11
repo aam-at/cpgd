@@ -19,6 +19,11 @@ def reset_optimizer(opt):
     [var.assign(tf.zeros_like(var)) for var in opt.variables()]
 
 
+def compute_lambda(state):
+    state_distr = tf.exp(state)
+    return state_distr[:, 0] / state_distr[:, 1]
+
+
 class OptimizerLp(object):
     """The L_p optimization attack (external regret minimization with
     multiplicative updates).
@@ -317,13 +322,11 @@ class OptimizerLp(object):
                     X_hat, y_onehot, targeted=targeted)
 
             # lambda for proximity operator (EMA)
-            state_distr = tf.exp(state)
-            lambda_curr = state_distr[:, 0] / state_distr[:, 1]
+            lambd_curr = compute_lambda(state)
             with tf.control_dependencies(
-                [lambd_mu.assign(lambda_curr)]):
+                [lambd_mu.assign(lambd_curr)]):
                 ema.apply([lambd_mu])
             lambd_f = ema.average(lambd_mu)
-            # lambd_f = lambda_curr
             lambd = tf.reshape(lambd_f, (-1, 1, 1, 1))
 
             # optimize primal variables (PG or APG)
@@ -332,9 +335,9 @@ class OptimizerLp(object):
                 fg = tf.where(
                     tf.reshape(cls_loss, (-1, 1, 1, 1)) > 0,
                     self.lp_normalize(fg), fg)
-            lr = primal_opt.lr
             # lr = self.line_search(X, y_onehot, ry, fg, primal_opt.lr, lambd)
-            # lr = tf.reshape(lr, (-1, 1, 1, 1))
+            lr = primal_opt.lr
+            lr = tf.reshape(lr, (-1, 1, 1, 1))
             if self.accelerated:
                 # proximal gradient with adaptive momentum
                 rx_v = rx.read_value()
