@@ -146,10 +146,10 @@ class OptimizerLp(object):
                                  trainable=True,
                                  constraint=self.project_state,
                                  name="dual_state")
-        self.lambd_mu = tf.Variable(tf.zeros(batch_size),
-                                    trainable=False,
-                                    name="lambd_mu")
-        self.ema.apply([self.lambd_mu])
+        self.mu_ema = tf.Variable(tf.zeros(batch_size),
+                                  trainable=False,
+                                  name="lambd_mu")
+        self.ema.apply([self.mu_ema])
         # create optimizer variables
         self.primal_opt.apply_gradients([(tf.zeros_like(self.ry), self.ry)])
         # (adaptive) momentum for accelerated gradient
@@ -158,9 +158,9 @@ class OptimizerLp(object):
         self.attack = tf.Variable(tf.zeros(X_shape),
                                   trainable=False,
                                   name="x_hat")
-        self.bestlambd = tf.Variable(tf.zeros(batch_size),
-                                     trainable=False,
-                                     name="best_lambd")
+        self.bestmu = tf.Variable(tf.zeros(batch_size),
+                                  trainable=False,
+                                  name="best_mu")
         self.bestlp = tf.Variable(tf.zeros(batch_size),
                                   trainable=False,
                                   name="best_lp")
@@ -201,9 +201,8 @@ class OptimizerLp(object):
         batch_size = X.shape[0]
         batch_indices = tf.range(batch_size)
         self.attack.assign(X)
-        self.bestlambd.assign(tf.ones(batch_size) * self.initial_const)
+        self.bestmu.assign(1e10 * tf.ones(batch_size))
         self.bestlp.assign(1e10 * tf.ones(batch_size))
-        self.lambd_mu.assign(self.bestlambd)
         # only compute perturbation for correctly classified inputs
         with tf.control_dependencies([tf.assert_rank(y_onehot, 2)]):
             y = tf.argmax(y_onehot, axis=-1)
@@ -223,10 +222,11 @@ class OptimizerLp(object):
         self.ry.assign(self.rx)
         ## reset dual optimizer and dual variables to best solution
         reset_optimizer(self.dual_opt)
-        self.state.assign(self._init_state(self.initial_const))
+        initial_mu = self.initial_const * self.primal_opt.lr
+        self.mu_ema.assign(tf.ones(batch_size) * initial_mu)
+        self.ema.average(self.mu_ema).assign(self.mu_ema)
+        self.state.assign(self._init_state(self.mu_ema / self.primal_opt.lr))
         self.beta.assign(tf.ones(batch_size) * self.momentum)
-        self.lambd_mu.assign(tf.ones(batch_size) * self.initial_const)
-        self.ema.average(self.lambd_mu).assign(self.lambd_mu)
 
     @abstractmethod
     def lp_metric(self, u, keepdims=False):
@@ -288,7 +288,7 @@ class OptimizerLp(object):
         return (r - rnew) / lr
 
     def project_state(self, u):
-        return tf.maximum(tf.math.log(1e-3),
+        return tf.maximum(tf.math.log(1e-6),
                           project_log_distribution_wrt_kl_divergence(u))
 
     def project_box(self, X, u):
@@ -312,9 +312,9 @@ class OptimizerLp(object):
         beta = self.beta
         # best solution
         attack = self.attack
-        bestlambd = self.bestlambd
+        bestmu = self.bestmu
         bestlp = self.bestlp
-        lambd_mu = self.lambd_mu
+        mu_ema = self.mu_ema
 
         @tf.function
         def optim_step(X, y_onehot, targeted=False, finetune=False):
@@ -329,7 +329,8 @@ class OptimizerLp(object):
                     X_hat, y_onehot, targeted=targeted)
 
             # select only active indices among all examples in the batch
-            update_indxs = batch_indices[cls_constraint > 0]
+            mask = cls_constraint > 0
+            update_indxs = batch_indices[mask]
 
             # compute gradient for primal variables
             fg = find_r_tape.gradient(cls_loss, ry)
@@ -347,10 +348,12 @@ class OptimizerLp(object):
             with tf.control_dependencies(
                 [primal_opt.apply_gradients([(sparse_fg, ry)])]):
                 if self.dual_ema:
-                    lambd = ema.average(lambd_mu)
+                    mu_f = ema.average(mu_ema)
+                    mu = tf.reshape(mu_f, (-1, 1, 1, 1))
                 else:
-                    lambd = compute_lambda(state)
-                mu = tf.reshape(lr * lambd, (-1, 1, 1, 1))
+                    mu_f = lr * compute_lambda(state)
+                    mu = tf.reshape(mu_f, (-1, 1, 1, 1))
+                lambd = mu_f / lr
                 self.rx.assign(
                     self.project_box(X, self.proximity_operator(ry, mu)))
             if self.accelerated:
@@ -388,16 +391,16 @@ class OptimizerLp(object):
             dual_opt.apply_gradients([(multipliers_gradients, state)])
 
             if self.dual_ema:
-                lambd_new = compute_lambda(state)
-                with tf.control_dependencies([lambd_mu.assign(lambd_new)]):
-                    self.ema.apply([lambd_mu])
+                mu_new = lr * compute_lambda(state)
+                with tf.control_dependencies([mu_ema.assign(mu_new)]):
+                    self.ema.apply([mu_ema])
 
             # check if it is the best perturbation
             is_best_attack = tf.logical_and(is_mistake, lp_loss < bestlp)
             attack.scatter_update(
                 to_indexed_slices(X_hat, batch_indices, is_best_attack))
-            bestlambd.scatter_update(
-                to_indexed_slices(lambd, batch_indices, is_best_attack))
+            bestmu.scatter_update(
+                to_indexed_slices(mu_f, batch_indices, is_best_attack))
             bestlp.scatter_update(
                 to_indexed_slices(lp_loss, batch_indices, is_best_attack))
 
@@ -406,9 +409,15 @@ class OptimizerLp(object):
         for iteration in range(self.max_iterations):
             if self.lr_decay:
                 min_lr = self.primal_min_lr
+                mu = compute_lambda(state) * primal_opt.lr
+                # as we decrease learning rate lr * lambd used in proximity
+                # operator decreases too.
+                # FIXME: adjust the state, so mu remains constant even after
+                # learning rate decrease
                 primal_opt.lr = (
                     min_lr + (self.primal_lr - min_lr) *
                     (1 - iteration % self.iterations / self.iterations))
+                state.assign(self._init_state(mu / primal_opt.lr))
             if iteration % self.iterations == 0:
                 self._restart_step(X, y_onehot)
                 t_onehot = tf.one_hot(
@@ -422,8 +431,8 @@ class OptimizerLp(object):
             self._restart_step(X, y_onehot)
             rx.assign(attack - X)
             ry.assign(rx)
-            state.assign(self._init_state(bestlambd))
             primal_opt.lr.assign(self.primal_min_lr)
+            state.assign(self._init_state(bestmu / primal_opt.lr))
             # finetune for 1/10 iterations
             for iteration in range(1, self.max_iterations // 10 + 1):
                 optim_step(X, y_onehot, targeted=self.targeted, finetune=True)
