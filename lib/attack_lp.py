@@ -6,7 +6,7 @@ import tensorflow as tf
 
 from .attack_utils import (margin, project_log_distribution_wrt_kl_divergence,
                            random_lp_vector, project_box, l2_metric)
-from .utils import prediction, random_targets, to_indexed_slices
+from .utils import prediction, random_targets, to_indexed_slices, linear_lr_decay
 
 
 def create_optimizer(opt, lr, **kwargs):
@@ -51,7 +51,6 @@ class OptimizerLp(object):
         finetune: bool = True,
         # attack parameters
         targeted: bool = False,
-        multitargeted: bool = False,
         confidence: float = 0.0,
         # parameters for random restarts
         r0_init: str = "uniform",
@@ -77,7 +76,6 @@ class OptimizerLp(object):
         :param primal_min_lr: minimal learning for primal variables for lr decay or for finetuning
         :param dual_lr: learning rate for dual variables
         :param targeted: if the attack is targeted
-        :param multitargeted: if the attack is multitargeted
         :param lr_decay: use learning rate decay
         :param finetune: finetune perturbation with primal_min_lr
         :param confidence: target attack confidence for 'cw' loss
@@ -114,7 +112,6 @@ class OptimizerLp(object):
         self.finetune = finetune
         # parameters for the attack
         self.targeted = targeted
-        self.multitargeted = multitargeted
         self.confidence = confidence
         # parameters for the random restarts
         self.r0_init = r0_init
@@ -252,22 +249,20 @@ class OptimizerLp(object):
                     y_onehot, logits)
         return cls_constraint, cls_loss
 
-    def line_search(self, X, y_onehot, r, g, lambd):
-        lr = tf.ones((self.batch_size, 1, 1, 1))
-        _, cls_loss0 = self.cls_constraint_and_loss(X + r,
-                                                    y_onehot,
-                                                    targeted=self.targeted)
-        for i in range(5):
-            pg = self.proximal_gradient(X, g, r, lr, lambd)
-            r_i = r - pg * lr
-            _, cls_loss = self.cls_constraint_and_loss(X + r_i,
-                                                       y_onehot,
-                                                       targeted=self.targeted)
-            lrf = tf.reshape(lr, (-1, ))
-            rhs = cls_loss0 - lrf * tf.reduce_sum(g * pg, axis=(
-                1, 2, 3)) + lrf / 2 * tf.reduce_sum(pg**2, axis=(1, 2, 3))
-            cond = cls_loss > rhs
-            lr = tf.where(tf.reshape(cond, (-1, 1, 1, 1)), 0.8 * lr, lr)
+    def line_search(self, X, y_onehot, r, g, initial_lr, lambd):
+        lr = initial_lr * tf.ones((self.batch_size, ))
+        loss0 = self.total_loss(X, y_onehot, r)
+        for i in tf.range(5):
+            lr_ = tf.reshape(lr, (-1, 1, 1, 1))
+            pg = self.proximal_gradient(X, g, r, lr_, lambd)
+            r_i = r - pg * lr_
+            loss_i = self.total_loss(X, y_onehot, r_i)
+            rhs = 0.5 / lr * l2_metric(pg) ** 2
+            lhs = loss0 - loss_i
+            cond = lhs < rhs
+            lr = tf.where(cond, 2.0 * lr, lr)
+            if tf.reduce_all(cond):
+                break
         return lr
 
     def total_loss(self, X, y_onehot, r, lambd):
@@ -315,6 +310,8 @@ class OptimizerLp(object):
         bestmu = self.bestmu
         bestlp = self.bestlp
         mu_ema = self.mu_ema
+        lr_mul = tf.math.exp(
+            tf.math.log(self.primal_min_lr / self.primal_lr) / self.iterations)
 
         @tf.function
         def optim_step(X, y_onehot, targeted=False, finetune=False):
@@ -406,26 +403,25 @@ class OptimizerLp(object):
 
         # reset optimizer and variables
         self._reset_attack(X, y_onehot)
+        lr_decay = linear_lr_decay(self.primal_lr, self.primal_min_lr, self.iterations)
+
+        def update_lr(new_lr):
+            mu = compute_lambda(state) * primal_opt.lr
+            primal_opt.lr = new_lr
+            state.assign(self._init_state(mu / new_lr))
+
         for iteration in range(self.max_iterations):
+            if iteration % self.iterations == 0:
+                primal_opt.lr = self.primal_lr
+                self._restart_step(X, y_onehot)
             if self.lr_decay:
-                min_lr = self.primal_min_lr
-                mu = compute_lambda(state) * primal_opt.lr
                 # as we decrease learning rate lr * lambd used in proximity
                 # operator decreases too.
                 # FIXME: adjust the state, so mu remains constant even after
                 # learning rate decrease
-                primal_opt.lr = (
-                    min_lr + (self.primal_lr - min_lr) *
-                    (1 - iteration % self.iterations / self.iterations))
-                state.assign(self._init_state(mu / primal_opt.lr))
-            if iteration % self.iterations == 0:
-                self._restart_step(X, y_onehot)
-                t_onehot = tf.one_hot(
-                    random_targets(num_classes, y_onehot, logits), num_classes)
-            if self.multitargeted:
-                optim_step(X, t_onehot, targeted=True)
-            else:
-                optim_step(X, y_onehot, targeted=self.targeted)
+                new_lr = lr_decay(iteration % self.iterations)
+                update_lr(new_lr)
+            optim_step(X, y_onehot, targeted=self.targeted)
 
         if self.finetune:
             self._restart_step(X, y_onehot)
@@ -433,8 +429,11 @@ class OptimizerLp(object):
             ry.assign(rx)
             primal_opt.lr.assign(self.primal_min_lr)
             state.assign(self._init_state(bestmu / primal_opt.lr))
-            # finetune for 1/10 iterations
-            for iteration in range(1, self.max_iterations // 10 + 1):
+            finetune_decay = linear_lr_decay(self.primal_min_lr, self.primal_min_lr / 10, self.iterations)
+            # finetune
+            for iteration in range(self.iterations):
+                new_lr = finetune_decay(iteration)
+                update_lr(new_lr)
                 optim_step(X, y_onehot, targeted=self.targeted, finetune=True)
             primal_opt.lr.assign(self.primal_lr)
 
