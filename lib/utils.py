@@ -61,7 +61,10 @@ def import_kwargs_as_flags(f, prefix=''):
     }
     for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
         kwarg_default = spec.defaults[index]
-        flag_defines[kwarg_type](f"{prefix}{kwarg}", kwarg_default, f"{kwarg}")
+        if kwarg_type not in flag_defines:
+            logging.debug(f"Uknown {kwarg} type {kwarg_type}")
+        else:
+            flag_defines[kwarg_type](f"{prefix}{kwarg}", kwarg_default, f"{kwarg}")
 
 
 def prepare_dir(dir_path, subdir_name):
@@ -242,6 +245,27 @@ def power_iteration(Ax, x0, num_iterations):
         xk = l2_normalize(xk)
         xk = tf.stop_gradient(xk)
     return xk
+
+
+
+def linear_lr_decay(init_lr, min_lr, decay_steps):
+    def decay_step(step):
+        assert_op = tf.Assert(decay_steps >= step, [step])
+        with tf.control_dependencies([assert_op]):
+            return min_lr + (init_lr - min_lr) * (1 - step / decay_steps)
+
+    return decay_step
+
+
+def exp_lr_decay(init_lr, min_lr, decay_steps):
+    lr_mul = tf.math.exp(tf.math.log(init_lr / min_lr) / decay_steps)
+
+    def decay_step(step):
+        assert_op = tf.Assert(decay_steps >= step, [step])
+        with tf.control_dependencies([assert_op]):
+            return init_lr * tf.pow(lr_mul, step)
+
+    return decay_step
 
 
 def l0_metric(x, axes=None, keepdims=False):
