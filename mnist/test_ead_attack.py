@@ -1,6 +1,5 @@
 from __future__ import absolute_import, division, print_function
 
-import argparse
 import logging
 import time
 from pathlib import Path
@@ -12,11 +11,10 @@ from absl import flags
 from tensorboard.plugins.hparams import api as hp
 
 from data import load_mnist
-from foolbox.attacks import (L1ProjectedGradientDescentAttack,
-                             L2ProjectedGradientDescentAttack,
-                             LinfProjectedGradientDescentAttack)
+from foolbox.attacks import EADAttack
 from foolbox.models import TensorFlowModel
-from lib.utils import (MetricsDictionary, import_kwargs_as_flags, log_metrics,
+from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
+                       import_kwargs_as_flags, l1_metric, log_metrics,
                        make_input_pipeline, register_experiment_flags,
                        reset_metrics, setup_experiment)
 from models import MadryCNN
@@ -24,32 +22,26 @@ from utils import load_madry
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/mnist/test_brendel_lp")
-flags.DEFINE_string("norm", "l1", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
+
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-flags.DEFINE_integer("attack_random_restarts", 1, "number of random restarts")
-flags.DEFINE_float("attack_abs_stepsize", None, "step size for the attack")
+import_kwargs_as_flags(EADAttack.__init__, "attack_")
+flags.DEFINE_string("attack_decision_rule", "L1", "attack decision rule")
 
 flags.DEFINE_integer("print_frequency", 1, "summarize frequency")
 
 FLAGS = flags.FLAGS
 
-lp_attacks = {
-    "l1": L1ProjectedGradientDescentAttack,
-    "l2": L2ProjectedGradientDescentAttack,
-    "li": LinfProjectedGradientDescentAttack,
-}
-
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_bethge_{FLAGS.norm}_test")
+    setup_experiment("madry_ead_l1_test")
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
@@ -71,26 +63,6 @@ def main(unused_args):
     # load classifier
     classifier(np.zeros([1, 28, 28, 1], dtype=np.float32))
     load_madry(FLAGS.load_from, classifier.trainable_variables)
-    model_type = Path(FLAGS.load_from).stem.split("_")[-1]
-
-    test_thresholds = {
-        "l1": {
-            "plain": np.linspace(2, 10, 5),
-            "linf": np.linspace(2.5, 12.5, 5),
-            "l2": np.linspace(5, 20, 5),
-        },
-        "l2": {
-            "plain": np.linspace(0.5, 2.5, 5),
-            "linf": np.linspace(1, 3, 5),
-            "l2": np.linspace(1, 3, 5),
-        },
-        "li": {
-            "plain": np.linspace(0.03, 0.11, 5),
-            "linf": [0.2, 0.25, 0.3, 0.325, 0.35],
-            "l2": np.linspace(0.05, 0.25, 5),
-        },
-    }
-    attack_epsilons = test_thresholds[FLAGS.norm][model_type]
 
     # attacks
     attack_kwargs = {
@@ -98,22 +70,47 @@ def main(unused_args):
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
         and kwarg not in ["attack_random_restarts"]
     }
-    olp = lp_attacks[FLAGS.norm](**attack_kwargs)
+    olp = EADAttack(**attack_kwargs)
+
+    nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
+    acc_fn = tf.keras.metrics.sparse_categorical_accuracy
 
     test_metrics = MetricsDictionary()
 
-    def test_step(image, label):
-        success = tf.ones((len(attack_epsilons), image.shape[0]),
-                          dtype=tf.bool)
-        for _ in range(FLAGS.attack_random_restarts):
-            _, _, scs = olp(fclassifier,
-                            image,
-                            label,
-                            epsilons=attack_epsilons)
-            success = tf.logical_and(success, ~scs)
+    test_thresholds = ([
+        2.0, 2.5, 4.0, 5.0, 6.0, 7.5, 8.0, 8.75, 10.0, 12.5, 16.25, 20.0
+    ], )
 
-        for i, epsilon in enumerate(attack_epsilons):
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % epsilon](success[i])
+    def test_step(image, label):
+        image_lp = olp(fclassifier, image, label, epsilons=None)
+
+        outs = test_classifier(image)
+        outs_l1 = test_classifier(image_lp)
+
+        # metrics
+        nll_loss = nll_loss_fn(label, outs["logits"])
+        acc = acc_fn(label, outs["logits"])
+        acc_l1 = acc_fn(label, outs_l1["logits"])
+
+        # accumulate metrics
+        test_metrics["nll_loss"](nll_loss)
+        test_metrics["acc"](acc)
+        test_metrics["conf"](outs["conf"])
+        test_metrics["acc_l1"](acc_l1)
+        test_metrics["conf_l1"](outs_l1["conf"])
+
+        l1 = l1_metric(image - image_lp)
+        for threshold in test_thresholds[FLAGS.norm]:
+            acc_th = get_acc_for_lp_threshold(
+                lambda x: test_classifier(x)["logits"],
+                image,
+                image_lp,
+                label,
+                l1,
+                threshold,
+            )
+            test_metrics["acc_l1_%.2f" % threshold](acc_th)
+        test_metrics["l1"](l1)
 
     # reset metrics
     reset_metrics(test_metrics)
@@ -181,9 +178,4 @@ def main(unused_args):
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--norm", default=None, type=str)
-    args, _ = parser.parse_known_args()
-    assert args.norm in ["l1", "l2", "li"]
-    import_kwargs_as_flags(lp_attacks[args.norm].__init__, "attack_")
     absl.app.run(main)

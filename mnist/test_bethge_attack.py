@@ -16,7 +16,7 @@ from data import load_mnist
 from foolbox.attacks import (L0BrendelBethgeAttack, L1BrendelBethgeAttack,
                              L2BrendelBethgeAttack,
                              LinearSearchBlendedUniformNoiseAttack,
-                             LinfinityBrendelBethgeAttack, LinfPGD)
+                             LinfinityBrendelBethgeAttack)
 from foolbox.models import TensorFlowModel
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
                        import_kwargs_as_flags, l0_metric, l1_metric, l2_metric,
