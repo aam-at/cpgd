@@ -21,7 +21,11 @@ def get_tmpl_str(script_name, ignored_flags, **flags):
     return tmpl_str
 
 
-def generate_test_optimizer(script_name, norm, load_from, ignored_flags, **kwargs):
+def generate_test_optimizer(script_name,
+                            norm,
+                            load_from,
+                            ignored_flags={},
+                            **kwargs):
     tmpl_str = get_tmpl_str(script_name, ignored_flags, **kwargs)
     assert Path(f"{script_name}.py").exists()
     assert Path(load_from).exists()
