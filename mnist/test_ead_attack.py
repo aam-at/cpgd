@@ -21,7 +21,7 @@ from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_brendel_lp")
+register_experiment_flags(working_dir="../results/mnist/test_ead")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 
 # test parameters
@@ -82,7 +82,7 @@ def main(unused_args):
     ], )
 
     def test_step(image, label):
-        image_lp = olp(fclassifier, image, label, epsilons=None)
+        image_lp, _, _ = olp(fclassifier, image, label, epsilons=None)
 
         outs = test_classifier(image)
         outs_l1 = test_classifier(image_lp)
@@ -100,7 +100,7 @@ def main(unused_args):
         test_metrics["conf_l1"](outs_l1["conf"])
 
         l1 = l1_metric(image - image_lp)
-        for threshold in test_thresholds[FLAGS.norm]:
+        for threshold in test_thresholds:
             acc_th = get_acc_for_lp_threshold(
                 lambda x: test_classifier(x)["logits"],
                 image,
