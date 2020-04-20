@@ -60,7 +60,10 @@ def import_kwargs_as_flags(f, prefix=''):
         float: flags.DEFINE_float
     }
     for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
-        kwarg_default = spec.defaults[index]
+        try:
+            kwarg_default = spec.defaults[index]
+        except:
+            kwarg_default = spec.kwonlydefaults[kwarg]
         if kwarg_type not in flag_defines:
             logging.debug(f"Uknown {kwarg} type {kwarg_type}")
         else:
