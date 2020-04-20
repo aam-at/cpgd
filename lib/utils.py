@@ -261,7 +261,8 @@ def linear_lr_decay(init_lr, min_lr, decay_steps):
 
 
 def exp_lr_decay(init_lr, min_lr, decay_steps):
-    lr_mul = tf.math.exp(tf.math.log(init_lr / min_lr) / decay_steps)
+    assert init_lr >= min_lr
+    lr_mul = tf.math.exp(tf.math.log(min_lr / init_lr) / decay_steps)
 
     def decay_step(step):
         assert_op = tf.Assert(decay_steps >= step, [step])

@@ -23,7 +23,7 @@ from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_brendel_lp")
+register_experiment_flags(working_dir="../results/mnist/test_pgd")
 flags.DEFINE_string("norm", "l1", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
