@@ -77,9 +77,9 @@ def main(unused_args):
 
     test_metrics = MetricsDictionary()
 
-    test_thresholds = ([
+    test_thresholds = [
         2.0, 2.5, 4.0, 5.0, 6.0, 7.5, 8.0, 8.75, 10.0, 12.5, 16.25, 20.0
-    ], )
+    ]
 
     def test_step(image, label):
         image_lp, _, _ = olp(fclassifier, image, label, epsilons=None)
