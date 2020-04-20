@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
+import importlib
 import itertools
 import subprocess
 from pathlib import Path
@@ -18,6 +19,11 @@ hostname = subprocess.getoutput('hostname')
 
 def generate_test_optimizer_lp(norm, load_from, **kwargs):
     return generate_test_optimizer('test_optimizer_lp_madry', norm, load_from,
+                                   **kwargs)
+
+
+def generate_test_bethge_lp(norm, load_from, **kwargs):
+    return generate_test_optimizer('test_bethge_attack', norm, load_from,
                                    **kwargs)
 
 
@@ -201,6 +207,24 @@ def test_li_config(runs=1, master_seed=1):
                         working_dir=working_dir,
                         name=name,
                         seed=seed))
+
+
+def test_bethge_config(norm, runs=1, master_seed=1):
+    assert norm in ['l0', 'li', 'l1', 'l2']
+    num_batches = {'l0': 10, 'li': 10, 'l1': 10, 'l2': 5}[norm]
+    attack_args = {'norm': norm, 'num_batches': num_batches, 'seed': 1}
+    name = "mnist_bethge_"
+
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/mnist_bethge/test_{norm}_{type}"
+        attack_args0 = attack_args.copy()
+        attack_args0.update({
+            'norm': norm,
+            'load_from': model,
+            'working_dir': working_dir
+        })
+        print(generate_test_bethge_lp(name=name, **attack_args0))
 
 
 if __name__ == '__main__':
