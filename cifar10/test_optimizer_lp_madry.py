@@ -28,7 +28,7 @@ from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_lp")
+register_experiment_flags(working_dir="../results/cifar10/test_lp")
 flags.DEFINE_string("norm", "l1", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
@@ -54,17 +54,10 @@ def main(unused_args):
     ])
 
     # data
-    _, _, test_ds = load_cifar10(FLAGS.validation_size)
-    x_test, y_test = test_ds._tensors
-    x_test, y_test = x_test.numpy(), y_test.numpy()
-    indices = np.arange(x_test.shape[0])
-    if FLAGS.sort_labels:
-        ys_indices = np.argsort(y_test)
-        x_test = x_test[ys_indices]
-        y_test = y_test[ys_indices]
-        indices = indices[ys_indices]
-
-    test_ds = tf.data.Dataset.from_tensor_slices((x_test, y_test, indices))
+    _, _, test_ds = load_cifar10(FLAGS.validation_size,
+                                 data_format="NHWC",
+                                 seed=FLAGS.data_seed)
+    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
     test_ds = make_input_pipeline(test_ds,
                                   shuffle=False,
                                   batch_size=FLAGS.batch_size)
@@ -147,7 +140,7 @@ def main(unused_args):
             acc_th = get_acc_for_lp_threshold(
                 lambda x: test_classifier(x)['logits'], image, image_lp, label,
                 lp, threshold)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](acc_th)
+            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](acc_th)
         test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
         is_corr = outs['pred'] == label
