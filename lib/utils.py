@@ -14,6 +14,7 @@ import numpy as np
 import six
 import tensorflow as tf
 from absl import flags
+from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 
 FLAGS = flags.FLAGS
 
@@ -251,14 +252,6 @@ def power_iteration(Ax, x0, num_iterations):
 
 
 
-def linear_lr_decay(init_lr, min_lr, decay_steps):
-    def decay_step(step):
-        assert_op = tf.Assert(decay_steps >= step, [step])
-        with tf.control_dependencies([assert_op]):
-            return min_lr + (init_lr - min_lr) * (1 - step / decay_steps)
-
-    return decay_step
-
 
 def exp_lr_decay(init_lr, min_lr, decay_steps):
     assert init_lr >= min_lr
@@ -270,6 +263,41 @@ def exp_lr_decay(init_lr, min_lr, decay_steps):
             return init_lr * tf.pow(lr_mul, step)
 
     return decay_step
+class LinearDecay(LearningRateSchedule):
+    def __init__(
+            self,
+            initial_learning_rate,
+            minimal_learning_rate,
+            decay_steps,
+            name=None):
+        super(LinearDecay, self).__init__()
+        self.initial_learning_rate = initial_learning_rate
+        self.minimal_learning_rate = minimal_learning_rate
+        self.decay_steps = decay_steps
+        self.name = name
+
+    def __call__(self, step):
+        with tf.name_scope(self.name or "LinearDecay") as name:
+            initial_learning_rate = tf.convert_to_tensor(
+                self.initial_learning_rate, name="initial_learning_rate")
+            dtype = initial_learning_rate.dtype
+            minimal_learning_rate = tf.cast(self.minimal_learning_rate, dtype)
+            decay_steps = tf.cast(self.decay_steps, dtype)
+
+            global_step_recomp = tf.cast(step, dtype)
+            p = global_step_recomp / decay_steps
+
+            assert_op = tf.Assert(decay_steps >= step, [step])
+            with tf.control_dependencies([assert_op]):
+                return minimal_learning_rate + (initial_learning_rate - minimal_learning_rate) * (1 - p)
+
+    def get_config(self):
+        return {
+            "initial_learning_rate": self.initial_learning_rate,
+            "minimal_learning_rate": self.minimal_learning_rate,
+            "decay_steps": self.decay_steps,
+            "name": self.name
+        }
 
 
 def l0_metric(x, axes=None, keepdims=False):
