@@ -68,7 +68,8 @@ def import_kwargs_as_flags(f, prefix=''):
         if kwarg_type not in flag_defines:
             logging.debug(f"Uknown {kwarg} type {kwarg_type}")
         else:
-            flag_defines[kwarg_type](f"{prefix}{kwarg}", kwarg_default, f"{kwarg}")
+            flag_defines[kwarg_type](f"{prefix}{kwarg}", kwarg_default,
+                                     f"{kwarg}")
 
 
 def prepare_dir(dir_path, subdir_name):
@@ -264,13 +265,13 @@ def exp_lr_decay(init_lr, min_lr, decay_steps):
 
     return decay_step
 class LinearDecay(LearningRateSchedule):
-    def __init__(
-            self,
-            initial_learning_rate,
-            minimal_learning_rate,
-            decay_steps,
-            name=None):
+    def __init__(self,
+                 initial_learning_rate,
+                 minimal_learning_rate,
+                 decay_steps,
+                 name=None):
         super(LinearDecay, self).__init__()
+        assert initial_learning_rate > minimal_learning_rate
         self.initial_learning_rate = initial_learning_rate
         self.minimal_learning_rate = minimal_learning_rate
         self.decay_steps = decay_steps
@@ -289,7 +290,8 @@ class LinearDecay(LearningRateSchedule):
 
             assert_op = tf.Assert(decay_steps >= step, [step])
             with tf.control_dependencies([assert_op]):
-                return minimal_learning_rate + (initial_learning_rate - minimal_learning_rate) * (1 - p)
+                return minimal_learning_rate + (
+                    initial_learning_rate - minimal_learning_rate) * (1 - p)
 
     def get_config(self):
         return {

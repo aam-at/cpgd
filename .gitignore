@@ -106,5 +106,6 @@ venv.bak/
 # End of https://www.gitignore.io/api/python
 .idea/*
 /mnist/data/*
-*runs**/
-*test**/
+results/*
+*.org
+*.org_archive
