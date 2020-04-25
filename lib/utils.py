@@ -288,7 +288,7 @@ class LinearDecay(LearningRateSchedule):
             global_step_recomp = tf.cast(step, dtype)
             p = global_step_recomp / decay_steps
 
-            assert_op = tf.Assert(decay_steps >= step, [step])
+            assert_op = tf.Assert(decay_steps >= global_step_recomp, [step])
             with tf.control_dependencies([assert_op]):
                 return minimal_learning_rate + (
                     initial_learning_rate - minimal_learning_rate) * (1 - p)
