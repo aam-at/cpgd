@@ -252,18 +252,6 @@ def power_iteration(Ax, x0, num_iterations):
     return xk
 
 
-
-
-def exp_lr_decay(init_lr, min_lr, decay_steps):
-    assert init_lr >= min_lr
-    lr_mul = tf.math.exp(tf.math.log(min_lr / init_lr) / decay_steps)
-
-    def decay_step(step):
-        assert_op = tf.Assert(decay_steps >= step, [step])
-        with tf.control_dependencies([assert_op]):
-            return init_lr * tf.pow(lr_mul, step)
-
-    return decay_step
 class LinearDecay(LearningRateSchedule):
     def __init__(self,
                  initial_learning_rate,
