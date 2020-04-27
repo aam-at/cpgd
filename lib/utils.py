@@ -53,9 +53,8 @@ def flags_to_params(fls):
 
 
 def import_klass_kwargs_as_flags(klass, prefix=''):
-    import_klass_kwargs_as_flags(klass.__init__, prefix)
-    for base_klass in inspect.getmro(klass):
-        import_klass_kwargs_as_flags(base_klass)
+    for base_klass in klass.mro():
+        import_kwargs_as_flags(base_klass.__init__, prefix)
 
 
 def import_kwargs_as_flags(f, prefix=''):
