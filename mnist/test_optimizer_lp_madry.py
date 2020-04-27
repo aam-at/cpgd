@@ -16,12 +16,13 @@ import lib
 from data import load_mnist
 from lib.attack_l0 import ProximalL0Attack
 from lib.attack_l1 import ProximalL1Attack
-from lib.attack_l2 import GradientL2Attack
+from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
 from lib.attack_li import ProximalLiAttack
 from lib.attack_lp import GradientOptimizerAttack
+from lib.attack_utils import AttackOptimizerManager
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
-                       import_kwargs_as_flags, l0_metric, l1_metric, l2_metric,
-                       li_metric, log_metrics, make_input_pipeline,
+                       import_klass_kwargs_as_flags, l0_metric, l1_metric,
+                       l2_metric, li_metric, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
 from models import MadryCNN
@@ -37,20 +38,37 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_kwargs_as_flags(GradientOptimizerAttack.__init__, 'attack_')
-
-flags.DEFINE_integer("print_frequency", 1, "summarize frequency")
+import_klass_kwargs_as_flags(AttackOptimizerManager, 'attack_')
 
 FLAGS = flags.FLAGS
+
+lp_attacks = {
+    'l0': ProximalL0Attack,
+    'l1': ProximalL1Attack,
+    'l2': ProximalL2Attack,
+    'l2g': GradientL2Attack,
+    'li': ProximalLiAttack
+}
+lp_metrics = {
+    'l0': l0_metric,
+    'l1': l1_metric,
+    'l2': l2_metric,
+    'li': li_metric
+}
 
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-    assert FLAGS.norm in ['l0', 'l1', 'l2', 'li']
     assert FLAGS.load_from is not None
+    attack_klass = lp_attacks[FLAGS.norm]
+    if FLAGS.norm == 'l2g':
+        FLAGS.norm = 'l2'
+
     setup_experiment(f"madry_{FLAGS.norm}_test", [
         lib.attack_lp.__file__,
-        getattr(lib, f"attack_{FLAGS.norm}").__file__
+        getattr(lib, f"attack_{FLAGS.norm}").__file__,
+        lib.attack_utils.__file__,
+        lib.utils.__file__,
     ])
 
     # data
@@ -72,21 +90,8 @@ def main(unused_args):
     # load classifier
     classifier(np.zeros([1, 28, 28, 1], dtype=np.float32))
     load_madry(FLAGS.load_from, classifier.trainable_variables)
-
-    lp_attacks = {
-        'l0': ProximalL0Attack,
-        'l1': ProximalL1Attack,
-        'l2': GradientL2Attack,
-        'li': ProximalLiAttack
-    }
-    lp_metrics = {
-        'l0': l0_metric,
-        'l1': l1_metric,
-        'l2': l2_metric,
-        'li': li_metric
-    }
     test_thresholds = {
-        'l0': [10, 30, 50, 80, 100],
+        'l0': [2, 4, 5, 6, 8, 10, 15, 20, 25, 30, 35, 45],
         'l1':
         [2.0, 2.5, 4.0, 5.0, 6.0, 7.5, 8.0, 8.75, 10.0, 12.5, 16.25, 20.0],
         'l2': [0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
@@ -98,12 +103,8 @@ def main(unused_args):
         kwarg.replace('attack_', ''): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith('attack_')
     }
-    olp = lp_attacks[FLAGS.norm](lambda x: test_classifier(x)["logits"],
-                                 batch_size=FLAGS.batch_size,
-                                 **attack_kwargs)
-
-    nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
-    acc_fn = tf.keras.metrics.sparse_categorical_accuracy
+    olp = attack_klass(lambda x: test_classifier(x)["logits"],
+                       **attack_kwargs)
 
     test_metrics = MetricsDictionary()
 
@@ -116,7 +117,8 @@ def main(unused_args):
         outs_lp = test_classifier(image_lp)
 
         # metrics
-        nll_loss = nll_loss_fn(label, outs["logits"])
+        nll_loss = tf.keras.metrics.sparse_categorical_crossentropy(label, outs["logits"])
+        acc_fn = tf.keras.metrics.sparse_categorical_accuracy
         acc = acc_fn(label, outs["logits"])
         acc_lp = acc_fn(label, outs_lp["logits"])
 
@@ -135,7 +137,7 @@ def main(unused_args):
                 lp, threshold)
             test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](acc_th)
         test_metrics[f"{FLAGS.norm}"](lp)
-        # exclude incorrectly classified
+        # compute statistics only for correctly classified inputs
         is_corr = outs['pred'] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
 
@@ -159,11 +161,10 @@ def main(unused_args):
             # save adversarial data
             X_lp_list.append(X_lp)
             y_list.append(label)
-            if batch_index % FLAGS.print_frequency == 0:
-                log_metrics(
-                    test_metrics, "Batch results [{}, {:.2f}s]:".format(
-                        batch_index,
-                        time.time() - start_time))
+            log_metrics(
+                test_metrics, "Batch results [{}, {:.2f}s]:".format(
+                    batch_index,
+                    time.time() - start_time))
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 is_completed = True
                 break
@@ -216,6 +217,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
-    if args.norm == 'li':
-        import_kwargs_as_flags(ProximalLiAttack.__init__, 'attack_')
+    assert args.norm in lp_attacks
+    import_klass_kwargs_as_flags(lp_attacks[args.norm], 'attack_')
     absl.app.run(main)

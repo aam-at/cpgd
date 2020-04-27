@@ -10,6 +10,9 @@ class ProximalL0Attack(ProximalGradientOptimizerAttack):
         super(ProximalL0Attack, self).__init__(model=model, **kwargs)
         self.ord = 0
 
+    def gradient_preprocess(self, g):
+        return g
+
     def lp_metric(self, u, keepdims=False):
         return l0_metric(u, keepdims=keepdims)
 

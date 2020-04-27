@@ -10,6 +10,10 @@ class GradientL2Attack(GradientOptimizerAttack):
         super(GradientL2Attack, self).__init__(model=model, **kwargs)
         self.ord = 2
 
+    def gradient_preprocess(self, g):
+        # TODO: consider l2-norm gradient normalization
+        return g
+
     def lp_metric(self, u, keepdims=False):
         return l2_metric(u, keepdims=keepdims)
 
