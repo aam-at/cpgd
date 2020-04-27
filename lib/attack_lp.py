@@ -1,6 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
-from abc import abstractmethod
+from abc import abstractmethod, ABC
 
 import tensorflow as tf
 
@@ -24,7 +24,7 @@ def init_state(ratio):
     return state
 
 
-class GradientOptimizerAttack(object):
+class GradientOptimizerAttack(ABC):
     """The L_p optimization attack (external regret minimization with
     multiplicative updates).
 
@@ -332,7 +332,7 @@ class GradientOptimizerAttack(object):
         return self.attack.read_value()
 
 
-class ProximalGradientOptimizerAttack(GradientOptimizerAttack):
+class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
     def __init__(
             self,
             model,

@@ -52,6 +52,12 @@ def flags_to_params(fls):
     return Namespace(**{k: f.value for k, f in fls.__flags.items()})
 
 
+def import_klass_kwargs_as_flags(klass, prefix=''):
+    import_klass_kwargs_as_flags(klass.__init__, prefix)
+    for base_klass in inspect.getmro(klass):
+        import_klass_kwargs_as_flags(base_klass)
+
+
 def import_kwargs_as_flags(f, prefix=''):
     spec = inspect.getfullargspec(f)
     flag_defines = {
