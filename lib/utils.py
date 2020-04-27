@@ -197,6 +197,16 @@ def setup_experiment(default_name, snapshot_files=None):
 
 
 # tensorflow utils
+def create_optimizer(opt, lr, **kwargs):
+    config = {'learning_rate': lr}
+    config.update(kwargs)
+    return tf.keras.optimizers.get({'class_name': opt, 'config': config})
+
+
+def reset_optimizer(opt):
+    [var.assign(tf.zeros_like(var)) for var in opt.variables()]
+
+
 def reset_metrics(metrics):
     for metric in metrics.values():
         metric.reset_states()
