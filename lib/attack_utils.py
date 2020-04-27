@@ -189,3 +189,19 @@ def random_lp_vector(shape, ord, eps, dtype=tf.float32, seed=None):
         r = eps * tf.reshape(w * x / norm, shape)
 
     return r
+
+
+class AttackOptimizerManager(object):
+    def __init__(self,
+                 attack,
+                 number_restarts: int = 1,
+                 r0_sampling_algorithm: str = 'uniform',
+                 r0_sampling_epsilon: float = 0.1,
+                 C0_initial_const: float = 0.01,
+                 finetune: bool = True):
+        self.attack = attack
+        self.number_restarts = number_restarts
+        self.r0_sampling_algorithm = r0_sampling_algorithm
+        self.r0_sampling_epsilon = r0_sampling_epsilon
+        self.C0_initial_const = C0_initial_const
+        self.finetune = finetune
