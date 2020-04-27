@@ -14,11 +14,11 @@ from tensorboard.plugins.hparams import api as hp
 
 import lib
 from data import load_cifar10
-from lib.attack_l0 import OptimizerL0
-from lib.attack_l1 import OptimizerL1
-from lib.attack_l2 import OptimizerL2
-from lib.attack_li import OptimizerLi
-from lib.attack_lp import OptimizerLp
+from lib.attack_l0 import ProximalL0Attack
+from lib.attack_l1 import ProximalL1Attack
+from lib.attack_l2 import GradientL2Attack
+from lib.attack_li import ProximalLiAttack
+from lib.attack_lp import GradientOptimizerAttack
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
                        import_kwargs_as_flags, l0_metric, l1_metric, l2_metric,
                        li_metric, log_metrics, make_input_pipeline,
@@ -37,7 +37,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_kwargs_as_flags(OptimizerLp.__init__, 'attack_')
+import_kwargs_as_flags(GradientOptimizerAttack.__init__, 'attack_')
 
 flags.DEFINE_integer("print_frequency", 1, "summarize frequency")
 
@@ -77,10 +77,10 @@ def main(unused_args):
                model_type=model_type)
 
     lp_attacks = {
-        'l0': OptimizerL0,
-        'l1': OptimizerL1,
-        'l2': OptimizerL2,
-        'li': OptimizerLi
+        'l0': ProximalL0Attack,
+        'l1': ProximalL1Attack,
+        'l2': GradientL2Attack,
+        'li': ProximalLiAttack
     }
     lp_metrics = {
         'l0': l0_metric,
@@ -224,5 +224,5 @@ if __name__ == "__main__":
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
     if args.norm == 'li':
-        import_kwargs_as_flags(OptimizerLi.__init__, 'attack_')
+        import_kwargs_as_flags(ProximalLiAttack.__init__, 'attack_')
     absl.app.run(main)
