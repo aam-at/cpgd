@@ -19,7 +19,7 @@ from lib.attack_l1 import ProximalL1Attack
 from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
 from lib.attack_li import ProximalLiAttack
 from lib.attack_lp import GradientOptimizerAttack
-from lib.attack_utils import AttackOptimizerManager
+from lib.attack_utils import RandomRestartOptimizationAttack
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
                        import_klass_kwargs_as_flags, l0_metric, l1_metric,
                        l2_metric, li_metric, log_metrics, make_input_pipeline,
@@ -38,7 +38,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_klass_kwargs_as_flags(AttackOptimizerManager, 'attack_')
+import_klass_kwargs_as_flags(RandomRestartOptimizationAttack, 'loop')
 
 FLAGS = flags.FLAGS
 
