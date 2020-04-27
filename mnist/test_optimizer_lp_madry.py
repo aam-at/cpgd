@@ -30,7 +30,7 @@ from utils import load_madry
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/mnist/test_lp")
-flags.DEFINE_string("norm", "l1", "lp-norm attack")
+flags.DEFINE_string("norm", None, "lp-norm attack ('l0', 'l1', 'l2', 'l2g', 'li')")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
