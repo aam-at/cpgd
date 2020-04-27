@@ -191,17 +191,35 @@ def random_lp_vector(shape, ord, eps, dtype=tf.float32, seed=None):
     return r
 
 
-class AttackOptimizerManager(object):
+class RandomRestartOptimizationAttack(object):
     def __init__(self,
                  attack,
                  number_restarts: int = 1,
                  r0_sampling_algorithm: str = 'uniform',
                  r0_sampling_epsilon: float = 0.1,
                  C0_initial_const: float = 0.01,
-                 finetune: bool = True):
+                 lr: float = 0.01,
+                 lr_config: str = None,
+                 finetune: bool = True,
+                 finetune_lr: float = 0.01,
+                 finetune_lr_config: str = None):
         self.attack = attack
         self.number_restarts = number_restarts
         self.r0_sampling_algorithm = r0_sampling_algorithm
         self.r0_sampling_epsilon = r0_sampling_epsilon
         self.C0_initial_const = C0_initial_const
+        self.lr = lr
+        self.lr_config = lr_config
         self.finetune = finetune
+        self.finetune_lr = finetune_lr
+        self.finetune_lr_config = finetune_lr_config
+
+    def run(self, X, y_onehot):
+        self.attack.restart_attack(X, y_onehot)
+        for i in range(self.number_restarts):
+            r0 = init_r0(X.shape, self.r0_sampling_algorithm, self.attack.ord, self.r0_sampling_algorithm)
+            r0 = self.attack.project_box(X, r0)
+            C0 = self.C0_initial_const
+            self.attack.reset_attack(r0, C0)
+            self.attack.run(X, y_onehot)
+        return self.attack.attack.read_value()
