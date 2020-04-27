@@ -19,6 +19,23 @@ def margin(logits, y_onehot, delta=0.0, targeted=False):
     return margin
 
 
+def init_r0(shape, epsilon, norm, init='uniform'):
+    if epsilon is not None and epsilon > 0:
+        if init == 'sign':
+            r0 = tf.sign(tf.random.normal(shape))
+            r0 = epsilon * r0
+        elif init == 'uniform':
+            r0 = tf.random.uniform(shape, -1.0, 1.0)
+            r0 = epsilon * r0
+        elif init == 'lp_sphere':
+            r0 = random_lp_vector(shape, norm, epsilon)
+        else:
+            raise ValueError
+    else:
+        r0 = tf.zeros(shape)
+    return r0
+
+
 def proximal_l0(u, lambd):
     return tf.where(tf.abs(u) <= tf.sqrt(2 * lambd), 0.0, u)
 
@@ -87,6 +104,8 @@ def project_l1ball(v, radius):
 
 
 def project_log_distribution_wrt_kl_divergence(log_distribution, axis=1):
+    """Projects onto the set of log-multinoulli distributions.
+    """
     # For numerical reasons, make sure that the largest element is zero before
     # exponentiating.
     log_distribution = log_distribution - tf.reduce_max(
