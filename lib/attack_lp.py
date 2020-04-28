@@ -41,7 +41,7 @@ class GradientOptimizerAttack(ABC):
             gradient_preprocessing: bool = False,
             lr_decay: bool = False,
             dual_optimizer: str = 'sgd',
-            dual_lr: float = 1e-2,
+            dual_lr: float = 1e-1,
             dual_ema: bool = True,
             # attack parameters
             targeted: bool = False,
@@ -320,14 +320,9 @@ class GradientOptimizerAttack(ABC):
             self.optim_step(X, y_onehot)
 
     def run(self, X, y_onehot):
-        X_hat = tf.py_function(self._run, [X, y_onehot], tf.float32)
-        X_hat.set_shape(X.get_shape())
-        return X_hat
+        tf.py_function(self._run, [X, y_onehot], [])
 
     def call(self, X, y_onehot):
-        if not self.built:
-            inputs_shapes = list(map(lambda x: x.shape, [X, y_onehot]))
-            self.build(inputs_shapes)
         self.run(X, y_onehot)
         return self.attack.read_value()
 

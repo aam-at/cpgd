@@ -19,7 +19,7 @@ from lib.attack_l1 import ProximalL1Attack
 from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
 from lib.attack_li import ProximalLiAttack
 from lib.attack_lp import GradientOptimizerAttack
-from lib.attack_utils import RandomRestartOptimizationAttack
+from lib.attack_utils import AttackOptimizationLoop
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
                        import_klass_kwargs_as_flags, l0_metric, l1_metric,
                        l2_metric, li_metric, log_metrics, make_input_pipeline,
@@ -38,7 +38,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_klass_kwargs_as_flags(RandomRestartOptimizationAttack, 'attack_loop_')
+import_klass_kwargs_as_flags(AttackOptimizationLoop, 'attack_loop_')
 
 FLAGS = flags.FLAGS
 
@@ -49,13 +49,6 @@ lp_attacks = {
     'l2g': ('l2', GradientL2Attack),
     'li': ('li', ProximalLiAttack)
 }
-lp_metrics = {
-    'l0': l0_metric,
-    'l1': l1_metric,
-    'l2': l2_metric,
-    'li': li_metric
-}
-
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
@@ -86,22 +79,25 @@ def main(unused_args):
         return classifier(x, training=False, **kwargs)
 
     # load classifier
-    classifier(np.zeros([1, 28, 28, 1], dtype=np.float32))
+    X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
+    y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
+    classifier(tf.zeros(X_shape))
     load_madry(FLAGS.load_from, classifier.trainable_variables)
 
     # attacks
     attack_loop_kwargs = {
-        kwarg.replace('attack_', ''): getattr(FLAGS, kwarg)
+        kwarg.replace('attack_loop_', ''): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith('attack_loop_')
     }
     attack_kwargs = {
         kwarg.replace('attack_', ''): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS)
-        if kwarg.startswith('attack_') and kwarg not in attack_loop_kwargs
+        if kwarg.startswith('attack_') and not kwarg.startswith('attack_loop_')
     }
     alp = attack_klass(lambda x: test_classifier(x)["logits"],
                        **attack_kwargs)
-    allp = RandomRestartOptimizationAttack(alp, **attack_loop_kwargs)
+    alp.build([X_shape, y_shape])
+    allp = AttackOptimizationLoop(alp, **attack_loop_kwargs)
 
     # test metrics
     test_thresholds = {
@@ -117,7 +113,7 @@ def main(unused_args):
     @tf.function
     def test_step(image, label):
         label_onehot = tf.one_hot(label, num_classes)
-        image_lp = allp(image, label_onehot)
+        image_lp = allp.run_loop(image, label_onehot)
 
         outs = test_classifier(image)
         outs_lp = test_classifier(image_lp)
@@ -136,7 +132,7 @@ def main(unused_args):
         test_metrics[f"conf_{norm}"](outs_lp["conf"])
 
         # measure norm
-        lp = lp_metrics[norm](image - image_lp)
+        lp = alp.lp_metric(image - image_lp)
         for threshold in test_thresholds[norm]:
             acc_th = get_acc_for_lp_threshold(
                 lambda x: test_classifier(x)['logits'], image, image_lp, label,
