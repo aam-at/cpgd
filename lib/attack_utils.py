@@ -192,7 +192,7 @@ def random_lp_vector(shape, ord, eps, dtype=tf.float32, seed=None):
     return r
 
 
-class RandomRestartOptimizationAttack(object):
+class AttackOptimizationLoop(object):
     def __init__(self,
                  attack,
                  number_restarts: int = 1,
@@ -221,11 +221,11 @@ class RandomRestartOptimizationAttack(object):
         else:
             self.finetune_lr = finetune_lr
 
-    def run(self, X, y_onehot):
+    def _run_loop(self, X, y_onehot):
         self.attack.restart_attack(X, y_onehot)
         self.attack.lr = self.lr
         for i in range(self.number_restarts):
-            r0 = init_r0(X.shape, self.r0_sampling_algorithm, self.attack.ord,
+            r0 = init_r0(X.shape, self.r0_sampling_epsilon, self.attack.ord,
                          self.r0_sampling_algorithm)
             r0 = self.attack.project_box(X, r0)
             C0 = self.C0_initial_const
@@ -237,4 +237,8 @@ class RandomRestartOptimizationAttack(object):
             Cbest = self.attack.bestlambd.read_value()
             self.attack.reset_attack(rbest, Cbest)
             self.attack.run(X, y_onehot)
-        return self.attack.attack.read_value()
+
+    def run_loop(self, X, y_onehot):
+        with tf.control_dependencies(
+            [tf.py_function(self._run_loop, [X, y_onehot], [])]):
+            return self.attack.attack.read_value()
