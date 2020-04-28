@@ -1,12 +1,13 @@
 from __future__ import absolute_import, division, print_function
 
-from abc import abstractmethod, ABC
+from abc import ABC, abstractmethod
 
 import tensorflow as tf
 
 from .attack_utils import (margin, project_box,
                            project_log_distribution_wrt_kl_divergence)
-from .utils import (prediction, to_indexed_slices, create_optimizer, reset_optimizer)
+from .utils import (create_optimizer, prediction, reset_optimizer,
+                    to_indexed_slices)
 
 
 def compute_lambda(state):
@@ -29,28 +30,28 @@ class GradientOptimizerAttack(ABC):
     multiplicative updates).
 
     """
-
     def __init__(
-            self,
-            model,
-            # parameters for the optimizer
-            loss: str = 'cw',
-            iterations: int = 100,
-            primal_optimizer: str = 'sgd',
-            primal_lr: float = 1e-1,
-            gradient_preprocessing: bool = False,
-            lr_decay: bool = False,
-            dual_optimizer: str = 'sgd',
-            dual_lr: float = 1e-1,
-            dual_ema: bool = True,
-            # attack parameters
-            targeted: bool = False,
-            confidence: float = 0.0,
-            # parameters for non-convex constrained minimization
-            use_proxy_constraint: bool = True,
-            boxmin: float = 0.0,
-            boxmax: float = 1.0,
-            min_dual_ratio: float = 1e-6):
+        self,
+        model,
+        # parameters for the optimizer
+        loss: str = "cw",
+        iterations: int = 100,
+        primal_optimizer: str = "sgd",
+        primal_lr: float = 1e-1,
+        gradient_preprocessing: bool = False,
+        lr_decay: bool = False,
+        dual_optimizer: str = "sgd",
+        dual_lr: float = 1e-1,
+        dual_ema: bool = True,
+        # attack parameters
+        targeted: bool = False,
+        confidence: float = 0.0,
+        # parameters for non-convex constrained minimization
+        use_proxy_constraint: bool = True,
+        boxmin: float = 0.0,
+        boxmax: float = 1.0,
+        min_dual_ratio: float = 1e-6,
+    ):
         """
         Args:
             model: the model function to call which returns logits.
@@ -74,7 +75,7 @@ class GradientOptimizerAttack(ABC):
         """
         super(GradientOptimizerAttack, self).__init__()
         self.model = model
-        assert loss in ['logit_diff', 'cw', 'ce']
+        assert loss in ["logit_diff", "cw", "ce"]
         self.loss = loss
         self.iterations = iterations
         self.primal_opt = create_optimizer(primal_optimizer, primal_lr)
@@ -100,10 +101,12 @@ class GradientOptimizerAttack(ABC):
         assert y_shape.ndims == 2
         # primal and dual variable
         self.rx = tf.Variable(tf.zeros(X_shape), trainable=True, name="rx")
-        self.state = tf.Variable(tf.zeros((batch_size, 2)),
-                                 trainable=True,
-                                 constraint=self.project_state,
-                                 name="dual_state")
+        self.state = tf.Variable(
+            tf.zeros((batch_size, 2)),
+            trainable=True,
+            constraint=self.project_state,
+            name="dual_state",
+        )
         self.lambd_ema = tf.Variable(tf.zeros(batch_size),
                                      trainable=False,
                                      name="lambd_mu")
@@ -135,8 +138,10 @@ class GradientOptimizerAttack(ABC):
             Projected dual state.
 
         """
-        return tf.maximum(tf.math.log(self.min_dual_ratio),
-                          project_log_distribution_wrt_kl_divergence(u))
+        return tf.maximum(
+            tf.math.log(self.min_dual_ratio),
+            project_log_distribution_wrt_kl_divergence(u),
+        )
 
     def project_box(self, X, u):
         """Projection w.r.t. box constraints.
@@ -163,11 +168,11 @@ class GradientOptimizerAttack(ABC):
         """
         logits = self.model(X)
         cls_constraint = margin(logits, y_onehot, targeted=self.targeted)
-        if self.loss == 'logit_diff':
+        if self.loss == "logit_diff":
             cls_loss = cls_constraint
-        elif self.loss == 'cw':
+        elif self.loss == "cw":
             cls_loss = tf.nn.relu(cls_constraint)
-        elif self.loss == 'ce':
+        elif self.loss == "ce":
             if self.targeted:
                 cls_loss = tf.nn.sigmoid_cross_entropy_with_logits(
                     y_onehot, logits)
@@ -220,21 +225,21 @@ class GradientOptimizerAttack(ABC):
         if self.gradient_preprocessing:
             fg = self.gradient_preprocess(fg)
         with tf.control_dependencies(
-                [self.primal_opt.apply_gradients([(fg, self.rx)])]):
+            [self.primal_opt.apply_gradients([(fg, self.rx)])]):
             self.rx.assign(self.project_box(X, self.rx))
 
     def _dual_optim_step(self, X, y_onehot):
         # gradient ascent on dual variables
         X_hat = X + self.rx
-        cls_constraint, _ = self.cls_constraint_and_loss(X_hat,
-                                                         y_onehot)
+        cls_constraint, _ = self.cls_constraint_and_loss(X_hat, y_onehot)
 
         if self.use_proxy_constraint:
             constraint_gradients = cls_constraint
         else:
             constraint_gradients = tf.sign(cls_constraint)
         multipliers_gradients = -tf.stack(
-            (tf.zeros_like(constraint_gradients), constraint_gradients), axis=1)
+            (tf.zeros_like(constraint_gradients), constraint_gradients),
+            axis=1)
         self.dual_opt.apply_gradients([(multipliers_gradients, self.state)])
 
         if self.dual_ema:
@@ -328,12 +333,12 @@ class GradientOptimizerAttack(ABC):
 
 
 class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
-    def __init__(
-            self,
-            model,
-            accelerated: bool = False,
-            momentum: float = 0.9,
-            adaptive_momentum: bool = False, **kwargs):
+    def __init__(self,
+                 model,
+                 accelerated: bool = False,
+                 momentum: float = 0.9,
+                 adaptive_momentum: bool = False,
+                 **kwargs):
         """
         Args:
             accelerated: if to use accelerated proximal gradient https://arxiv.org/pdf/1705.04925.pdf
@@ -341,7 +346,8 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
             adaptive_momentum: if to use adaptive momentum accelerated gradient
             **kwargs:
         """
-        super(ProximalGradientOptimizerAttack, self).__init__(model=model, **kwargs)
+        super(ProximalGradientOptimizerAttack, self).__init__(model=model,
+                                                              **kwargs)
         self.accelerated = accelerated
         self.momentum = momentum
         self.adaptive_momentum = adaptive_momentum
@@ -351,7 +357,9 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
         X_shape, _ = inputs_shape
         batch_size = X_shape[0]
         # mirror variable to track momentum for accelerated gradient
-        self.ry = tf.Variable(tf.zeros_like(self.rx), trainable=True, name="ry")
+        self.ry = tf.Variable(tf.zeros_like(self.rx),
+                              trainable=True,
+                              name="ry")
         # (adaptive) momentum for accelerated gradient
         self.beta = tf.Variable(tf.zeros(batch_size))
 
@@ -383,17 +391,15 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
         # sparse updates does not work correctly and stil update all the statistics for some optimizer
         # FIXME: consider using LazyAdam from tf.addons
         with tf.control_dependencies(
-                [self.primal_opt.apply_gradients([(sparse_fg, ry)])]):
+            [self.primal_opt.apply_gradients([(sparse_fg, ry)])]):
             mu = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
-            rx.assign(
-                self.project_box(X, self.proximity_operator(ry, mu)))
+            rx.assign(self.project_box(X, self.proximity_operator(ry, mu)))
         if self.accelerated:
             rv = self.project_box(
                 X, rx + tf.reshape(self.beta, (-1, 1, 1, 1)) * (rx - rx_v))
             F_x = self.total_loss(X, y_onehot, rx, self.lambd)
             F_v = self.total_loss(X, y_onehot, rv, self.lambd)
-            ry.assign(
-                tf.where(tf.reshape(F_x <= F_v, (-1, 1, 1, 1)), rx, rv))
+            ry.assign(tf.where(tf.reshape(F_x <= F_v, (-1, 1, 1, 1)), rx, rv))
             if self.adaptive_momentum:
                 self.beta.scatter_mul(
                     tf.IndexedSlices(tf.where(F_x <= F_v, 0.9, 1.0 / 0.9),
