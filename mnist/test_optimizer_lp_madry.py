@@ -30,7 +30,7 @@ from utils import load_madry
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/mnist/test_lp")
-flags.DEFINE_string("norm", None, "lp-norm attack ('l0', 'l1', 'l2', 'l2g', 'li')")
+flags.DEFINE_string("attack", None, "choice of teh attack ('l0', 'l1', 'l2', 'l2g', 'li')")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -38,16 +38,16 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_klass_kwargs_as_flags(RandomRestartOptimizationAttack, 'loop')
+import_klass_kwargs_as_flags(RandomRestartOptimizationAttack, 'attack_loop_')
 
 FLAGS = flags.FLAGS
 
 lp_attacks = {
-    'l0': ProximalL0Attack,
-    'l1': ProximalL1Attack,
-    'l2': ProximalL2Attack,
-    'l2g': GradientL2Attack,
-    'li': ProximalLiAttack
+    'l0': ('l0', ProximalL0Attack),
+    'l1': ('l1', ProximalL1Attack),
+    'l2': ('l2', ProximalL2Attack),
+    'l2g': ('l2', GradientL2Attack),
+    'li': ('li', ProximalLiAttack)
 }
 lp_metrics = {
     'l0': l0_metric,
@@ -59,14 +59,12 @@ lp_metrics = {
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-    assert FLAGS.load_from is not None
-    attack_klass = lp_attacks[FLAGS.norm]
-    if FLAGS.norm == 'l2g':
-        FLAGS.norm = 'l2'
+    norm, attack_klass = lp_attacks[FLAGS.attack]
 
-    setup_experiment(f"madry_{FLAGS.norm}_test", [
+    assert FLAGS.load_from is not None
+    setup_experiment(f"madry_{norm}_test", [
         lib.attack_lp.__file__,
-        getattr(lib, f"attack_{FLAGS.norm}").__file__,
+        getattr(lib, f"attack_{norm}").__file__,
         lib.attack_utils.__file__,
         lib.utils.__file__,
     ])
@@ -90,6 +88,22 @@ def main(unused_args):
     # load classifier
     classifier(np.zeros([1, 28, 28, 1], dtype=np.float32))
     load_madry(FLAGS.load_from, classifier.trainable_variables)
+
+    # attacks
+    attack_loop_kwargs = {
+        kwarg.replace('attack_', ''): getattr(FLAGS, kwarg)
+        for kwarg in dir(FLAGS) if kwarg.startswith('attack_loop_')
+    }
+    attack_kwargs = {
+        kwarg.replace('attack_', ''): getattr(FLAGS, kwarg)
+        for kwarg in dir(FLAGS)
+        if kwarg.startswith('attack_') and kwarg not in attack_loop_kwargs
+    }
+    alp = attack_klass(lambda x: test_classifier(x)["logits"],
+                       **attack_kwargs)
+    allp = RandomRestartOptimizationAttack(alp, **attack_loop_kwargs)
+
+    # test metrics
     test_thresholds = {
         'l0': [2, 4, 5, 6, 8, 10, 15, 20, 25, 30, 35, 45],
         'l1':
@@ -98,20 +112,12 @@ def main(unused_args):
         'li':
         [0.03, 0.05, 0.07, 0.09, 0.1, 0.11, 0.15, 0.2, 0.25, 0.3, 0.325, 0.35]
     }
-    # attacks
-    attack_kwargs = {
-        kwarg.replace('attack_', ''): getattr(FLAGS, kwarg)
-        for kwarg in dir(FLAGS) if kwarg.startswith('attack_')
-    }
-    olp = attack_klass(lambda x: test_classifier(x)["logits"],
-                       **attack_kwargs)
-
     test_metrics = MetricsDictionary()
 
     @tf.function
     def test_step(image, label):
         label_onehot = tf.one_hot(label, num_classes)
-        image_lp = olp(image, label_onehot)
+        image_lp = allp(image, label_onehot)
 
         outs = test_classifier(image)
         outs_lp = test_classifier(image_lp)
@@ -126,20 +132,20 @@ def main(unused_args):
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_{FLAGS.norm}"](acc_lp)
-        test_metrics[f"conf_{FLAGS.norm}"](outs_lp["conf"])
+        test_metrics[f"acc_{norm}"](acc_lp)
+        test_metrics[f"conf_{norm}"](outs_lp["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_lp)
-        for threshold in test_thresholds[FLAGS.norm]:
+        lp = lp_metrics[norm](image - image_lp)
+        for threshold in test_thresholds[norm]:
             acc_th = get_acc_for_lp_threshold(
                 lambda x: test_classifier(x)['logits'], image, image_lp, label,
                 lp, threshold)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](acc_th)
-        test_metrics[f"{FLAGS.norm}"](lp)
+            test_metrics[f"acc_{norm}_%.2f" % threshold](acc_th)
+        test_metrics[f"{norm}"](lp)
         # compute statistics only for correctly classified inputs
         is_corr = outs['pred'] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
+        test_metrics[f"{norm}_corr"](lp[is_corr])
 
         return image_lp
 
@@ -156,7 +162,7 @@ def main(unused_args):
                                      "epoch_orig-%d.png" % batch_index)
             save_images(image, save_path, data_format="NHWC")
             save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_{FLAGS.norm}-%d.png" % batch_index)
+                FLAGS.samples_dir, f"epoch_{norm}-%d.png" % batch_index)
             save_images(X_lp, save_path, data_format="NHWC")
             # save adversarial data
             X_lp_list.append(X_lp)
@@ -179,7 +185,7 @@ def main(unused_args):
                     if kwarg.startswith('attack_')
                 ]
                 hp_metric_names = [
-                    f"final_{FLAGS.norm}", f"final_{FLAGS.norm}_corr"
+                    f"final_{norm}", f"final_{norm}_corr"
                 ]
                 hp_params = [
                     hp.HParam(hp_param_name)
@@ -194,10 +200,10 @@ def main(unused_args):
                     hp_param_name: getattr(FLAGS, hp_param_name)
                     for hp_param_name in hp_param_names
                 })
-                final_lp = test_metrics[f"{FLAGS.norm}"].result()
-                tf.summary.scalar(f"final_{FLAGS.norm}", final_lp, step=1)
-                final_lp_corr = test_metrics[f"{FLAGS.norm}_corr"].result()
-                tf.summary.scalar(f"final_{FLAGS.norm}_corr",
+                final_lp = test_metrics[f"{norm}"].result()
+                tf.summary.scalar(f"final_{norm}", final_lp, step=1)
+                final_lp_corr = test_metrics[f"{norm}_corr"].result()
+                tf.summary.scalar(f"final_{norm}_corr",
                                   final_lp_corr,
                                   step=1)
                 tf.summary.flush()
@@ -215,8 +221,9 @@ def main(unused_args):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
-    parser.add_argument("--norm", default=None, type=str)
+    parser.add_argument("--attack", default=None, type=str)
     args, _ = parser.parse_known_args()
-    assert args.norm in lp_attacks
-    import_klass_kwargs_as_flags(lp_attacks[args.norm], 'attack_')
+    assert args.attack in lp_attacks
+    attack_klass = lp_attacks[args.attack][1]
+    import_klass_kwargs_as_flags(attack_klass, 'attack_')
     absl.app.run(main)
