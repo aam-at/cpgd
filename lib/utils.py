@@ -212,6 +212,14 @@ def reset_optimizer(opt):
     [var.assign(tf.zeros_like(var)) for var in opt.variables()]
 
 
+def create_lr_schedule(schedule, **kwargs):
+    if schedule == 'constant':
+        lr = kwargs['learning_rate']
+    elif schedule == 'linear':
+        lr = LinearDecay(**kwargs)
+    return lr
+
+
 def reset_metrics(metrics):
     for metric in metrics.values():
         metric.reset_states()
