@@ -1,8 +1,9 @@
 import numpy as np
 import tensorflow as tf
+
 import tensorflow_probability as tfp
 
-from .utils import l2_metric
+from .utils import create_lr_schedule, l2_metric
 
 
 def margin(logits, y_onehot, delta=0.0, targeted=False):
@@ -208,18 +209,32 @@ class RandomRestartOptimizationAttack(object):
         self.r0_sampling_algorithm = r0_sampling_algorithm
         self.r0_sampling_epsilon = r0_sampling_epsilon
         self.C0_initial_const = C0_initial_const
-        self.lr = lr
-        self.lr_config = lr_config
+        if lr_config is not None:
+            self.lr = create_lr_schedule(lr_config['schedule'],
+                                         **lr_config['config'])
+        else:
+            self.lr = lr
         self.finetune = finetune
-        self.finetune_lr = finetune_lr
-        self.finetune_lr_config = finetune_lr_config
+        if finetune_lr_config is not None:
+            self.finetune_lr = create_lr_schedule(
+                finetune_lr_config['schedule'], **finetune_lr_config['config'])
+        else:
+            self.finetune_lr = finetune_lr
 
     def run(self, X, y_onehot):
         self.attack.restart_attack(X, y_onehot)
+        self.attack.lr = self.lr
         for i in range(self.number_restarts):
-            r0 = init_r0(X.shape, self.r0_sampling_algorithm, self.attack.ord, self.r0_sampling_algorithm)
+            r0 = init_r0(X.shape, self.r0_sampling_algorithm, self.attack.ord,
+                         self.r0_sampling_algorithm)
             r0 = self.attack.project_box(X, r0)
             C0 = self.C0_initial_const
             self.attack.reset_attack(r0, C0)
+            self.attack.run(X, y_onehot)
+        if self.finetune:
+            self.attack.lr = self.finetune_lr
+            rbest = self.attack.attack.read_value() - X
+            Cbest = self.attack.bestlambd.read_value()
+            self.attack.reset_attack(rbest, Cbest)
             self.attack.run(X, y_onehot)
         return self.attack.attack.read_value()
