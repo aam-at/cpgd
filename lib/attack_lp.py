@@ -39,7 +39,6 @@ class GradientOptimizerAttack(ABC):
         primal_optimizer: str = "sgd",
         primal_lr: float = 1e-1,
         gradient_preprocessing: bool = False,
-        lr_decay: bool = False,
         dual_optimizer: str = "sgd",
         dual_lr: float = 1e-1,
         dual_ema: bool = True,
@@ -79,11 +78,8 @@ class GradientOptimizerAttack(ABC):
         self.loss = loss
         self.iterations = iterations
         self.primal_opt = create_optimizer(primal_optimizer, primal_lr)
-        self.primal_lr = primal_lr
         self.gradient_preprocessing = gradient_preprocessing
-        self.lr_decay = lr_decay
         self.dual_opt = create_optimizer(dual_optimizer, dual_lr)
-        self.dual_lr = dual_lr
         self.dual_ema = dual_ema
         self.ema = tf.train.ExponentialMovingAverage(decay=0.9)
         self.targeted = targeted
@@ -93,6 +89,28 @@ class GradientOptimizerAttack(ABC):
         self.boxmax = boxmax
         self.min_dual_ratio = min_dual_ratio
         self.built = False
+
+    @property
+    def primal_lr(self):
+        if callable(self.primal_opt.lr):
+            return self.primal_opt.lr(self.primal_opt.iterations)
+        else:
+            return self.primal_opt.lr
+
+    @primal_lr.setter
+    def primal_lr(self, lr):
+        self.primal_opt.lr = lr
+
+    @property
+    def dual_lr(self):
+        if callable(self.dual_lr):
+            return self.dual_opt.lr(self.dual_opt.iterations)
+        else:
+            return self.dual_opt.lr
+
+    @dual_lr.setter
+    def dual_lr(self, lr):
+        self.dual_opt.lr = lr
 
     def build(self, inputs_shape):
         assert not self.built
@@ -385,7 +403,7 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
             fg = self.gradient_preprocess(fg)
 
         # proximal or accelerated proximal gradient
-        lr = self.primal_opt.lr
+        lr = self.primal_lr
         rx_v = rx.read_value()
         sparse_fg = tf.IndexedSlices(fg, update_indxs)
         # sparse updates does not work correctly and stil update all the statistics for some optimizer
