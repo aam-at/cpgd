@@ -1,6 +1,7 @@
+import ast
+
 import numpy as np
 import tensorflow as tf
-
 import tensorflow_probability as tfp
 
 from .utils import create_lr_schedule, l2_metric
@@ -198,7 +199,7 @@ class AttackOptimizationLoop(object):
                  number_restarts: int = 1,
                  r0_sampling_algorithm: str = 'uniform',
                  r0_sampling_epsilon: float = 0.1,
-                 C0_initial_const: float = 0.01,
+                 c0_initial_const: float = 0.01,
                  lr: float = 0.01,
                  lr_config: str = None,
                  finetune: bool = True,
@@ -208,14 +209,18 @@ class AttackOptimizationLoop(object):
         self.number_restarts = number_restarts
         self.r0_sampling_algorithm = r0_sampling_algorithm
         self.r0_sampling_epsilon = r0_sampling_epsilon
-        self.C0_initial_const = C0_initial_const
+        self.c0_initial_const = c0_initial_const
         if lr_config is not None:
+            if isinstance(lr_config, str):
+                lr_config = ast.literal_eval(lr_config)
             self.lr = create_lr_schedule(lr_config['schedule'],
                                          **lr_config['config'])
         else:
             self.lr = lr
         self.finetune = finetune
         if finetune_lr_config is not None:
+            if isinstance(finetune_lr_config, str):
+                finetune_lr_config = ast.literal_eval(finetune_lr_config)
             self.finetune_lr = create_lr_schedule(
                 finetune_lr_config['schedule'], **finetune_lr_config['config'])
         else:
@@ -223,19 +228,19 @@ class AttackOptimizationLoop(object):
 
     def _run_loop(self, X, y_onehot):
         self.attack.restart_attack(X, y_onehot)
-        self.attack.lr = self.lr
+        self.attack.primal_lr = self.lr
         for i in range(self.number_restarts):
             r0 = init_r0(X.shape, self.r0_sampling_epsilon, self.attack.ord,
                          self.r0_sampling_algorithm)
             r0 = self.attack.project_box(X, r0)
-            C0 = self.C0_initial_const
-            self.attack.reset_attack(r0, C0)
+            c0 = self.c0_initial_const
+            self.attack.reset_attack(r0, c0)
             self.attack.run(X, y_onehot)
         if self.finetune:
-            self.attack.lr = self.finetune_lr
+            self.attack.primal_lr = self.finetune_lr
             rbest = self.attack.attack.read_value() - X
-            Cbest = self.attack.bestlambd.read_value()
-            self.attack.reset_attack(rbest, Cbest)
+            cbest = self.attack.bestlambd.read_value()
+            self.attack.reset_attack(rbest, cbest)
             self.attack.run(X, y_onehot)
 
     def run_loop(self, X, y_onehot):
