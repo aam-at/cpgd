@@ -9,9 +9,8 @@ from .utils import li_metric
 
 
 class ProximalLiAttack(ProximalGradientOptimizerAttack):
-    def __init__(self, model, use_sign: bool = False, **kwargs):
+    def __init__(self, model, **kwargs):
         super(ProximalLiAttack, self).__init__(model=model, **kwargs)
-        self.use_sign = use_sign
         self.ord = np.inf
 
     def gradient_preprocess(self, g):
