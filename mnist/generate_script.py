@@ -109,7 +109,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_10/test_{norm}_{type}"
+        working_dir = f"../results/mnist_10/test_{type}_{norm}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -151,15 +151,16 @@ def test_lp_config(attack, runs=1, master_seed=1):
             })
             base_name = f"mnist_{type}"
             name = format_name(base_name, attack_args) + '_'
-            np.random.seed(master_seed)
+            attack_args["name"] = name
             p = [
                 s.name[:-1] for s in list(Path(working_dir).glob("*"))
             ]
             if name in p:
                 continue
+            np.random.seed(master_seed)
             for i in range(runs):
                 seed = np.random.randint(1000)
-                attack_args.update({'seed': seed})
+                attack_args["seed"] = seed
                 if True:
                     print(generate_test_optimizer_lp(**attack_args))
 
