@@ -232,7 +232,7 @@ class GradientOptimizerAttack(ABC):
         with tf.GradientTape() as find_r_tape:
             X_hat = X + self.rx
             # Part 1: lp loss
-            lp_loss = self.lp_metric(self.ry)
+            lp_loss = self.lp_metric(self.rx)
             # Part 2: classification loss
             cls_constraint, cls_loss = self.cls_constraint_and_loss(
                 X_hat, y_onehot)
