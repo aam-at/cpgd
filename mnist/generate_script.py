@@ -114,7 +114,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
         attack_args.update({
             'working_dir': working_dir,
         })
-        for lr, lr_decay in itertools.product([0.1, 0.5, 1.0], [1, 0.1]):
+        for lr, lr_decay in itertools.product([0.05, 0.1, 0.5, 1.0], [1, 0.1]):
             min_lr = lr * lr_decay
             if lr == min_lr:
                 lr_config = {
@@ -155,7 +155,6 @@ def test_lp_config(attack, runs=1, master_seed=1):
             p = [
                 s.name[:-1] for s in list(Path(working_dir).glob("*"))
             ]
-            print(name)
             if name in p:
                 continue
             for i in range(runs):
