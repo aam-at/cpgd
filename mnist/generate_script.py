@@ -8,8 +8,12 @@ import importlib
 
 import numpy as np
 
+import test_optimizer_lp_madry
 from lib.generate_script import generate_test_optimizer
 from lib.parse_logs import parse_test_optimizer_log
+from lib.utils import ConstantDecay, LinearDecay, import_klass_kwargs_as_flags
+
+from test_optimizer_lp_madry import lp_attacks
 
 models = [
     './models/mnist_weights_plain.mat', './models/mnist_weights_linf.mat',
@@ -18,139 +22,147 @@ models = [
 hostname = subprocess.getoutput('hostname')
 
 
-def generate_test_optimizer_lp(norm, load_from, **kwargs):
-    return generate_test_optimizer('test_optimizer_lp_madry', norm, load_from,
-                                   **kwargs)
+from absl import flags
+FLAGS = flags.FLAGS
+
+def generate_test_optimizer_lp(**kwargs):
+    return generate_test_optimizer('test_optimizer_lp_madry', **kwargs)
 
 
-def generate_test_bethge_lp(norm, load_from, **kwargs):
-    return generate_test_optimizer('test_bethge_attack', norm, load_from,
-                                   **kwargs)
+def generate_test_bethge_lp(**kwargs):
+    return generate_test_optimizer('test_bethge_attack', **kwargs)
 
 
-def test_lp_config(norm, runs=1, master_seed=1):
-    assert norm in ['l0', 'li', 'l1', 'l2']
+def format_name(base_name, attack_args):
+    name = f"""{base_name}_{attack_args['attack']}_{attack_args["attack_loss"]}_n{attack_args["attack_iterations"]}
+_N{attack_args["attack_loop_number_restarts"]}
+"""
+    lr_config = attack_args['attack_loop_lr_config']
+    if lr_config['schedule'] == 'constant':
+        name = f"{name}_lr{lr_config['config']['learning_rate']}"
+    elif lr_config['schedule'] == 'linear':
+        name = f"""{name}_linear_lr{lr_config['config']['initial_learning_rate']:.2f}_
+mlr{lr_config['config']['minimal_learning_rate']:.3f}_
+{'finetune' if attack_args['attack_loop_finetune'] else 'nofinetune'}
+"""
+    name = f"{name}_{attack_args['attack_primal_optimizer']}"
+    if 'attack_gradient_preprocessing' in attack_args and attack_args[
+            'attack_gradient_preprocessing']:
+        name = f"{name}_gprep"
+    if 'attack_accelerated' in attack_args and attack_args[
+            'attack_accelerated']:
+        name = f"{name}_apg_m{attack_args['attack_momentum']}" \
+               f"{'_adaptive' if attack_args['attack_adaptive_momentum'] else ''}"
+    name = f"{name}_dlr{attack_args['attack_dual_lr']}_d{attack_args['attack_dual_optimizer']}"
+    name = f"""{name}_{attack_args['attack_loop_r0_sampling_algorithm']}_
+R{attack_args['attack_loop_r0_sampling_epsilon']}_
+C{attack_args['attack_loop_c0_initial_const']}_
+{'proxy' if attack_args['attack_use_proxy_constraint'] else 'noproxy'}"""
+    return name.replace('\n', '')
+
+
+def test_lp_config(attack, runs=1, master_seed=1):
+    norm, _ = lp_attacks[attack]
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 500
-    attack_args = {
-        'norm': norm,
-        'num_batches': num_images // batch_size,
-        'batch_size': batch_size
+    attack_grid_args = {
+        'num_batches':
+        [num_images // batch_size],
+        'batch_size':
+        [batch_size],
+        'load_from':
+        models,
+        'attack': [attack],
+        'attack_loss': ["cw"],
+        'attack_iterations': [500],
+        'attack_primal_lr': [1e-1],
+        'attack_dual_optimizer': ["sgd"],
+        'attack_dual_lr': [1e-1],
+        'attack_dual_ema': [True, False],
+        'attack_use_proxy_constraint': [False],
+        'attack_loop_number_restarts': [1],
+        'attack_loop_finetune': [True],
+        'attack_loop_r0_sampling_algorithm': ['uniform'],
+        'attack_loop_r0_sampling_epsilon': [0.5],
+        'attack_loop_c0_initial_const': [1.0, 0.1, 0.01]
     }
-    name = "mnist_lin_lambd_c2_"
-    for (model, iterations, max_iterations, loss, optimizer, accelerated,
-         gradient_normalize,
-         use_sign,
-         adaptive_momentum,
-         dual_ema) in itertools.product(models, [500], [1], ["cw"],
-                                        ["sgd"], [False, True],
-                                        [False, True],
-                                        [False, True],
-                                        [False],
-                                        [True, False]):
-        max_iterations *= iterations
+
+    if attack != 'l2g':
+        attack_grid_args.update({
+            'attack_primal_optimizer': ["sgd"],
+            'attack_accelerated': [True, False],
+            'attack_momentum': [0.9],
+            'attack_adaptive_momentum': [True, False]
+        })
+    else:
+        attack_grid_args.update({
+            'attack_primal_optimizer': ["adam"]
+        })
+
+    if norm == 'li':
+        attack_grid_args.update({
+            'attack_gradient_preprocessing': [True]
+        })
+
+    attack_arg_names = list(attack_grid_args.keys())
+
+    for attack_arg_value in itertools.product(*attack_grid_args.values()):
+        model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_10/test_{norm}_{type}"
-        name0 = name + f"{norm}_{type}_{iterations}_{max_iterations // 1000}k_"
-        name0 = name0 + f"{optimizer if not accelerated else optimizer + '_apg'}_{loss}_"
-        name0 = name0 + f"{'gnorm' if gradient_normalize else 'nognorm'}_"
-        attack_args0 = attack_args.copy()
-        if norm == 'li':
-            attack_args0.update({'attack_use_sign': use_sign})
-            if not gradient_normalize:
-                continue
-            elif gradient_normalize and use_sign:
-                name0 = name0[:-1] + "sign_"
-            else:
-                continue
-        elif use_sign:
-            continue
-        if not accelerated and adaptive_momentum:
-            continue
-        if gradient_normalize and norm != 'li':
-            continue
-        name0 = name0 + f"{'adaptive' if adaptive_momentum else 'nonadaptive'}_"
-        name0 = name0 + f"{'ema' if dual_ema else 'noema'}_"
-        attack_args0.update({
-            'load_from': model,
-            'attack_iterations': iterations,
-            'attack_max_iterations': max_iterations,
-            'attack_loss': loss,
-            'attack_primal_optimizer': optimizer,
-            'attack_gradient_normalize': gradient_normalize,
-            'attack_accelerated': accelerated,
-            'attack_adaptive_momentum': adaptive_momentum,
-            'attack_dual_optimizer': 'sgd',
-            'attack_dual_ema': dual_ema,
-            'working_dir': working_dir
+        attack_args = dict(zip(attack_arg_names, attack_arg_value))
+        attack_args.update({
+            'working_dir': working_dir,
         })
-        if type == 'plain':
-            if norm == 'l0':
-                lr_space = [0.1, 0.5]
+        for lr, lr_decay in itertools.product([0.1, 0.5, 1.0], [1, 0.1]):
+            min_lr = lr * lr_decay
+            if lr == min_lr:
+                lr_config = {
+                    'schedule': 'constant',
+                    'config': {
+                        **ConstantDecay(lr).get_config()
+                    }
+                }
             else:
-                lr_space = [0.1, 0.5]
-        elif type == 'l2':
-            if norm == 'li':
-                lr_space = [0.1, 0.5]
-            else:
-                lr_space = [1.0, 0.5]
-        else:
-            if norm == 'l2':
-                lr_space = [0.1, 0.5]
-            else:
-                lr_space = [0.1, 0.5]
-        lr_space = [0.01, 0.05] + list(np.linspace(0.1, 0.5, 5)) + [1.0]
-        for lr, min_lr, llr, C0 in itertools.product(lr_space, [0.1, 0.01, 0.001], [0.1], [1., 0.1, 0.01]):
-            if lr < min_lr:
-                continue
-            attack_args1 = attack_args0.copy()
-            attack_args1.update({
-                'attack_primal_lr': lr,
-                'attack_primal_min_lr': min_lr,
-                'attack_dual_lr': llr,
-                'attack_initial_const': C0
+                assert lr_decay < 1
+                lr_config = {
+                    'schedule': 'linear',
+                    'config': {
+                        **LinearDecay(initial_learning_rate=lr,
+                                      minimal_learning_rate=min_lr,
+                                      decay_steps=attack_args['attack_iterations']).get_config(
+                        )
+                    }
+                }
+            finetune_lr_config = {
+                'schedule': 'linear',
+                'config': {
+                    **LinearDecay(initial_learning_rate=min_lr,
+                                  minimal_learning_rate=min_lr / 10,
+                                  decay_steps=attack_args['attack_iterations']).get_config(
+                    )
+                }
+            }
+            attack_args.update({
+                'attack_loop_lr_config':
+                lr_config,
+                'attack_loop_finetune_lr_config':
+                finetune_lr_config
             })
-            name1 = name0 + f"lr{lr:.2}_mlr{min_lr:.4}_llr{llr:.2}_C{C0:.4}_"
-            for (sampling_radius,
-                 sampling_algorithm) in itertools.product([0.5], ["uniform"]):
-                attack_args2 = attack_args1.copy()
-                attack_args2.update({
-                    'attack_r0_init': sampling_algorithm,
-                    'attack_sampling_radius': sampling_radius,
-                })
-                name2 = name1 + f"{sampling_algorithm}_R{sampling_radius}_"
-                name2 = name2 + "initial_"
-                for lr_decay, finetune, use_proxy in itertools.product(
-                    [True, False], [True], [False]):
-                    if lr == min_lr and lr_decay:
-                        continue
-                    attack_args3 = attack_args2.copy()
-                    attack_args3.update({
-                        'attack_lr_decay':
-                        lr_decay,
-                        'attack_finetune':
-                        finetune,
-                        'attack_use_proxy_constraint':
-                        use_proxy
-                    })
-                    name3 = name2 + f"{'decay' if lr_decay else 'nodecay'}_"
-                    name3 = name3 + f"{'finetune' if finetune else 'nofinetune'}_"
-                    name3 = name3 + f"{'proxy' if use_proxy else 'noproxy'}_"
-                    np.random.seed(master_seed)
-                    p = [
-                        s.name[:-1] for s in list(Path(working_dir).glob("*"))
-                    ]
-                    if name3 in p:
-                        continue
-                    for i in range(runs):
-                        seed = np.random.randint(1000)
-                        if True:
-                            print(
-                                generate_test_optimizer_lp(
-                                    name=name3,
-                                    seed=seed,
-                                    ignored_flags=['attack_use_sign'],
-                                    **attack_args3))
+            base_name = f"mnist_{type}"
+            name = format_name(base_name, attack_args) + '_'
+            np.random.seed(master_seed)
+            p = [
+                s.name[:-1] for s in list(Path(working_dir).glob("*"))
+            ]
+            print(name)
+            if name in p:
+                continue
+            for i in range(runs):
+                seed = np.random.randint(1000)
+                attack_args.update({'seed': seed})
+                if True:
+                    print(generate_test_optimizer_lp(**attack_args))
 
 
 def test_lp_custom_config(norm, runs=1, master_seed=1):
@@ -271,15 +283,18 @@ def test_bethge_config(norm, runs=1, master_seed=1):
         working_dir = f"../results/mnist_bethge/test_{norm}_{type}"
         attack_args0 = attack_args.copy()
         attack_args0.update({
+            'name': name,
             'norm': norm,
             'load_from': model,
             'working_dir': working_dir
         })
-        print(generate_test_bethge_lp(name=name, **attack_args0))
+        print(generate_test_bethge_lp(**attack_args0))
 
 
 if __name__ == '__main__':
-    for norm in ['l0', 'l1', 'l2', 'li']:
-        if norm == 'l2':
-            # test_lp_custom_config(norm)
-            test_lp_config(norm)
+    for attack in lp_attacks:
+        flags.FLAGS._flags().clear()
+        importlib.reload(test_optimizer_lp_madry)
+        _, attack_klass = lp_attacks[attack]
+        import_klass_kwargs_as_flags(attack_klass, 'attack_')
+        test_lp_config(attack)
