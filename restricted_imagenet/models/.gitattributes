@@ -1,0 +1,23 @@
+train_224_robust_eps_1.0_lp_2_slim/stats.json filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_1.0_lp_2_slim/checkpoint filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_1.0_lp_2_slim/events.out.tfevents.1526197275.deep-gpu-2 filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_1.0_lp_2_slim/graph-0513-034126.meta filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_1.0_lp_2_slim/log.log filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_1.0_lp_2_slim/model-33000.data-00000-of-00001 filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_1.0_lp_2_slim/model-33000.index filter=lfs diff=lfs merge=lfs -text
+
+train_224_robust_eps_0.005_lp_inf_slim/graph-0516-143737.meta filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_0.005_lp_inf_slim/log.log filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_0.005_lp_inf_slim/model-33000.data-00000-of-00001 filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_0.005_lp_inf_slim/model-33000.index filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_0.005_lp_inf_slim/stats.json filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_0.005_lp_inf_slim/checkpoint filter=lfs diff=lfs merge=lfs -text
+train_224_robust_eps_0.005_lp_inf_slim/events.out.tfevents.1526495847.deep-gpu-3 filter=lfs diff=lfs merge=lfs -text
+
+train_224_nat_slim/graph-0515-150650.meta filter=lfs diff=lfs merge=lfs -text
+train_224_nat_slim/log.log filter=lfs diff=lfs merge=lfs -text
+train_224_nat_slim/model-33000.data-00000-of-00001 filter=lfs diff=lfs merge=lfs -text
+train_224_nat_slim/model-33000.index filter=lfs diff=lfs merge=lfs -text
+train_224_nat_slim/stats.json filter=lfs diff=lfs merge=lfs -text
+train_224_nat_slim/checkpoint filter=lfs diff=lfs merge=lfs -text
+train_224_nat_slim/events.out.tfevents.1526411203.deep-gpu-2 filter=lfs diff=lfs merge=lfs -text
