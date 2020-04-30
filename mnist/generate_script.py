@@ -41,10 +41,18 @@ _N{attack_args["attack_loop_number_restarts"]}
     if lr_config['schedule'] == 'constant':
         name = f"{name}_lr{lr_config['config']['learning_rate']}"
     elif lr_config['schedule'] == 'linear':
-        name = f"""{name}_linear_lr{lr_config['config']['initial_learning_rate']:.2f}_
-mlr{lr_config['config']['minimal_learning_rate']:.3f}_
-{'finetune' if attack_args['attack_loop_finetune'] else 'nofinetune'}
-"""
+        name = f"{name}_linear_lr{lr_config['config']['initial_learning_rate']:.2f}_" \
+            f"mlr{lr_config['config']['minimal_learning_rate']:.3f}"
+    if attack_args['attack_loop_finetune']:
+        name = f"{name}_finetune"
+        lr_config = attack_args['attack_loop_finetune_lr_config']
+        if lr_config['schedule'] == 'constant':
+            name = f"{name}_flr{lr_config['config']['learning_rate']}"
+        else:
+            name = f"{name}_linear_lr{lr_config['config']['initial_learning_rate']:.2f}" \
+                f"mlr{lr_config['config']['minimal_learning_rate']:.3f}"
+    else:
+        name = f"{name}_nofinetune"
     name = f"{name}_{attack_args['attack_primal_optimizer']}"
     if 'attack_gradient_preprocessing' in attack_args and attack_args[
             'attack_gradient_preprocessing']:
@@ -114,17 +122,9 @@ def test_lp_config(attack, runs=1, master_seed=1):
         attack_args.update({
             'working_dir': working_dir,
         })
-        for lr, lr_decay in itertools.product([0.05, 0.1, 0.5, 1.0], [1, 0.1]):
-            min_lr = lr * lr_decay
-            if lr == min_lr:
-                lr_config = {
-                    'schedule': 'constant',
-                    'config': {
-                        **ConstantDecay(lr).get_config()
-                    }
-                }
-            else:
-                assert lr_decay < 1
+        for lr, decay_factor, lr_decay in itertools.product([0.1, 0.5, 1.0], [1, 0.1], [True, False]):
+            min_lr = lr * decay_factor
+            if lr_decay and min_lr < lr:
                 lr_config = {
                     'schedule': 'linear',
                     'config': {
@@ -134,15 +134,30 @@ def test_lp_config(attack, runs=1, master_seed=1):
                         )
                     }
                 }
-            finetune_lr_config = {
-                'schedule': 'linear',
-                'config': {
-                    **LinearDecay(initial_learning_rate=min_lr,
-                                  minimal_learning_rate=min_lr / 10,
-                                  decay_steps=attack_args['attack_iterations']).get_config(
-                    )
+            else:
+                lr_config = {
+                    'schedule': 'constant',
+                    'config': {
+                        **ConstantDecay(lr).get_config()
+                    }
                 }
-            }
+            if lr_decay:
+                finetune_lr_config = {
+                    'schedule': 'linear',
+                    'config': {
+                        **LinearDecay(initial_learning_rate=min_lr,
+                                      minimal_learning_rate=min_lr / 10,
+                                      decay_steps=attack_args['attack_iterations']).get_config(
+                        )
+                    }
+                }
+            else:
+                finetune_lr_config = {
+                    'schedule': 'constant',
+                    'config': {
+                        **ConstantDecay(learning_rate=min_lr).get_config()
+                    }
+                }
             attack_args.update({
                 'attack_loop_lr_config':
                 lr_config,
