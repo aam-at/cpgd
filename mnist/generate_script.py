@@ -41,16 +41,16 @@ _N{attack_args["attack_loop_number_restarts"]}
     if lr_config['schedule'] == 'constant':
         name = f"{name}_lr{lr_config['config']['learning_rate']}"
     elif lr_config['schedule'] == 'linear':
-        name = f"{name}_linear_lr{lr_config['config']['initial_learning_rate']:.2f}_" \
-            f"mlr{lr_config['config']['minimal_learning_rate']:.3f}"
+        name = f"{name}_linear_lr{lr_config['config']['initial_learning_rate']}_" \
+            f"mlr{lr_config['config']['minimal_learning_rate']}"
     if attack_args['attack_loop_finetune']:
         name = f"{name}_finetune"
         lr_config = attack_args['attack_loop_finetune_lr_config']
         if lr_config['schedule'] == 'constant':
             name = f"{name}_flr{lr_config['config']['learning_rate']}"
         else:
-            name = f"{name}_linear_lr{lr_config['config']['initial_learning_rate']:.2f}" \
-                f"mlr{lr_config['config']['minimal_learning_rate']:.3f}"
+            name = f"{name}_linear_lr{lr_config['config']['initial_learning_rate']}_" \
+                f"mlr{lr_config['config']['minimal_learning_rate']}"
     else:
         name = f"{name}_nofinetune"
     name = f"{name}_{attack_args['attack_primal_optimizer']}"
@@ -122,8 +122,8 @@ def test_lp_config(attack, runs=1, master_seed=1):
         attack_args.update({
             'working_dir': working_dir,
         })
-        for lr, decay_factor, lr_decay in itertools.product([0.1, 0.5, 1.0], [1, 0.1], [True, False]):
-            min_lr = lr * decay_factor
+        for lr, decay_factor, lr_decay in itertools.product([0.05, 0.1, 0.5, 1.0], [1, 0.1, 0.01], [True, False]):
+            min_lr = round(lr * decay_factor, 6)
             if lr_decay and min_lr < lr:
                 lr_config = {
                     'schedule': 'linear',
@@ -146,7 +146,8 @@ def test_lp_config(attack, runs=1, master_seed=1):
                     'schedule': 'linear',
                     'config': {
                         **LinearDecay(initial_learning_rate=min_lr,
-                                      minimal_learning_rate=min_lr / 10,
+                                      minimal_learning_rate=round(
+                                          min_lr / 10, 6),
                                       decay_steps=attack_args['attack_iterations']).get_config(
                         )
                     }
