@@ -79,7 +79,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_10/test_{type}_{norm}"
+        working_dir = f"../results/cifar10_10/test_{type}_{norm}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -127,7 +127,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
                 'attack_loop_finetune_lr_config':
                 finetune_lr_config
             })
-            base_name = f"mnist_{type}"
+            base_name = f"cifar10_{type}"
             name = format_name(base_name, attack_args) + '_'
             attack_args["name"] = name
             p = [
@@ -149,7 +149,7 @@ def test_lp_custom_config(attack, runs=1, master_seed=1):
     batch_size = 500
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_10/test_{type}_{norm}"
+        working_dir = f"../results/cifar10_10/test_{type}_{norm}"
         script_module = importlib.import_module("test_optimizer_lp_madry")
         defined_flags = script_module.FLAGS._flags().keys()
         export_test_params=[
@@ -170,7 +170,7 @@ def test_lp_custom_config(attack, runs=1, master_seed=1):
             attack_args['attack_loop_number_restarts'] = 10
 
             # generate unique name
-            base_name = f"mnist_{type}"
+            base_name = f"cifar10_{type}"
             name = format_name(base_name, attack_args) + '_'
             attack_args["name"] = name
             p = [
@@ -190,11 +190,11 @@ def test_bethge_config(norm, runs=1, master_seed=1):
     assert norm in ['l0', 'li', 'l1', 'l2']
     num_images = {'l0': 10, 'li': 10, 'l1': 10, 'l2': 5}[norm]
     attack_args = {'norm': norm, 'num_images': num_images, 'seed': 1}
-    name = "mnist_bethge_"
+    name = "cifar10_bethge_"
 
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_bethge/test_{norm}_{type}"
+        working_dir = f"../results/cifar10_bethge/test_{norm}_{type}"
         attack_args0 = attack_args.copy()
         attack_args0.update({
             'name': name,
