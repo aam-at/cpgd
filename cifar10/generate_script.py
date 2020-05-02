@@ -60,7 +60,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
     if attack != 'l2g':
         attack_grid_args.update({
             'attack_primal_optimizer': ["sgd"],
-            'attack_accelerated': [True, False],
+            'attack_accelerated': [False],
             'attack_momentum': [0.9],
             'attack_adaptive_momentum': [True, False]
         })
@@ -75,6 +75,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
         })
 
     attack_arg_names = list(attack_grid_args.keys())
+    existing_names = []
 
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
@@ -84,7 +85,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
         attack_args.update({
             'working_dir': working_dir,
         })
-        for lr, decay_factor, lr_decay in itertools.product([0.05, 0.1, 0.5, 1.0], [0.01], [True, False]):
+        for lr, decay_factor, lr_decay in itertools.product([0.01, 0.05, 0.1, 0.5], [0.1, 0.01], [True]):
             min_lr = round(lr * decay_factor, 6)
             if lr_decay and min_lr < lr:
                 lr_config = {
@@ -109,7 +110,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
                     'config': {
                         **LinearDecay(initial_learning_rate=min_lr,
                                       minimal_learning_rate=round(
-                                          min_lr / 100, 6),
+                                          min_lr / 10, 6),
                                       decay_steps=attack_args['attack_iterations']).get_config(
                         )
                     }
@@ -133,8 +134,9 @@ def test_lp_config(attack, runs=1, master_seed=1):
             p = [
                 s.name[:-1] for s in list(Path(working_dir).glob("*"))
             ]
-            if name in p:
+            if name in p or name in existing_names:
                 continue
+            existing_names.append(name)
             np.random.seed(master_seed)
             for i in range(runs):
                 seed = np.random.randint(1000)
@@ -143,10 +145,11 @@ def test_lp_config(attack, runs=1, master_seed=1):
                     print(generate_test_optimizer_lp(**attack_args))
 
 
-def test_lp_custom_config(attack, runs=1, master_seed=1):
+def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
     norm, _ = lp_attacks[attack]
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 500
+    existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/cifar10_10/test_{type}_{norm}"
@@ -155,19 +158,30 @@ def test_lp_custom_config(attack, runs=1, master_seed=1):
         export_test_params=[
             flag for flag in defined_flags if flag.startswith("attack_")]
         df = parse_test_optimizer_log(
-            working_dir,
+            Path(working_dir) / f"cifar10_{type}_{attack}_",
             export_test_params=export_test_params)
         df = df.sort_values(norm)
-        df = df[df.name.str.contains("N10")].head(1)
+        df = df[df.name.str.contains("N10")]
+        j = 0
         for id, df in df.iterrows():
             attack_args = {col: df[col] for col in df.keys() if col in export_test_params}
             attack_args.update({
                 'attack': attack,
                 'num_batches': num_images // batch_size,
-                'batch_size': batch_size
+                'batch_size': batch_size,
+                'load_from': model,
+                'working_dir': working_dir
             })
+            if attack != 'l2g' and not attack_args['attack_accelerated'] and not attack_args['attack_adaptive_momentum']:
+                continue
+            import ast
+            lr_config = ast.literal_eval(attack_args['attack_loop_lr_config'])
+            if lr_config['schedule'] != 'linear':
+                continue
+            if attack_args['attack_loop_c0_initial_const'] != 0.01:
+                continue
             # change args
-            attack_args['attack_loop_number_restarts'] = 10
+            attack_args['attack_loop_number_restarts'] = 100
 
             # generate unique name
             base_name = f"cifar10_{type}"
@@ -176,8 +190,12 @@ def test_lp_custom_config(attack, runs=1, master_seed=1):
             p = [
                 s.name[:-1] for s in list(Path(working_dir).glob("*"))
             ]
-            if name in p:
+            if name in existing_names:
                 continue
+            j += 1
+            if name in p or j > topk:
+                continue
+            existing_names.append(name)
             np.random.seed(master_seed)
             for i in range(runs):
                 seed = np.random.randint(1000)
