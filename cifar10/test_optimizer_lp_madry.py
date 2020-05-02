@@ -149,7 +149,7 @@ def main(unused_args):
                 lp,
                 threshold,
             )
-            test_metrics[f"acc_{norm}_%.2f" % threshold](acc_th)
+            test_metrics[f"acc_{norm}_%.3f" % threshold](acc_th)
         test_metrics[f"{norm}"](lp)
         # compute statistics only for correctly classified inputs
         is_corr = outs["pred"] == label
