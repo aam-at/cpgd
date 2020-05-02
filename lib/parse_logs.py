@@ -277,8 +277,7 @@ def parse_test_optimizer_log(root,
 
     failed = []
     test_results = []
-    for index, load_dir in enumerate(sorted(Path(root).glob('*'))):
-        load_dir = str(load_dir)
+    for index, load_dir in enumerate(sorted(glob.glob(str(root) + '*'))):
         with open(os.path.join(load_dir, 'tensorflow.log'), 'r') as f:
             test_param_str = f.readline()
             test_params = load_params(test_param_str)

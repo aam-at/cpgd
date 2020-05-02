@@ -75,6 +75,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
         })
 
     attack_arg_names = list(attack_grid_args.keys())
+    existing_names = []
 
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
@@ -133,8 +134,9 @@ def test_lp_config(attack, runs=1, master_seed=1):
             p = [
                 s.name[:-1] for s in list(Path(working_dir).glob("*"))
             ]
-            if name in p:
+            if name in p or name in existing_names:
                 continue
+            existing_names.append(name)
             np.random.seed(master_seed)
             for i in range(runs):
                 seed = np.random.randint(1000)
@@ -143,10 +145,11 @@ def test_lp_config(attack, runs=1, master_seed=1):
                     print(generate_test_optimizer_lp(**attack_args))
 
 
-def test_lp_custom_config(attack, runs=1, master_seed=1):
+def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
     norm, _ = lp_attacks[attack]
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 500
+    existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_10/test_{type}_{norm}"
@@ -155,16 +158,19 @@ def test_lp_custom_config(attack, runs=1, master_seed=1):
         export_test_params=[
             flag for flag in defined_flags if flag.startswith("attack_")]
         df = parse_test_optimizer_log(
-            working_dir,
+            Path(working_dir) / f"mnist_{type}_{attack}_",
             export_test_params=export_test_params)
         df = df.sort_values(norm)
-        df = df[df.name.str.contains("N10")].head(1)
+        df = df[df.name.str.contains("N10")]
+        j = 0
         for id, df in df.iterrows():
             attack_args = {col: df[col] for col in df.keys() if col in export_test_params}
             attack_args.update({
                 'attack': attack,
                 'num_batches': num_images // batch_size,
-                'batch_size': batch_size
+                'batch_size': batch_size,
+                'load_from': model,
+                'working_dir': working_dir
             })
             # change args
             attack_args['attack_loop_number_restarts'] = 10
@@ -176,8 +182,12 @@ def test_lp_custom_config(attack, runs=1, master_seed=1):
             p = [
                 s.name[:-1] for s in list(Path(working_dir).glob("*"))
             ]
-            if name in p:
+            if name in existing_names:
                 continue
+            j += 1
+            if name in p or j > topk:
+                continue
+            existing_names.append(name)
             np.random.seed(master_seed)
             for i in range(runs):
                 seed = np.random.randint(1000)

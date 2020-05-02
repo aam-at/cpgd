@@ -64,7 +64,7 @@ def get_tmpl_str(script_name, **flags):
     str_bfr.write("python %(script_name)s.py " % locals())
     for arg_name, arg_value in flags.items():
         assert arg_name in defined_flags, arg_name
-        if isinstance(arg_value, dict):
+        if isinstance(arg_value, (dict, str)):
             str_bfr.write('--{}="{}" '.format(arg_name, arg_value))
         else:
             str_bfr.write("--{}={} ".format(arg_name, arg_value))
