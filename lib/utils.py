@@ -276,9 +276,7 @@ def power_iteration(Ax, x0, num_iterations):
 
 
 class ConstantDecay(LearningRateSchedule):
-    def __init__(self,
-                 learning_rate,
-                 name=None):
+    def __init__(self, learning_rate, name=None):
         super(ConstantDecay, self).__init__()
         self.learning_rate = learning_rate
         self.name = name
@@ -287,10 +285,7 @@ class ConstantDecay(LearningRateSchedule):
         return self.learning_rate
 
     def get_config(self):
-        return {
-            "learning_rate": self.learning_rate,
-            "name": self.name
-        }
+        return {"learning_rate": self.learning_rate, "name": self.name}
 
 
 class LinearDecay(LearningRateSchedule):
@@ -300,7 +295,8 @@ class LinearDecay(LearningRateSchedule):
                  decay_steps,
                  name=None):
         super(LinearDecay, self).__init__()
-        assert initial_learning_rate > minimal_learning_rate
+        assert initial_learning_rate > minimal_learning_rate, (
+            initial_learning_rate, minimal_learning_rate)
         self.initial_learning_rate = initial_learning_rate
         self.minimal_learning_rate = minimal_learning_rate
         self.decay_steps = decay_steps
@@ -318,8 +314,8 @@ class LinearDecay(LearningRateSchedule):
 
         assert_op = tf.Assert(decay_steps >= global_step_recomp, [step])
         with tf.control_dependencies([assert_op]):
-            return minimal_learning_rate + (
-                initial_learning_rate - minimal_learning_rate) * (1 - p)
+            return (minimal_learning_rate +
+                    (initial_learning_rate - minimal_learning_rate) * (1 - p))
 
     def get_config(self):
         return {
