@@ -18,13 +18,11 @@ from lib.attack_l0 import ProximalL0Attack
 from lib.attack_l1 import ProximalL1Attack
 from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
 from lib.attack_li import ProximalLiAttack
-from lib.attack_lp import GradientOptimizerAttack
 from lib.attack_utils import AttackOptimizationLoop
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
-                       import_klass_kwargs_as_flags, l0_metric, l1_metric,
-                       l2_metric, li_metric, log_metrics, make_input_pipeline,
-                       register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
+                       import_klass_kwargs_as_flags, log_metrics,
+                       make_input_pipeline, register_experiment_flags,
+                       reset_metrics, save_images, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
