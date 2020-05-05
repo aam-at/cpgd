@@ -6,9 +6,23 @@ from residual_utils import make_bottleneck_layer
 
 
 class TsiprasCNN(tf.keras.Model):
+    LABEL_RANGES = [(151, 268), (281, 285), (30, 32), (33, 37), (80, 100), (365, 382),
+                    (389, 397), (118, 121), (300, 319)]
+
     # Imagenet robust model Tsipras et al
     def __init__(self):
         super(TsiprasCNN, self).__init__()
+        self.backbone = ResnetCNN()
+
+    def call(self, inputs, training=True):
+        logits = self.backbone(inputs, training=training)
+        num_labels = len(TsiprasCNN.LABEL_RANGES)
+        return add_default_end_points({'logits': logits[:, :num_labels]})
+
+
+class ResnetCNN(tf.keras.Model):
+    def __init__(self):
+        super(ResnetCNN, self).__init__()
 
     def build(self, inputs_shape):
         # configure inputs
@@ -32,8 +46,8 @@ class TsiprasCNN(tf.keras.Model):
             z = block4(z)
             z = tf.keras.layers.GlobalAveragePooling2D()(z)
             logits = tf.keras.layers.Dense(1000)(z)
-        self.model = tf.keras.Model(inputs=x, outputs=[z, logits])
+        self.model = tf.keras.Model(inputs=x, outputs=logits)
 
     def call(self, inputs, training=True):
-        z, logits = self.model(inputs, training=training)
-        return add_default_end_points({'features': z, 'logits': logits})
+        logits = self.model(inputs, training=training)
+        return logits
