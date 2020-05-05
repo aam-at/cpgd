@@ -18,17 +18,17 @@ class TsiprasCNN(tf.keras.Model):
 
         # define functional computation graph
         with tf.init_scope():
-            z = tf.keras.layers.Conv2D(64, 7, strides=2, use_bias=False)(x)
-            z = tf.keras.layers.BatchNormalization(axis=bn_axis, epsilon=1e-5)(z)
+            z = tf.keras.layers.Conv2D(64, 7, strides=2, use_bias=False, name="conv0")(x)
+            z = tf.keras.layers.BatchNormalization(axis=bn_axis, epsilon=1e-5, name="conv0/bn")(z)
             z = tf.keras.layers.ReLU()(z)
             z = tf.keras.layers.MaxPool2D(pool_size=3, strides=2, padding='SAME')(z)
-            block1 = make_bottleneck_layer(64, 3, use_bias=False, name="group0")
+            block1 = make_bottleneck_layer(64, 3, use_bias=False, stride=1, name="group0")
             z = block1(z)
-            block2 = make_bottleneck_layer(128, 4, use_bias=False, name="group1")
+            block2 = make_bottleneck_layer(128, 4, use_bias=False, stride=2, name="group1")
             z = block2(z)
-            block3 = make_bottleneck_layer(256, 6, use_bias=False, name="group2")
+            block3 = make_bottleneck_layer(256, 6, use_bias=False, stride=2, name="group2")
             z = block3(z)
-            block4 = make_bottleneck_layer(512, 3, use_bias=False, name="group3")
+            block4 = make_bottleneck_layer(512, 3, use_bias=False, stride=2, name="group3")
             z = block4(z)
             z = tf.keras.layers.GlobalAveragePooling2D()(z)
             logits = tf.keras.layers.Dense(1000)(z)
