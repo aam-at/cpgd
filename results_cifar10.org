@@ -106,6 +106,200 @@
 
 #+RESULTS:
 
+* Init
+#+NAME: init_block_random
+#+BEGIN_SRC python :noweb yes
+  <<init_block>>
+  def parse_output_logs(paths, norm, type):
+      if not isinstance(paths, (list, tuple)):
+          paths = list(paths)
+      df_sublist = []
+      for p in paths:
+          p = Path(p)
+          df = parse_test_optimizer_log(p / f"test_random_{type}_{norm}" / "cifar10")
+          df_sublist.append(df)
+      df = pd.concat(df_sublist, ignore_index=True)
+      df = df.sort_values('entropy', ascending=False)
+      return df
+#+END_SRC
+
+#+RESULTS: init_block_random
+: None
+
+#+NAME: output_results_init
+#+BEGIN_SRC python :noweb yes
+  dirs = glob.glob("./results/cifar10*")
+  df = parse_output_logs(dirs, norm, type)
+  df_org = output_org_results([df], norm, summarize=False, topk=100)
+#+END_SRC
+
+#+RESULTS: output_results_init
+
+** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="plain" :results value :return df_org
+  <<init_block_random>>
+  <<output_results_init>>
+#+END_SRC
+
+#+RESULTS:
+|-----------------------------------+----------|
+| name                              |  entropy |
+|-----------------------------------+----------|
+| cifar10_plain_N100_uniform_0.25_0 | 0.583797 |
+| cifar10_plain_N100_uniform_0.2_0  | 0.580105 |
+| cifar10_plain_N100_sign_0.15_0    | 0.573916 |
+| cifar10_plain_N100_sign_0.1_0     | 0.559848 |
+| cifar10_plain_N100_uniform_0.3_0  | 0.549546 |
+| cifar10_plain_N100_uniform_0.15_0 |  0.52837 |
+| cifar10_plain_N100_uniform_0.35_0 | 0.492507 |
+| cifar10_plain_N100_sign_0.2_0     | 0.485201 |
+| cifar10_plain_N100_uniform_0.4_0  | 0.426997 |
+| cifar10_plain_N100_uniform_0.1_0  | 0.414899 |
+| cifar10_plain_N100_sign_0.05_0    | 0.374817 |
+| cifar10_plain_N100_sign_0.25_0    | 0.368437 |
+| cifar10_plain_N100_uniform_0.45_0 | 0.363402 |
+| cifar10_plain_N100_uniform_0.5_0  | 0.309578 |
+| cifar10_plain_N100_sign_0.3_0     | 0.276976 |
+| cifar10_plain_N100_uniform_0.55_0 | 0.265326 |
+| cifar10_plain_N100_uniform_0.05_0 | 0.243613 |
+| cifar10_plain_N100_uniform_0.6_0  | 0.231089 |
+| cifar10_plain_N100_sign_0.35_0    | 0.216495 |
+| cifar10_plain_N100_uniform_0.65_0 | 0.204933 |
+| cifar10_plain_N100_uniform_0.7_0  | 0.185646 |
+| cifar10_plain_N100_sign_0.4_0     | 0.181948 |
+| cifar10_plain_N100_uniform_0.75_0 |  0.17184 |
+| cifar10_plain_N100_sign_0.45_0    | 0.162416 |
+| cifar10_plain_N100_uniform_0.8_0  | 0.161117 |
+| cifar10_plain_N100_uniform_0.85_0 | 0.154495 |
+| cifar10_plain_N100_sign_0.5_0     | 0.150787 |
+| cifar10_plain_N100_uniform_0.9_0  | 0.149353 |
+| cifar10_plain_N100_uniform_0.95_0 | 0.145637 |
+| cifar10_plain_N100_sign_0.55_0    | 0.143297 |
+| cifar10_plain_N100_uniform_1.0_0  | 0.142941 |
+| cifar10_plain_N100_sign_0.6_0     | 0.138251 |
+| cifar10_plain_N100_sign_0.65_0    | 0.134136 |
+| cifar10_plain_N100_sign_0.7_0     | 0.130856 |
+| cifar10_plain_N100_sign_0.75_0    | 0.128423 |
+| cifar10_plain_N100_sign_0.8_0     | 0.126607 |
+| cifar10_plain_N100_sign_0.85_0    | 0.125505 |
+| cifar10_plain_N100_sign_0.9_0     | 0.124676 |
+| cifar10_plain_N100_sign_0.95_0    | 0.124283 |
+| cifar10_plain_N100_sign_1.0_0     | 0.124183 |
+| cifar10_plain_N100_uniform_0.0_0  |      0.0 |
+| cifar10_plain_N100_sign_0.0_0     |      0.0 |
+|-----------------------------------+----------|
+|-----------------------------------+----------|
+
+** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="linf" :results value :return df_org
+  <<init_block_random>>
+  <<output_results_init>>
+#+END_SRC
+
+#+RESULTS:
+|----------------------------------+----------|
+| name                             |  entropy |
+|----------------------------------+----------|
+| cifar10_linf_N100_uniform_0.4_0  | 0.394875 |
+| cifar10_linf_N100_uniform_0.35_0 | 0.394839 |
+| cifar10_linf_N100_sign_0.2_0     | 0.392526 |
+| cifar10_linf_N100_sign_0.25_0    | 0.381669 |
+| cifar10_linf_N100_uniform_0.3_0  | 0.378934 |
+| cifar10_linf_N100_uniform_0.45_0 | 0.377246 |
+| cifar10_linf_N100_sign_0.15_0    | 0.352482 |
+| cifar10_linf_N100_uniform_0.25_0 |  0.34435 |
+| cifar10_linf_N100_uniform_0.5_0  | 0.343174 |
+| cifar10_linf_N100_sign_0.3_0     | 0.317892 |
+| cifar10_linf_N100_uniform_0.55_0 | 0.301035 |
+| cifar10_linf_N100_uniform_0.2_0  | 0.290646 |
+| cifar10_linf_N100_uniform_0.6_0  | 0.258896 |
+| cifar10_linf_N100_sign_0.1_0     | 0.256092 |
+| cifar10_linf_N100_sign_0.35_0    | 0.238596 |
+| cifar10_linf_N100_uniform_0.15_0 | 0.225118 |
+| cifar10_linf_N100_uniform_0.65_0 | 0.220009 |
+| cifar10_linf_N100_uniform_0.7_0  | 0.185248 |
+| cifar10_linf_N100_sign_0.4_0     | 0.164787 |
+| cifar10_linf_N100_uniform_0.75_0 | 0.154519 |
+| cifar10_linf_N100_uniform_0.1_0  | 0.152267 |
+| cifar10_linf_N100_sign_0.05_0    | 0.133418 |
+| cifar10_linf_N100_uniform_0.8_0  | 0.129312 |
+| cifar10_linf_N100_sign_0.45_0    | 0.110436 |
+| cifar10_linf_N100_uniform_0.85_0 | 0.109105 |
+| cifar10_linf_N100_uniform_0.9_0  | 0.093048 |
+| cifar10_linf_N100_uniform_0.95_0 | 0.081094 |
+| cifar10_linf_N100_uniform_0.05_0 | 0.079388 |
+| cifar10_linf_N100_sign_0.5_0     |  0.07715 |
+| cifar10_linf_N100_uniform_1.0_0  | 0.072298 |
+| cifar10_linf_N100_sign_1.0_0     | 0.067849 |
+| cifar10_linf_N100_sign_0.95_0    | 0.067797 |
+| cifar10_linf_N100_sign_0.9_0     | 0.067479 |
+| cifar10_linf_N100_sign_0.85_0    | 0.066759 |
+| cifar10_linf_N100_sign_0.8_0     |  0.06537 |
+| cifar10_linf_N100_sign_0.75_0    | 0.063105 |
+| cifar10_linf_N100_sign_0.55_0    | 0.061344 |
+| cifar10_linf_N100_sign_0.7_0     | 0.060249 |
+| cifar10_linf_N100_sign_0.65_0    | 0.057424 |
+| cifar10_linf_N100_sign_0.6_0     | 0.056658 |
+| cifar10_linf_N100_uniform_0.0_0  |      0.0 |
+| cifar10_linf_N100_sign_0.0_0     |      0.0 |
+|----------------------------------+----------|
+|----------------------------------+----------|
+
+** L2
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="l2" :results value :return df_org
+  <<init_block_random>>
+  <<output_results_init>>
+#+END_SRC
+
+#+RESULTS:
+|--------------------------------+----------|
+| name                           |  entropy |
+|--------------------------------+----------|
+| cifar10_l2_N100_uniform_0.4_0  | 0.418115 |
+| cifar10_l2_N100_uniform_0.35_0 | 0.412734 |
+| cifar10_l2_N100_sign_0.2_0     |  0.41089 |
+| cifar10_l2_N100_sign_0.25_0    |  0.40208 |
+| cifar10_l2_N100_uniform_0.45_0 |  0.39904 |
+| cifar10_l2_N100_uniform_0.3_0  |  0.39182 |
+| cifar10_l2_N100_sign_0.15_0    | 0.363906 |
+| cifar10_l2_N100_uniform_0.5_0  | 0.363871 |
+| cifar10_l2_N100_uniform_0.25_0 | 0.356102 |
+| cifar10_l2_N100_sign_0.3_0     | 0.334307 |
+| cifar10_l2_N100_uniform_0.55_0 | 0.321334 |
+| cifar10_l2_N100_uniform_0.2_0  | 0.300778 |
+| cifar10_l2_N100_uniform_0.6_0  |  0.28098 |
+| cifar10_l2_N100_sign_0.1_0     |  0.26646 |
+| cifar10_l2_N100_sign_0.35_0    |  0.25999 |
+| cifar10_l2_N100_uniform_0.65_0 |  0.24661 |
+| cifar10_l2_N100_uniform_0.15_0 | 0.235828 |
+| cifar10_l2_N100_uniform_0.7_0  | 0.217717 |
+| cifar10_l2_N100_sign_0.4_0     | 0.204048 |
+| cifar10_l2_N100_uniform_0.75_0 | 0.195793 |
+| cifar10_l2_N100_uniform_0.8_0  | 0.179823 |
+| cifar10_l2_N100_sign_0.45_0    | 0.169929 |
+| cifar10_l2_N100_uniform_0.85_0 | 0.168491 |
+| cifar10_l2_N100_uniform_0.1_0  | 0.163616 |
+| cifar10_l2_N100_uniform_0.9_0  | 0.160294 |
+| cifar10_l2_N100_uniform_0.95_0 | 0.154212 |
+| cifar10_l2_N100_sign_0.5_0     | 0.152484 |
+| cifar10_l2_N100_uniform_1.0_0  | 0.149057 |
+| cifar10_l2_N100_sign_0.55_0    | 0.144398 |
+| cifar10_l2_N100_sign_0.05_0    | 0.143346 |
+| cifar10_l2_N100_sign_0.8_0     | 0.142772 |
+| cifar10_l2_N100_sign_0.75_0    | 0.142738 |
+| cifar10_l2_N100_sign_0.85_0    | 0.142541 |
+| cifar10_l2_N100_sign_0.7_0     | 0.141953 |
+| cifar10_l2_N100_sign_0.9_0     | 0.141764 |
+| cifar10_l2_N100_sign_0.65_0    | 0.141332 |
+| cifar10_l2_N100_sign_0.6_0     | 0.141307 |
+| cifar10_l2_N100_sign_0.95_0    | 0.141082 |
+| cifar10_l2_N100_sign_1.0_0     | 0.140897 |
+| cifar10_l2_N100_uniform_0.05_0 | 0.085368 |
+| cifar10_l2_N100_uniform_0.0_0  |      0.0 |
+| cifar10_l2_N100_sign_0.0_0     |      0.0 |
+|--------------------------------+----------|
+|--------------------------------+----------|
+
 * L0
 ** Plain
 #+BEGIN_SRC python :noweb yes :var norm="l0" :var type="plain" :results value :return df_org
