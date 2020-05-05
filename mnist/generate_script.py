@@ -8,11 +8,9 @@ from pathlib import Path
 import numpy as np
 from absl import flags
 
-import test_optimizer_lp_madry
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_test_optimizer_log
 from lib.utils import ConstantDecay, LinearDecay, import_klass_kwargs_as_flags
-from test_optimizer_lp_madry import lp_attacks
 
 models = [
     './models/mnist_weights_plain.mat', './models/mnist_weights_linf.mat',
@@ -20,8 +18,12 @@ models = [
 ]
 hostname = subprocess.getoutput('hostname')
 
-
 FLAGS = flags.FLAGS
+
+
+def generate_test_random(**kwargs):
+    return generate_test_optimizer('test_random', **kwargs)
+
 
 def generate_test_optimizer_lp(**kwargs):
     return generate_test_optimizer('test_optimizer_lp_madry', **kwargs)
@@ -29,6 +31,35 @@ def generate_test_optimizer_lp(**kwargs):
 
 def generate_test_bethge_lp(**kwargs):
     return generate_test_optimizer('test_bethge_attack', **kwargs)
+
+
+def test_random(runs=1, master_seed=1):
+    existing_names = []
+    for model, N, norm, eps, init in itertools.product(
+            models, [100], ["l2"], np.linspace(0.0, 1.0, 21),
+        ["uniform", "sign"]):
+        type = Path(model).stem.split("_")[-1]
+        eps = round(eps, 3)
+        name = f"mnist_{type}_N{N}_{init}_{eps}_"
+        working_dir = f"../results/mnist_10/test_random_{type}_{norm}"
+        attack_args = {
+            'working_dir': working_dir,
+            'load_from': model,
+            "norm": norm,
+            "restarts": N,
+            "init": init,
+            'epsilon': eps,
+            'name': name
+        }
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        np.random.seed(master_seed)
+        for i in range(runs):
+            seed = np.random.randint(1000)
+            attack_args["seed"] = seed
+            print(generate_test_random(**attack_args))
 
 
 def test_lp_config(attack, runs=1, master_seed=1):
@@ -216,6 +247,9 @@ def test_bethge_config(norm, runs=1, master_seed=1):
 
 
 if __name__ == '__main__':
+    # test_random()
+    from test_optimizer_lp_madry import lp_attacks
+    import test_optimizer_lp_madry
     for attack in lp_attacks:
         norm, _ = lp_attacks[attack]
         if norm not in ['l0', 'l1', 'l2', 'li']:
@@ -224,4 +258,5 @@ if __name__ == '__main__':
         importlib.reload(test_optimizer_lp_madry)
         _, attack_klass = lp_attacks[attack]
         import_klass_kwargs_as_flags(attack_klass, 'attack_')
-        test_lp_config(attack)
+        # test_lp_config(attack)
+        test_lp_custom_config(attack)
