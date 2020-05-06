@@ -55,28 +55,31 @@ def main(unused_args):
         return classifier(x, training=False, **kwargs)
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
+    y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from,
-               classifier.trainable_variables,
-               model_type=model_type)
+    load_tsipras(FLAGS.load_from, classifier.variables)
 
     # test metrics
     test_metrics = MetricsDictionary()
     norm = {"l0": 0, "l1": 1, "l2": 2, "li": np.inf}[FLAGS.norm]
 
     @tf.function
+    def get_target(image, label_onehot):
+        r0 = init_r0(image.shape, FLAGS.epsilon, norm, FLAGS.init)
+        r0 = project_box(image, r0, 0.0, 1.0)
+        logits = test_classifier(image + r0)["logits"]
+        target_indx = tf.argmax(
+            tf.where(label_onehot == 0, logits, -np.inf * tf.ones_like(logits)),
+            axis=-1,
+        )
+        return target_indx
+
     def test_step(image, label):
         label_onehot = tf.one_hot(label, num_classes)
         targets_prob = tf.zeros_like(label_onehot)
         for i in range(FLAGS.restarts):
-            r0 = init_r0(image.shape, FLAGS.epsilon, norm, FLAGS.init)
-            r0 = project_box(image, r0, 0.0, 1.0)
-            logits = test_classifier(image + r0)["logits"]
-            target_indx = tf.argmax(
-                tf.where(label_onehot == 0, logits, -np.inf * tf.ones_like(logits)),
-                axis=-1,
-            )
+            target_indx = get_target(image, label_onehot)
             targets_prob += tf.one_hot(target_indx, num_classes)
         targets_prob /= FLAGS.restarts
         d = tfp.distributions.Categorical(probs=targets_prob)
@@ -87,7 +90,7 @@ def main(unused_args):
     start_time = time.time()
     try:
         val_ds.reset_state()
-        for batch_index, (image, label) in enumerate(test_ds, 1):
+        for batch_index, (image, label) in enumerate(val_ds, 1):
             test_step(image, label)
             log_metrics(
                 test_metrics,
