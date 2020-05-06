@@ -48,7 +48,7 @@ def get_imagenet_dataflow(
             fname, cls = dp
             im = cv2.imread(fname, cv2.IMREAD_COLOR)
             im = aug.augment(im)
-            im = np.array(im, np.float32) / 255.0
+            im = np.array(im, np.float32) * (1.0 / 255)
             return im, cls
 
         ds = MultiThreadMapData(ds, cpu, mapf, buffer_size=2000, strict=True)
