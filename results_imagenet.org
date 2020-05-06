@@ -119,7 +119,7 @@
           df = parse_test_optimizer_log(p / f"test_random_{type}_{norm}" / "imagenet")
           df_sublist.append(df)
       df = pd.concat(df_sublist, ignore_index=True)
-      df = df.sort_values('entropy', ascending=False)
+      df = df.sort_values('entropy_hat', ascending=False)
       return df
 #+END_SRC
 
