@@ -147,7 +147,7 @@ def main(unused_args):
                 lp,
                 threshold,
             )
-            test_metrics[f"acc_{norm}_%.2f" % threshold](acc_th)
+            test_metrics[f"acc_{norm}_%.4f" % threshold](acc_th)
         test_metrics[f"{norm}"](lp)
         # compute statistics only for correctly classified inputs
         is_corr = outs["pred"] == label
@@ -213,8 +213,10 @@ def main(unused_args):
                 final_lp_corr = test_metrics[f"{norm}_corr"].result()
                 tf.summary.scalar(f"final_{norm}_corr", final_lp_corr, step=1)
                 tf.summary.flush()
-    except:
+    except KeyboardInterrupt:
         logging.info("Stopping after {}".format(batch_index))
+    except:
+        raise
     finally:
         log_metrics(
             test_metrics,
