@@ -40,11 +40,13 @@ def main(unused_args):
     setup_experiment(f"madry_test")
 
     # data
-    _, _, test_ds = load_mnist(
-        FLAGS.validation_size, data_format="NHWC", seed=FLAGS.data_seed
-    )
+    _, _, test_ds = load_mnist(FLAGS.validation_size,
+                               data_format="NHWC",
+                               seed=FLAGS.data_seed)
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(test_ds, shuffle=False, batch_size=FLAGS.batch_size)
+    test_ds = make_input_pipeline(test_ds,
+                                  shuffle=False,
+                                  batch_size=FLAGS.batch_size)
 
     # models
     num_classes = 10
@@ -61,23 +63,45 @@ def main(unused_args):
     # test metrics
     test_metrics = MetricsDictionary()
     norm = {"l0": 0, "l1": 1, "l2": 2, "li": np.inf}[FLAGS.norm]
+    acc_fn = tf.keras.metrics.sparse_categorical_accuracy
+    nll_fn = tf.keras.metrics.sparse_categorical_crossentropy
 
     @tf.function
-    def test_step(image, label):
+    def get_target(image, label):
         label_onehot = tf.one_hot(label, num_classes)
-        targets_prob = tf.zeros_like(label_onehot)
+        r0 = init_r0(image.shape, FLAGS.epsilon, norm, FLAGS.init)
+        r0 = project_box(image, r0, 0.0, 1.0)
+        logits = test_classifier(image + r0)["logits"]
+        target = tf.argmax(
+            tf.where(label_onehot == 0, logits,
+                     -np.inf * tf.ones_like(logits)),
+            axis=-1,
+        )
+        nll = tf.reduce_mean(nll_fn(label, logits))
+        acc = tf.reduce_mean(acc_fn(label, logits))
+        return acc, nll, target
+
+    def test_step(image, label):
+        image = tf.convert_to_tensor(image)
+        label = tf.convert_to_tensor(label)
+
+        # clean accuracy
+        logits = test_classifier(image)["logits"]
+        test_metrics["acc"](acc_fn(label, logits))
+        # random sampling
+        targets_prob = tf.zeros((image.shape[0], num_classes))
+        mean_acc = 0.0
+        mean_nll = 0.0
         for i in range(FLAGS.restarts):
-            r0 = init_r0(image.shape, FLAGS.epsilon, norm, FLAGS.init)
-            r0 = project_box(image, r0, 0.0, 1.0)
-            logits = test_classifier(image + r0)["logits"]
-            target_indx = tf.argmax(
-                tf.where(label_onehot == 0, logits, -np.inf * tf.ones_like(logits)),
-                axis=-1,
-            )
-            targets_prob += tf.one_hot(target_indx, num_classes)
+            acc, nll, target = get_target(image, label)
+            mean_acc += acc
+            mean_nll += nll
+            targets_prob += tf.one_hot(target, num_classes)
         targets_prob /= FLAGS.restarts
         d = tfp.distributions.Categorical(probs=targets_prob)
-        test_metrics["entropy"](d.entropy())
+        test_metrics["acc_hat"](acc)
+        test_metrics["nll_hat"](nll)
+        test_metrics["entropy_hat"](d.entropy())
 
     # reset metrics
     reset_metrics(test_metrics)
@@ -87,9 +111,9 @@ def main(unused_args):
             test_step(image, label)
             log_metrics(
                 test_metrics,
-                "Batch results [{}, {:.2f}s]:".format(
-                    batch_index, time.time() - start_time
-                ),
+                "Batch results [{}, {:.2f}s]:".format(batch_index,
+                                                      time.time() -
+                                                      start_time),
             )
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
@@ -98,7 +122,8 @@ def main(unused_args):
     finally:
         log_metrics(
             test_metrics,
-            "Test results [{:.2f}s, {}]:".format(time.time() - start_time, batch_index),
+            "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
+                                                 batch_index),
         )
 
 
