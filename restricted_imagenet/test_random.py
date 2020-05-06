@@ -10,7 +10,7 @@ import tensorflow as tf
 import tensorflow_probability as tfp
 from absl import flags
 
-from data import get_imagenet_dataflow, fbresnet_augmentor
+from data import fbresnet_augmentor, get_imagenet_dataflow
 from lib.attack_utils import init_r0, project_box
 from lib.utils import (MetricsDictionary, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics,
@@ -43,9 +43,10 @@ def main(unused_args):
 
     # data
     augmentors = fbresnet_augmentor(224, training=False)
-    val_ds = get_imagenet_dataflow(
-        FLAGS.data_dir, FLAGS.batch_size,
-        augmentors, mode='val')
+    val_ds = get_imagenet_dataflow(FLAGS.data_dir,
+                                   FLAGS.batch_size,
+                                   augmentors,
+                                   mode="val")
 
     # models
     num_classes = len(TsiprasCNN.LABEL_RANGES)
@@ -63,27 +64,45 @@ def main(unused_args):
     # test metrics
     test_metrics = MetricsDictionary()
     norm = {"l0": 0, "l1": 1, "l2": 2, "li": np.inf}[FLAGS.norm]
+    acc_fn = tf.keras.metrics.sparse_categorical_accuracy
+    nll_fn = tf.keras.metrics.sparse_categorical_crossentropy
 
     @tf.function
-    def get_target(image, label_onehot):
+    def get_target(image, label):
+        label_onehot = tf.one_hot(label, num_classes)
         r0 = init_r0(image.shape, FLAGS.epsilon, norm, FLAGS.init)
         r0 = project_box(image, r0, 0.0, 1.0)
         logits = test_classifier(image + r0)["logits"]
-        target_indx = tf.argmax(
-            tf.where(label_onehot == 0, logits, -np.inf * tf.ones_like(logits)),
+        target = tf.argmax(
+            tf.where(label_onehot == 0, logits,
+                     -np.inf * tf.ones_like(logits)),
             axis=-1,
         )
-        return target_indx
+        nll = tf.reduce_mean(nll_fn(label, logits))
+        acc = tf.reduce_mean(acc_fn(label, logits))
+        return acc, nll, target
 
     def test_step(image, label):
-        label_onehot = tf.one_hot(label, num_classes)
-        targets_prob = tf.zeros_like(label_onehot)
+        image = tf.convert_to_tensor(image)
+        label = tf.convert_to_tensor(label)
+
+        # clean accuracy
+        logits = test_classifier(image)["logits"]
+        test_metrics["acc"](acc_fn(label, logits))
+        # random sampling
+        targets_prob = tf.zeros((image.shape[0], num_classes))
+        mean_acc = 0.0
+        mean_nll = 0.0
         for i in range(FLAGS.restarts):
-            target_indx = get_target(image, label_onehot)
-            targets_prob += tf.one_hot(target_indx, num_classes)
+            acc, nll, target = get_target(image, label)
+            mean_acc += acc
+            mean_nll += nll
+            targets_prob += tf.one_hot(target, num_classes)
         targets_prob /= FLAGS.restarts
         d = tfp.distributions.Categorical(probs=targets_prob)
-        test_metrics["entropy"](d.entropy())
+        test_metrics["acc_hat"](acc)
+        test_metrics["nll_hat"](nll)
+        test_metrics["entropy_hat"](d.entropy())
 
     # reset metrics
     reset_metrics(test_metrics)
@@ -94,9 +113,9 @@ def main(unused_args):
             test_step(image, label)
             log_metrics(
                 test_metrics,
-                "Batch results [{}, {:.2f}s]:".format(
-                    batch_index, time.time() - start_time
-                ),
+                "Batch results [{}, {:.2f}s]:".format(batch_index,
+                                                      time.time() -
+                                                      start_time),
             )
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
@@ -105,7 +124,8 @@ def main(unused_args):
     finally:
         log_metrics(
             test_metrics,
-            "Test results [{:.2f}s, {}]:".format(time.time() - start_time, batch_index),
+            "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
+                                                 batch_index),
         )
 
 
