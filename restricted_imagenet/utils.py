@@ -1,7 +1,3 @@
-import pickle
-
-import numpy as np
-import scipy.io
 import tensorflow as tf
 from tensorflow.python.training import py_checkpoint_reader
 
@@ -51,7 +47,6 @@ def load_tsipras(load_from, model_vars):
         except:
             print("Failed to find: {}".format(mapped_var_name))
 
+    assert all([v for v in initialized_vars.values()]), "Failed to load model"
     print("Failed to find a matching variable ckpt -> model: {}".format(
         [name for name, v in all_ckpt_tensors.items() if not v]))
-    print("Failed to find a matching variable model -> ckpt: {}".format(
-        [name for name, v in initialized_vars.items() if not v]))
