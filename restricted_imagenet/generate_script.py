@@ -69,7 +69,7 @@ def test_random(runs=1, master_seed=1):
 def test_lp_config(attack, runs=1, master_seed=1):
     norm, _ = lp_attacks[attack]
     num_images = {'l0': 500, 'li': 500, 'l1': 500, 'l2': 500}[norm]
-    batch_size = 100
+    batch_size = 50
     attack_grid_args = {
         'num_batches': [num_images // batch_size],
         'batch_size': [batch_size],
