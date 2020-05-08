@@ -36,7 +36,7 @@ def generate_test_bethge_lp(**kwargs):
 def test_random(runs=1, master_seed=1):
     existing_names = []
     for model, N, norm, eps, init in itertools.product(
-            models, [100], ["l2"], np.linspace(0.0, 1.0, 21),
+            models, [100], ["l2"], np.linspace(0.05, 0.5, 10),
         ["uniform", "sign"]):
         type = Path(model).stem.split("_")[-1]
         eps = round(eps, 3)
