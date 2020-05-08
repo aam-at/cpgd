@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 from absl import flags
 
+from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_test_optimizer_log
 from lib.utils import ConstantDecay, LinearDecay, import_klass_kwargs_as_flags
@@ -67,7 +68,7 @@ def test_random(runs=1, master_seed=1):
 
 
 def test_lp_config(attack, runs=1, master_seed=1):
-    norm, _ = lp_attacks[attack]
+    norm, attack_klass = lp_attacks[attack]
     num_images = {'l0': 500, 'li': 500, 'l1': 500, 'l2': 500}[norm]
     batch_size = 50
     attack_grid_args = {
@@ -88,7 +89,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
         'attack_loop_c0_initial_const': [0.01]
     }
 
-    if attack != 'l2g':
+    if issubclass(attack_klass, ProximalGradientOptimizerAttack):
         attack_grid_args.update({
             'attack_primal_optimizer': ["sgd"],
             'attack_accelerated': [False],
