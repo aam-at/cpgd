@@ -15,7 +15,7 @@ from tensorboard.plugins.hparams import api as hp
 import lib
 from data import load_cifar10
 from lib.attack_l0 import ProximalL0Attack
-from lib.attack_l1 import ProximalL1Attack
+from lib.attack_l1 import GradientL1Attack, ProximalL1Attack
 from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
 from lib.attack_li import ProximalLiAttack
 from lib.attack_utils import AttackOptimizationLoop
@@ -45,6 +45,7 @@ FLAGS = flags.FLAGS
 lp_attacks = {
     "l0": ("l0", ProximalL0Attack),
     "l1": ("l1", ProximalL1Attack),
+    "l1g": ("l1", GradientL1Attack),
     "l2": ("l2", ProximalL2Attack),
     "l2g": ("l2", GradientL2Attack),
     "li": ("li", ProximalLiAttack),
