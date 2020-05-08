@@ -84,7 +84,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
         'attack_loop_number_restarts': [1],
         'attack_loop_finetune': [True],
         'attack_loop_r0_sampling_algorithm': ['uniform'],
-        'attack_loop_r0_sampling_epsilon': [0.5, 0],
+        'attack_loop_r0_sampling_epsilon': [0.1, 0.3, 0.5],
         'attack_loop_c0_initial_const': [0.01]
     }
 
@@ -114,8 +114,6 @@ def test_lp_config(attack, runs=1, master_seed=1):
             })
             for lr, decay_factor, flr_decay_factor, lr_decay in itertools.product(
                 [0.005, 0.01, 0.05, 0.1, 0.5], [0.01], [0.1], [True]):
-                if type != 'plain' and lr == 0.01:
-                    continue
                 min_lr = round(lr * decay_factor, 6)
                 if lr_decay and min_lr < lr:
                     lr_config = {
@@ -173,28 +171,24 @@ def test_lp_config(attack, runs=1, master_seed=1):
                         print(generate_test_optimizer_lp(**attack_args))
 
 
-def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
+def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
     norm, _ = lp_attacks[attack]
-    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
-    batch_size = 500
+    num_images = {'l0': 500, 'li': 500, 'l1': 500, 'l2': 500}[norm]
+    batch_size = 50
     existing_names = []
-    for model in models:
-        type = Path(model).stem.split("_")[-1]
+    for type in models.keys():
         working_dir = f"../results/imagenet_10/test_{type}_{norm}"
         script_module = importlib.import_module("test_optimizer_lp_madry")
         defined_flags = script_module.FLAGS._flags().keys()
         export_test_params = [
             flag for flag in defined_flags if flag.startswith("attack_")
         ]
-        if attack == 'l0':
-            df = parse_test_optimizer_log(Path(working_dir) /
-                                        f"imagenet_{type}_",
-                                        export_test_params=export_test_params)
-        else:
-            df = parse_test_optimizer_log(Path(working_dir) /
-                                        f"imagenet_{type}_{attack}_",
-                                        export_test_params=export_test_params)
-        df = df[df.name.str.contains("N10")]
+        df = parse_test_optimizer_log(Path(working_dir) /
+                                      f"imagenet_{type}_{attack}_",
+                                      export_test_params=export_test_params)
+        if len(df) == 0:
+            continue
+        df = df[df.name.str.contains("N1")]
         df = df.sort_values(norm)
         j = 0
         for id, df in df.iterrows():
@@ -206,7 +200,7 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
                 'attack': attack,
                 'num_batches': num_images // batch_size,
                 'batch_size': batch_size,
-                'load_from': model,
+                'load_from': models[type],
                 'working_dir': working_dir
             })
             if attack != 'l2g' and not attack_args[
@@ -227,7 +221,7 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
             if attack_args['attack_loop_c0_initial_const'] != 0.01:
                 continue
             # change args
-            attack_args['attack_loop_number_restarts'] = 100
+            attack_args['attack_loop_number_restarts'] = 10
             attack_args['attack_loop_r0_sampling_epsilon'] = 0.5
 
             # generate unique name
