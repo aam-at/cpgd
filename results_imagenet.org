@@ -40,7 +40,7 @@
           for col in df.columns:
               if col.startswith(f"acc_{norm}_"):
                   if col not in [
-                          f"acc_{norm}_{th:.3f}" for th in allowed_thresholds
+                          f"acc_{norm}_{th:.4f}" for th in allowed_thresholds
                   ]:
                       df = df.drop(columns=[col])
       df = df.sort_values(norm, ascending=True)
@@ -79,7 +79,6 @@
 #+BEGIN_SRC python :noweb yes
   dirs = glob.glob("./results/imagenet*")
   df = parse_output_logs(dirs, norm, type, allowed_thresholds=thresholds)
-  df = df[getattr(df, f"acc_{norm}") == 0]
   df_org = output_org_results([df], norm, summarize=False, topk=100)
 #+END_SRC
 
