@@ -38,8 +38,12 @@ def init_r0(shape, epsilon, norm, init='uniform'):
     return r0
 
 
+def hard_threshold(u, th):
+    return tf.where(tf.abs(u) <= th, 0.0, u)
+
+
 def proximal_l0(u, lambd):
-    return tf.where(tf.abs(u) <= tf.sqrt(2 * lambd), 0.0, u)
+    return hard_threshold(u, tf.sqrt(2 * lambd))
 
 
 def proximal_l1(u, lambd):
