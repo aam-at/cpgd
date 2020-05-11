@@ -8,7 +8,10 @@ import six
 
 
 def format_name(base_name, attack_args):
-    name = f"""{base_name}_{attack_args['attack']}_{attack_args["attack_loss"]}_n{attack_args["attack_iterations"]}
+    attack = attack_args['attack']
+    if attack == 'l1g' and attack_args['attack_hard_threshold']:
+        attack = f"{attack}_threshold"
+    name = f"""{base_name}_{attack}_{attack_args["attack_loss"]}_n{attack_args["attack_iterations"]}
 _N{attack_args["attack_loop_number_restarts"]}
 """
     lr_config = attack_args["attack_loop_lr_config"]
