@@ -60,6 +60,7 @@ def main(unused_args):
     setup_experiment(
         f"madry_{norm}_test",
         [
+            __file__,
             lib.attack_lp.__file__,
             getattr(lib, f"attack_{norm}").__file__,
             lib.attack_utils.__file__,
