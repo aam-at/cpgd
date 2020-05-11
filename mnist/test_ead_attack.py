@@ -8,11 +8,10 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from tensorboard.plugins.hparams import api as hp
-
-from data import load_mnist
 from foolbox.attacks import EADAttack
 from foolbox.models import TensorFlowModel
+
+from data import load_mnist
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
                        import_kwargs_as_flags, l1_metric, log_metrics,
                        make_input_pipeline, register_experiment_flags,
@@ -33,7 +32,6 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 import_kwargs_as_flags(EADAttack.__init__, "attack_")
 flags.DEFINE_string("attack_decision_rule", "L1", "attack decision rule")
 
-flags.DEFINE_integer("print_frequency", 1, "summarize frequency")
 
 FLAGS = flags.FLAGS
 
@@ -54,14 +52,16 @@ def main(unused_args):
 
     # models
     classifier = MadryCNN()
-    fclassifier = TensorFlowModel(lambda x: classifier(x)["logits"],
-                                  bounds=(0.0, 1.0))
-
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
 
+    fclassifier = TensorFlowModel(lambda x: test_classifier(x)["logits"],
+                                  bounds=(0.0, 1.0))
+
     # load classifier
-    classifier(np.zeros([1, 28, 28, 1], dtype=np.float32))
+    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
+    y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
+    classifier(tf.zeros(X_shape))
     load_madry(FLAGS.load_from, classifier.trainable_variables)
 
     # attacks
@@ -112,58 +112,27 @@ def main(unused_args):
             test_metrics["acc_l1_%.2f" % threshold](acc_th)
         test_metrics["l1"](l1)
 
+        return image_lp
+
     # reset metrics
     reset_metrics(test_metrics)
     X_lp_list = []
     y_list = []
     start_time = time.time()
     try:
-        is_completed = False
         for batch_index, (image, label) in enumerate(test_ds, 1):
-            test_step(image, label)
-            if batch_index % FLAGS.print_frequency == 0:
-                log_metrics(
-                    test_metrics,
-                    "Batch results [{}, {:.2f}s]:".format(
-                        batch_index,
-                        time.time() - start_time),
-                )
+            X_lp = test_step(image, label)
+            log_metrics(
+                test_metrics,
+                "Batch results [{}, {:.2f}s]:".format(
+                    batch_index,
+                    time.time() - start_time),
+            )
+            # save adversarial data
+            X_lp_list.append(X_lp)
+            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
-                is_completed = True
                 break
-        else:
-            is_completed = True
-        if is_completed:
-            # hyperparameter tuning
-            with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
-                # hyperparameters
-                hp_param_names = [
-                    kwarg for kwarg in dir(FLAGS)
-                    if kwarg.startswith("attack_")
-                ]
-                hp_metric_names = [
-                    f"final_{FLAGS.norm}", f"final_{FLAGS.norm}_corr"
-                ]
-                hp_params = [
-                    hp.HParam(hp_param_name)
-                    for hp_param_name in hp_param_names
-                ]
-                hp_metrics = [
-                    hp.Metric(hp_metric_name)
-                    for hp_metric_name in hp_metric_names
-                ]
-                hp.hparams_config(hparams=hp_params, metrics=hp_metrics)
-                hp.hparams({
-                    hp_param_name: getattr(FLAGS, hp_param_name)
-                    for hp_param_name in hp_param_names
-                })
-                final_lp = test_metrics[f"{FLAGS.norm}"].result()
-                tf.summary.scalar(f"final_{FLAGS.norm}", final_lp, step=1)
-                final_lp_corr = test_metrics[f"{FLAGS.norm}_corr"].result()
-                tf.summary.scalar(f"final_{FLAGS.norm}_corr",
-                                  final_lp_corr,
-                                  step=1)
-                tf.summary.flush()
     except:
         logging.info("Stopping after {}".format(batch_index))
     finally:

@@ -162,6 +162,13 @@ def main(unused_args):
         is_completed = False
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_lp = test_step(image, label)
+            log_metrics(
+                test_metrics,
+                "Batch results [{}, {:.2f}s]:".format(
+                    batch_index, time.time() - start_time
+                ),
+            )
+            # save adversarial data
             save_path = os.path.join(
                 FLAGS.samples_dir, "epoch_orig-%d.png" % batch_index
             )
@@ -170,15 +177,8 @@ def main(unused_args):
                 FLAGS.samples_dir, f"epoch_{norm}-%d.png" % batch_index
             )
             save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
             X_lp_list.append(X_lp)
             y_list.append(label)
-            log_metrics(
-                test_metrics,
-                "Batch results [{}, {:.2f}s]:".format(
-                    batch_index, time.time() - start_time
-                ),
-            )
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 is_completed = True
                 break
