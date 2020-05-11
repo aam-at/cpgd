@@ -89,6 +89,11 @@ def test_lp_config(attack, runs=1, master_seed=1):
         'attack_loop_c0_initial_const': [1.0, 0.1, 0.01]
     }
 
+    if attack == 'l1g':
+        attack_grid_args.update({
+            'attack_hard_threshold': [True, False]
+        })
+
     if issubclass(attack_klass, ProximalGradientOptimizerAttack):
         attack_grid_args.update({
             'attack_primal_optimizer': ["sgd"],
