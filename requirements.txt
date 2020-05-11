@@ -1,0 +1,6 @@
+absl-py>=0.9.0
+numba==0.47
+tensorboard>=2.1.0
+tensorflow-gpu>=2.1.0
+tensorflow-probability==0.9.0
+torch>=1.4.0
