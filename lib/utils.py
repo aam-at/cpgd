@@ -335,6 +335,11 @@ def l0_metric(x, axes=None, keepdims=False):
                          keepdims=keepdims)
 
 
+def l0_pixel_metric(u, channel_dim=-1, keepdims=False):
+    u_c = tf.reduce_max(tf.abs(u), axis=channel_dim)
+    return l0_metric(u_c, keepdims=keepdims)
+
+
 def li_metric(x, axes=None, keepdims=False):
     if axes is None:
         axes = list(range(1, x.shape.ndims))
