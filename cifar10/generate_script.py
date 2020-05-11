@@ -256,6 +256,8 @@ def test_bethge_config(norm, runs=1, master_seed=1):
 
 
 if __name__ == '__main__':
+    # for norm in ['l0', 'l1', 'l2', 'li']:
+    #     test_bethge_config(norm)
     # test_random()
     import test_optimizer_lp_madry
     from test_optimizer_lp_madry import lp_attacks
