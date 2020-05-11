@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from .attack_lp import ProximalGradientOptimizerAttack
 from .attack_utils import proximal_l0
-from .utils import l0_metric
+from .utils import l0_pixel_metric
 
 
 class ProximalL0Attack(ProximalGradientOptimizerAttack):
@@ -19,8 +19,7 @@ class ProximalL0Attack(ProximalGradientOptimizerAttack):
     def lp_metric(self, u, keepdims=False):
         """Compute l0 metric pixelwise (excluding channel dimension)
         """
-        u_c = tf.reduce_max(tf.abs(u), axis=self.channel_dim)
-        return l0_metric(u_c, keepdims=keepdims)
+        return l0_pixel_metric(u, channel_dim=self.channel_dim, keepdims=keepdims)
 
     def proximity_operator(self, u, l):
         """Compute l0 proximal operator pixelwise (excluding channel dimension)
