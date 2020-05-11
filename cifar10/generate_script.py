@@ -249,7 +249,7 @@ def test_bethge_config(norm, runs=1, master_seed=1):
 
     for model, init in itertools.product(models, ["linear_search", "dataset"]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_bethge/test_{norm}_{type}"
+        working_dir = f"../results/cifar10_bethge/test_{type}_{norm}"
         name = f"cifar10_bethge_{type}_{norm}_{init}_"
         attack_args.update({
             'name': name,
