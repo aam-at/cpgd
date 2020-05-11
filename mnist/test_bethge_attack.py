@@ -10,19 +10,17 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from tensorboard.plugins.hparams import api as hp
-
-from data import load_mnist
-from foolbox.attacks import (L0BrendelBethgeAttack, L1BrendelBethgeAttack,
-                             L2BrendelBethgeAttack,
+from foolbox.attacks import (DatasetAttack, L0BrendelBethgeAttack,
+                             L1BrendelBethgeAttack, L2BrendelBethgeAttack,
                              LinearSearchBlendedUniformNoiseAttack,
                              LinfinityBrendelBethgeAttack)
 from foolbox.models import TensorFlowModel
-from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
-                       import_kwargs_as_flags, l0_metric, l1_metric, l2_metric,
-                       li_metric, log_metrics, make_input_pipeline,
-                       register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
+
+from data import load_mnist
+from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
+                       l1_metric, l2_metric, li_metric, log_metrics,
+                       make_input_pipeline, register_experiment_flags,
+                       reset_metrics, save_images, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
@@ -36,8 +34,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-
-flags.DEFINE_integer("print_frequency", 1, "summarize frequency")
+flags.DEFINE_string("attack_init", "linear_search", "attack to init Bethge attack")
 
 FLAGS = flags.FLAGS
 
@@ -82,7 +79,7 @@ def main(unused_args):
         'li': li_metric
     }
     test_thresholds = {
-        'l0': [10, 30, 50, 80, 100],
+        'l0': np.linspace(2, 50, 49),
         'l1':
             [2.0, 2.5, 4.0, 5.0, 6.0, 7.5, 8.0, 8.75, 10.0, 12.5, 16.25, 20.0],
         'l2': [0.5, 1.0, 1.5, 2.0, 2.5, 3.0],
@@ -90,11 +87,20 @@ def main(unused_args):
             [0.03, 0.05, 0.07, 0.09, 0.1, 0.11, 0.15, 0.2, 0.25, 0.3, 0.325, 0.35]
     }
     # attacks
+    if FLAGS.attack_init == 'dataset':
+        a0 = DatasetAttack()
+        for batch_index, (image, label) in enumerate(test_ds, 1):
+            a0.feed(fclassifier, image)
+    elif FLAGS.attack_init == 'linear_search':
+        a0 = LinearSearchBlendedUniformNoiseAttack()
+    else:
+        raise ValueError()
     attack_kwargs = {
         kwarg.replace('attack_', ''): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith('attack_')
+        if kwarg not in ['attack_init']
     }
-    olp = lp_attacks[FLAGS.norm](init_attack=LinearSearchBlendedUniformNoiseAttack(), **attack_kwargs)
+    olp = lp_attacks[FLAGS.norm](init_attack=a0, **attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
@@ -121,11 +127,10 @@ def main(unused_args):
 
         # measure norm
         lp = lp_metrics[FLAGS.norm](image - image_lp)
+        is_adv = outs_lp["pred"] != label
         for threshold in test_thresholds[FLAGS.norm]:
-            acc_th = get_acc_for_lp_threshold(
-                lambda x: test_classifier(x)['logits'], image, image_lp, label,
-                lp, threshold)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](acc_th)
+            is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
+            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
         test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
         is_corr = outs['pred'] == label
@@ -139,9 +144,12 @@ def main(unused_args):
     y_list = []
     start_time = time.time()
     try:
-        is_completed = False
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_lp = test_step(image, label)
+            log_metrics(
+                test_metrics, "Batch results [{}, {:.2f}s]:".format(
+                    batch_index,
+                    time.time() - start_time))
             save_path = os.path.join(FLAGS.samples_dir,
                                      "epoch_orig-%d.png" % batch_index)
             save_images(image, save_path, data_format="NHWC")
@@ -151,47 +159,8 @@ def main(unused_args):
             # save adversarial data
             X_lp_list.append(X_lp)
             y_list.append(label)
-            if batch_index % FLAGS.print_frequency == 0:
-                log_metrics(
-                    test_metrics, "Batch results [{}, {:.2f}s]:".format(
-                        batch_index,
-                        time.time() - start_time))
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
-                is_completed = True
                 break
-        else:
-            is_completed = True
-        if is_completed:
-            # hyperparameter tuning
-            with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
-                # hyperparameters
-                hp_param_names = [
-                    kwarg for kwarg in dir(FLAGS)
-                    if kwarg.startswith('attack_')
-                ]
-                hp_metric_names = [
-                    f"final_{FLAGS.norm}", f"final_{FLAGS.norm}_corr"
-                ]
-                hp_params = [
-                    hp.HParam(hp_param_name)
-                    for hp_param_name in hp_param_names
-                ]
-                hp_metrics = [
-                    hp.Metric(hp_metric_name)
-                    for hp_metric_name in hp_metric_names
-                ]
-                hp.hparams_config(hparams=hp_params, metrics=hp_metrics)
-                hp.hparams({
-                    hp_param_name: getattr(FLAGS, hp_param_name)
-                    for hp_param_name in hp_param_names
-                })
-                final_lp = test_metrics[f"{FLAGS.norm}"].result()
-                tf.summary.scalar(f"final_{FLAGS.norm}", final_lp, step=1)
-                final_lp_corr = test_metrics[f"{FLAGS.norm}_corr"].result()
-                tf.summary.scalar(f"final_{FLAGS.norm}_corr",
-                                  final_lp_corr,
-                                  step=1)
-                tf.summary.flush()
     except:
         logging.info("Stopping after {}".format(batch_index))
     finally:
@@ -208,6 +177,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
-    assert args.norm in ['l0', 'l1', 'l2', 'li']
+    assert args.norm in lp_attacks
     import_kwargs_as_flags(lp_attacks[args.norm].__init__, 'attack_')
     absl.app.run(main)

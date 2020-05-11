@@ -230,19 +230,26 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
 
 def test_bethge_config(norm, runs=1, master_seed=1):
     assert norm in ['l0', 'li', 'l1', 'l2']
-    num_images = {'l0': 10, 'li': 10, 'l1': 10, 'l2': 5}[norm]
-    attack_args = {'norm': norm, 'num_images': num_images, 'seed': 1}
-    name = "mnist_bethge_"
+    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    batch_size = 100
+    attack_args = {
+        'norm': norm,
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
 
-    for model in models:
+    for model, init in itertools.product(models, ["linear_search", "dataset"]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_bethge/test_{norm}_{type}"
+        name = f"mnist_bethge_{type}_{norm}_{init}_"
         attack_args0 = attack_args.copy()
         attack_args0.update({
             'name': name,
             'norm': norm,
             'load_from': model,
-            'working_dir': working_dir
+            'working_dir': working_dir,
+            'attack_init': init,
         })
         print(generate_test_bethge_lp(**attack_args0))
 
