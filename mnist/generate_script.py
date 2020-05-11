@@ -10,7 +10,7 @@ from absl import flags
 
 from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.generate_script import format_name, generate_test_optimizer
-from lib.parse_logs import parse_test_optimizer_log
+from lib.parse_logs import parse_test_log
 from lib.utils import ConstantDecay, LinearDecay, import_klass_kwargs_as_flags
 
 models = [
@@ -189,7 +189,7 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
         defined_flags = script_module.FLAGS._flags().keys()
         export_test_params=[
             flag for flag in defined_flags if flag.startswith("attack_")]
-        df = parse_test_optimizer_log(
+        df = parse_test_log(
             Path(working_dir) / f"mnist_{type}_{attack}_",
             export_test_params=export_test_params)
         df = df.sort_values(norm)
@@ -239,22 +239,29 @@ def test_bethge_config(norm, runs=1, master_seed=1):
         'seed': 1
     }
 
-    for model, init in itertools.product(models, ["linear_search", "dataset"]):
+    existing_names = []
+    for model, init in itertools.product(
+            models, ["linear_search", "dataset"]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_bethge/test_{type}_{norm}"
-        name = f"mnist_bethge_{type}_{norm}_{init}_"
-        attack_args0 = attack_args.copy()
-        attack_args0.update({
-            'name': name,
+        attack_args.update({
             'norm': norm,
             'load_from': model,
             'working_dir': working_dir,
             'attack_init': init,
         })
-        print(generate_test_bethge_lp(**attack_args0))
+        name = f"mnist_bethge_{type}_{norm}_{init}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_bethge_lp(**attack_args))
 
 
 if __name__ == '__main__':
+    # for norm in ['l0', 'l1', 'l2', 'li']:
+    #     test_bethge_config(norm)
     # test_random()
     from test_optimizer_lp_madry import lp_attacks
     import test_optimizer_lp_madry
