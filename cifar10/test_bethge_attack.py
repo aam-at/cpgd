@@ -36,6 +36,7 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
 flags.DEFINE_string("attack_init", "linear_search", "attack to init Bethge attack")
+flags.DEFINE_integer("attack_init_steps", 10000, "number of steps for init attack")
 flags.DEFINE_bool("attack_l0_pixel_metric", True, "use l0 pixel metric")
 
 FLAGS = flags.FLAGS
@@ -99,13 +100,14 @@ def main(unused_args):
         for batch_index, (image, label) in enumerate(test_ds, 1):
             a0.feed(fclassifier, image)
     elif FLAGS.attack_init == "linear_search":
-        a0 = LinearSearchBlendedUniformNoiseAttack()
+        a0 = LinearSearchBlendedUniformNoiseAttack(
+            steps=FLAGS.attack_init_steps)
     else:
         raise ValueError()
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
-        for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
-        if kwarg not in ["attack_init", "attack_l0_pixel_metric"]
+        for kwarg in dir(FLAGS) if kwarg.startswith("attack_") if kwarg not in
+        ["attack_init", "attack_init_steps", "attack_l0_pixel_metric"]
     }
     olp = lp_attacks[FLAGS.norm](init_attack=a0, **attack_kwargs)
 
