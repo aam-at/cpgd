@@ -50,7 +50,6 @@ lp_attacks = {
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-    assert FLAGS.load_from is not None
 
     assert FLAGS.load_from is not None
     assert FLAGS.data_dir is not None
@@ -76,12 +75,10 @@ def main(unused_args):
                                                   dtype=np.float32))
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from,
-               classifier.trainable_variables,
-               model_type=model_type)
+    load_tsipras(FLAGS.load_from, classifier.variables)
 
     lp_metrics = {
         "l0": l0_pixel_metric if FLAGS.attack_l0_pixel_metric else l0_metric,
@@ -105,7 +102,8 @@ def main(unused_args):
     # init attacks
     a0 = LinearSearchBlendedUniformNoiseAttack()
     a0_2 = DatasetAttack()
-    for image, _ in test_ds:
+    val_ds.reset_state()
+    for image, _ in val_ds:
         a0_2.feed(fclassifier, image)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
@@ -163,7 +161,8 @@ def main(unused_args):
     y_list = []
     start_time = time.time()
     try:
-        for batch_index, (image, label) in enumerate(test_ds, 1):
+        val_ds.reset_state()
+        for batch_index, (image, label) in enumerate(val_ds, 1):
             X_lp = test_step(image, label)
             log_metrics(
                 test_metrics,
