@@ -104,7 +104,8 @@ def main(unused_args):
                                      image_adv_i, image_adv)
                 bestlp = tf.minimum(bestlp, l0)
         elif FLAGS.attack_targets == 'second':
-            masked_logits = tf.where(tf.cast(label_onehot, tf.bool), -np.inf, outs['logits'])
+            masked_logits = tf.where(tf.cast(label_onehot, tf.bool), -np.inf,
+                                     outs['logits'])
             target = tf.argsort(masked_logits, direction='DESCENDING')[:, 0]
             target_onehot = tf.one_hot(target, num_classes)
             image_adv = jsma.generate(image, y_target=target_onehot)
