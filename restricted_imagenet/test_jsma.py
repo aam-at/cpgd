@@ -136,7 +136,7 @@ def main(unused_args):
     y_list = []
     start_time = time.time()
     try:
-        for batch_index, (image, label) in enumerate(test_ds, 1):
+        for batch_index, (image, label) in enumerate(val_ds, 1):
             X_lp = test_step(image, label)
             log_metrics(
                 test_metrics,
