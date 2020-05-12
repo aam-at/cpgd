@@ -276,14 +276,15 @@ def test_jsma_config(runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model in models:
+    for model, targets in itertools.product(models, ["random", "all", "second"]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_jsma/test_{type}_"
+        working_dir = f"../results/mnist_jsma/test_{type}"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
+            'attack_targets': targets
         })
-        name = f"mnist_jsma_{type}_"
+        name = f"mnist_jsma_{type}_{targets}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
