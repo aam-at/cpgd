@@ -261,14 +261,12 @@ def test_bethge_config(norm, runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, l0_pixel in itertools.product(models, [True, False]):
-        type = Path(model).stem.split("_")[-1]
+    for type, l0_pixel in itertools.product(models.keys(), [True, False]):
         working_dir = f"../results/imagenet_bethge/test_{type}_{norm}"
         attack_args.update({
             'norm': norm,
-            'load_from': model,
+            'load_from': models[type],
             'working_dir': working_dir,
-            'attack_init': init,
         })
         name = f"imagenet_bethge_{type}_{norm}_"
         if norm == 'l0':

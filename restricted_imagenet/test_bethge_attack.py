@@ -29,6 +29,7 @@ from utils import load_tsipras
 # general experiment parameters
 register_experiment_flags(working_dir="../results/imagenet/test_brendel_lp")
 flags.DEFINE_string("norm", "l1", "lp-norm attack")
+flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -62,6 +63,7 @@ def main(unused_args):
     val_ds = get_imagenet_dataflow(
         FLAGS.data_dir, FLAGS.batch_size,
         augmentors, mode='val')
+    val_ds.reset_state()
 
     # models
     num_classes = len(TsiprasCNN.LABEL_RANGES)
@@ -102,7 +104,6 @@ def main(unused_args):
     # init attacks
     a0 = LinearSearchBlendedUniformNoiseAttack()
     a0_2 = DatasetAttack()
-    val_ds.reset_state()
     for image, _ in val_ds:
         a0_2.feed(fclassifier, image)
 
@@ -161,7 +162,6 @@ def main(unused_args):
     y_list = []
     start_time = time.time()
     try:
-        val_ds.reset_state()
         for batch_index, (image, label) in enumerate(val_ds, 1):
             X_lp = test_step(image, label)
             log_metrics(
