@@ -109,19 +109,19 @@ def main(unused_args):
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_l0"](acc_l0)
-        test_metrics[f"conf_l0"](outs_l0["conf"])
+        test_metrics["acc_l0"](acc_l0)
+        test_metrics["conf_l0"](outs_l0["conf"])
 
         # measure norm
         l0 = l0_metric(image - image_adv)
         is_adv = outs_l0["pred"] != label
         for threshold in test_thresholds["l0"]:
             is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
-            test_metrics[f"acc_l0_%.2f" % threshold](~is_adv_at_th)
-        test_metrics[f"l0"](l0)
+            test_metrics["acc_l0_%.2f" % threshold](~is_adv_at_th)
+        test_metrics["l0"](l0)
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
-        test_metrics[f"l0_corr"](l0[is_corr])
+        test_metrics["l0_corr"](l0[is_corr])
 
         return image_adv
 

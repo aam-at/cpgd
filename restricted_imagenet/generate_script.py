@@ -294,7 +294,7 @@ def test_jsma_config(runs=1, master_seed=1):
 
     existing_names = []
     for type, l0_pixel in itertools.product(models.keys(), [True, False]):
-        working_dir = f"../results/imagenet_jsma/test_{type}_"
+        working_dir = f"../results/imagenet_jsma/test_{type}"
         attack_args.update({
             'load_from': models[type],
             'working_dir': working_dir,

@@ -76,7 +76,7 @@ def main(unused_args):
     load_tsipras(FLAGS.load_from, classifier.variables)
 
     # saliency map method attack
-    l0_metric = l0_pixel_metric if FLAGS.attack_l0_pixel_metric else l0_metric
+    metric = l0_pixel_metric if FLAGS.attack_l0_pixel_metric else l0_metric
     jsma = SaliencyMapMethod(MadryModel())
     jsma.parse_params(theta=FLAGS.attack_theta,
                       gamma=FLAGS.attack_gamma,
@@ -114,19 +114,19 @@ def main(unused_args):
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_l0"](acc_l0)
-        test_metrics[f"conf_l0"](outs_l0["conf"])
+        test_metrics["acc_l0"](acc_l0)
+        test_metrics["conf_l0"](outs_l0["conf"])
 
         # measure norm
-        l0 = l0_metric(image - image_adv)
+        l0 = metric(image - image_adv)
         is_adv = outs_l0["pred"] != label
         for threshold in test_thresholds["l0"]:
             is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
-            test_metrics[f"acc_l0_%.2f" % threshold](~is_adv_at_th)
-        test_metrics[f"l0"](l0)
+            test_metrics["acc_l0_%.2f" % threshold](~is_adv_at_th)
+        test_metrics["l0"](l0)
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
-        test_metrics[f"l0_corr"](l0[is_corr])
+        test_metrics["l0_corr"](l0[is_corr])
 
         return image_adv
 
@@ -148,7 +148,7 @@ def main(unused_args):
                                      "epoch_orig-%d.png" % batch_index)
             save_images(image, save_path, data_format="NHWC")
             save_path = os.path.join(FLAGS.samples_dir,
-                                     f"epoch_l0-%d.png" % batch_index)
+                                     "epoch_l0-%d.png" % batch_index)
             save_images(X_lp, save_path, data_format="NHWC")
             # save adversarial data
             X_lp_list.append(X_lp)

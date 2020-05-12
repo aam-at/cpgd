@@ -288,7 +288,7 @@ def test_jsma_config(runs=1, master_seed=1):
     existing_names = []
     for model, l0_pixel in itertools.product(models, [True, False]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_jsma/test_{type}_"
+        working_dir = f"../results/cifar10_jsma/test_{type}"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
