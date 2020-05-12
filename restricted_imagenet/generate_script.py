@@ -251,21 +251,35 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
 
 def test_bethge_config(norm, runs=1, master_seed=1):
     assert norm in ['l0', 'li', 'l1', 'l2']
-    num_images = {'l0': 10, 'li': 10, 'l1': 10, 'l2': 5}[norm]
-    attack_args = {'norm': norm, 'num_images': num_images, 'seed': 1}
-    name = "imagenet_bethge_"
+    num_images = {'l0': 500, 'li': 500, 'l1': 500, 'l2': 500}[norm]
+    batch_size = 50
+    attack_args = {
+        'norm': norm,
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
 
-    for model in models:
+    existing_names = []
+    for model, l0_pixel in itertools.product(models, [True, False]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/imagenet_bethge/test_{norm}_{type}"
-        attack_args0 = attack_args.copy()
-        attack_args0.update({
-            'name': name,
+        working_dir = f"../results/imagenet_bethge/test_{type}_{norm}"
+        attack_args.update({
             'norm': norm,
             'load_from': model,
-            'working_dir': working_dir
+            'working_dir': working_dir,
+            'attack_init': init,
         })
-        print(generate_test_bethge_lp(**attack_args0))
+        name = f"imagenet_bethge_{type}_{norm}_"
+        if norm == 'l0':
+            attack_args["attack_l0_pixel_metric"] = l0_pixel
+            name = f"{name}{'pixel_' if l0_pixel else ''}"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_bethge_lp(**attack_args))
 
 
 if __name__ == '__main__':

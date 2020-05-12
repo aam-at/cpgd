@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import logging
 import os
+import sys
 import time
 from pathlib import Path
 
@@ -35,8 +36,6 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-flags.DEFINE_string("attack_init", "linear_search", "attack to init Bethge attack")
-flags.DEFINE_integer("attack_init_steps", 10000, "number of steps for init attack")
 flags.DEFINE_bool("attack_l0_pixel_metric", True, "use l0 pixel metric")
 
 FLAGS = flags.FLAGS
@@ -96,21 +95,17 @@ def main(unused_args):
         'li': [1 / 255, 1.5 / 255, 2 / 255, 2.5 / 255, 3 / 255, 4 / 255, 6 / 255, 8 / 255, 10 / 255]
     }
     # attacks
-    if FLAGS.attack_init == "dataset":
-        a0 = DatasetAttack()
-        for batch_index, (image, label) in enumerate(test_ds, 1):
-            a0.feed(fclassifier, image)
-    elif FLAGS.attack_init == "linear_search":
-        a0 = LinearSearchBlendedUniformNoiseAttack(
-            steps=FLAGS.attack_init_steps)
-    else:
-        raise ValueError()
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
-        for kwarg in dir(FLAGS) if kwarg.startswith("attack_") if kwarg not in
-        ["attack_init", "attack_init_steps", "attack_l0_pixel_metric"]
+        for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
+        if kwarg not in ["attack_l0_pixel_metric"]
     }
-    olp = lp_attacks[FLAGS.norm](init_attack=a0, **attack_kwargs)
+    olp = lp_attacks[FLAGS.norm](**attack_kwargs)
+    # init attacks
+    a0 = LinearSearchBlendedUniformNoiseAttack()
+    a0_2 = DatasetAttack()
+    for image, _ in test_ds:
+        a0_2.feed(fclassifier, image)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
@@ -118,7 +113,20 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
-        image_lp, _, _ = olp(fclassifier, image, label, epsilons=None)
+        # get attack starting points
+        x0 = a0.run(fclassifier, image, label)
+        is_adv = tf.argmax(fclassifier(x0), axis=-1) != label
+        # run dataset attack if LinearSearchBlendedUniformNoiseAttack fails
+        if not tf.reduce_all(is_adv):
+            x0 = tf.where(
+                tf.reshape(
+                    tf.argmax(fclassifier(x0), axis=-1) != label,
+                    (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image, label))
+        image_lp, _, _ = olp(fclassifier,
+                             image,
+                             label,
+                             starting_points=x0,
+                             epsilons=None)
 
         outs = test_classifier(image)
         outs_lp = test_classifier(image_lp)
@@ -173,17 +181,21 @@ def main(unused_args):
             y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
-    except:
+    except KeyboardInterrupt:
         logging.info("Stopping after {}".format(batch_index))
+    except Exception as e:
+        raise
     finally:
-        log_metrics(
-            test_metrics,
-            "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
-                                                 batch_index),
-        )
-        X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-        y_all = tf.concat(y_list, axis=0).numpy()
-        np.savez(Path(FLAGS.working_dir) / "X_adv", X_adv=X_lp_all, y=y_all)
+        e = sys.exc_info()[1]
+        if e is None or isinstance(e, KeyboardInterrupt):
+            log_metrics(
+                test_metrics,
+                "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
+                                                    batch_index),
+            )
+            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
+            y_all = tf.concat(y_list, axis=0).numpy()
+            np.savez(Path(FLAGS.working_dir) / "X_adv", X_adv=X_lp_all, y=y_all)
 
 
 if __name__ == "__main__":

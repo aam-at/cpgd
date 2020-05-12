@@ -245,17 +245,15 @@ def test_bethge_config(norm, runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, init in itertools.product(
-            models, ["linear_search", "dataset"]):
+    for model in models:
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_bethge/test_{type}_{norm}"
         attack_args.update({
             'norm': norm,
             'load_from': model,
             'working_dir': working_dir,
-            'attack_init': init,
         })
-        name = f"mnist_bethge_{type}_{norm}_{init}_"
+        name = f"mnist_bethge_{type}_{norm}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
