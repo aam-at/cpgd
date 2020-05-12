@@ -1,6 +1,5 @@
 from __future__ import absolute_import, division, print_function
 
-import argparse
 import logging
 import os
 import sys
@@ -12,26 +11,21 @@ import numpy as np
 import tensorflow as tf
 from absl import flags
 
+from cleverhans.attacks.saliency_map_method import SaliencyMapMethod
+from cleverhans.model import Model
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from foolbox.attacks import (DatasetAttack, L0BrendelBethgeAttack,
-                             L1BrendelBethgeAttack, L2BrendelBethgeAttack,
-                             LinearSearchBlendedUniformNoiseAttack,
-                             LinfinityBrendelBethgeAttack)
-from foolbox.models import TensorFlowModel
 from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
-                       l0_pixel_metric, l1_metric, l2_metric, li_metric,
-                       log_metrics, make_input_pipeline,
+                       l0_pixel_metric, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/imagenet/test_brendel_lp")
-flags.DEFINE_string("norm", "l1", "lp-norm attack")
-flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
+register_experiment_flags(working_dir="../results/cifar10/test_jsma")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
+flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
@@ -39,15 +33,10 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
 flags.DEFINE_bool("attack_l0_pixel_metric", True, "use l0 pixel metric")
+flags.DEFINE_float("attack_theta", 1.0, "theta for jsma")
+flags.DEFINE_float("attack_gamma", 1.0, "gamma for jsma")
 
 FLAGS = flags.FLAGS
-
-lp_attacks = {
-    "l0": L0BrendelBethgeAttack,
-    "l1": L1BrendelBethgeAttack,
-    "l2": L2BrendelBethgeAttack,
-    "li": LinfinityBrendelBethgeAttack,
-}
 
 
 def main(unused_args):
@@ -57,7 +46,7 @@ def main(unused_args):
     assert FLAGS.data_dir is not None
     if FLAGS.data_dir.startswith("$"):
         FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
-    setup_experiment(f"madry_bethge_{FLAGS.norm}_test", [__file__])
+    setup_experiment(f"madry_jsma_test", [__file__])
 
     # data
     augmentors = fbresnet_augmentor(224, training=False)
@@ -73,9 +62,12 @@ def main(unused_args):
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
 
-    fclassifier = TensorFlowModel(lambda x: test_classifier(x)["logits"],
-                                  bounds=np.array((0.0, 1.0),
-                                                  dtype=np.float32))
+    class MadryModel(Model):
+        def get_logits(self, x, **kwargs):
+            return test_classifier(x, **kwargs)["logits"]
+
+        def get_probs(self, x, **kwargs):
+            return test_classifier(x, **kwargs)["prob"]
 
     # load classifier
     X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
@@ -83,73 +75,60 @@ def main(unused_args):
     classifier(tf.zeros(X_shape))
     load_tsipras(FLAGS.load_from, classifier.variables)
 
-    lp_metrics = {
-        "l0": l0_pixel_metric if FLAGS.attack_l0_pixel_metric else l0_metric,
-        "l1": l1_metric,
-        "l2": l2_metric,
-        "li": li_metric,
-    }
-    # attacks
-    attack_kwargs = {
-        kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
-        for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
-        if kwarg not in ["attack_l0_pixel_metric"]
-    }
-    olp = lp_attacks[FLAGS.norm](**attack_kwargs)
-    # init attacks
-    a0 = LinearSearchBlendedUniformNoiseAttack()
-    a0_2 = DatasetAttack()
-    for image, _ in val_ds:
-        a0_2.feed(fclassifier, image)
+    # saliency map method attack
+    l0_metric = l0_pixel_metric if FLAGS.attack_l0_pixel_metric else l0_metric
+    jsma = SaliencyMapMethod(MadryModel())
+    jsma.parse_params(theta=FLAGS.attack_theta,
+                      gamma=FLAGS.attack_gamma,
+                      clip_min=0.0,
+                      clip_max=1.0)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
 
     test_metrics = MetricsDictionary()
 
+    @tf.function
     def test_step(image, label):
-        # get attack starting points
-        x0 = a0.run(fclassifier, image, label)
-        is_adv = tf.argmax(fclassifier(x0), axis=-1) != label
-        # run dataset attack if LinearSearchBlendedUniformNoiseAttack fails
-        if not tf.reduce_all(is_adv):
-            x0 = tf.where(
-                tf.reshape(
-                    tf.argmax(fclassifier(x0), axis=-1) != label,
-                    (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image, label))
-        image_lp, _, _ = olp(fclassifier,
-                             image,
-                             label,
-                             starting_points=x0,
-                             epsilons=None)
+        label_onehot = tf.one_hot(label, num_classes)
+        indices = tf.argsort(label_onehot)[:, :-1]
+        bestlp = np.inf * tf.ones(image.shape[0])
+        image_adv = tf.identity(image)
+        for i in tf.range(num_classes - 1):
+            target_onehot = tf.one_hot(indices[:, i], num_classes)
+            image_adv_i = jsma.generate(image, y_target=target_onehot)
+            l0 = l0_metric(image_adv_i - image)
+            image_adv = tf.where(tf.reshape(l0 < bestlp, (-1, 1, 1, 1)),
+                                 image_adv_i, image_adv)
+            bestlp = tf.minimum(bestlp, l0)
 
         outs = test_classifier(image)
-        outs_lp = test_classifier(image_lp)
+        outs_l0 = test_classifier(image_adv)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
-        acc_lp = acc_fn(label, outs_lp["logits"])
+        acc_l0 = acc_fn(label, outs_l0["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_{FLAGS.norm}"](acc_lp)
-        test_metrics[f"conf_{FLAGS.norm}"](outs_lp["conf"])
+        test_metrics[f"acc_l0"](acc_l0)
+        test_metrics[f"conf_l0"](outs_l0["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_lp)
-        is_adv = outs_lp["pred"] != label
-        for threshold in test_thresholds[FLAGS.norm]:
-            is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
-        test_metrics[f"{FLAGS.norm}"](lp)
+        l0 = l0_metric(image - image_adv)
+        is_adv = outs_l0["pred"] != label
+        for threshold in test_thresholds["l0"]:
+            is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
+            test_metrics[f"acc_l0_%.2f" % threshold](~is_adv_at_th)
+        test_metrics[f"l0"](l0)
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
+        test_metrics[f"l0_corr"](l0[is_corr])
 
-        return image_lp
+        return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
@@ -157,7 +136,7 @@ def main(unused_args):
     y_list = []
     start_time = time.time()
     try:
-        for batch_index, (image, label) in enumerate(val_ds, 1):
+        for batch_index, (image, label) in enumerate(test_ds, 1):
             X_lp = test_step(image, label)
             log_metrics(
                 test_metrics,
@@ -168,8 +147,8 @@ def main(unused_args):
             save_path = os.path.join(FLAGS.samples_dir,
                                      "epoch_orig-%d.png" % batch_index)
             save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_{FLAGS.norm}-%d.png" % batch_index)
+            save_path = os.path.join(FLAGS.samples_dir,
+                                     f"epoch_l0-%d.png" % batch_index)
             save_images(X_lp, save_path, data_format="NHWC")
             # save adversarial data
             X_lp_list.append(X_lp)
@@ -186,17 +165,14 @@ def main(unused_args):
             log_metrics(
                 test_metrics,
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
-                                                    batch_index),
+                                                     batch_index),
             )
             X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
             y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv", X_adv=X_lp_all, y=y_all)
+            np.savez(Path(FLAGS.working_dir) / "X_adv",
+                     X_adv=X_lp_all,
+                     y=y_all)
 
 
 if __name__ == "__main__":
-    parser = argparse.ArgumentParser()
-    parser.add_argument("--norm", default=None, type=str)
-    args, _ = parser.parse_known_args()
-    assert args.norm in lp_attacks
-    import_kwargs_as_flags(lp_attacks[args.norm].__init__, "attack_")
     absl.app.run(main)

@@ -13,7 +13,8 @@ from absl import flags
 from tensorboard.plugins.hparams import api as hp
 
 import lib
-from data import get_imagenet_dataflow, fbresnet_augmentor
+from config import test_thresholds
+from data import fbresnet_augmentor, get_imagenet_dataflow
 from lib.attack_l0 import ProximalL0Attack
 from lib.attack_l1 import GradientL1Attack, ProximalL1Attack
 from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
@@ -21,8 +22,8 @@ from lib.attack_li import ProximalLiAttack
 from lib.attack_utils import AttackOptimizationLoop
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
                        import_klass_kwargs_as_flags, log_metrics,
-                       register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
+                       register_experiment_flags, reset_metrics, save_images,
+                       setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
@@ -106,12 +107,6 @@ def main(unused_args):
     allp = AttackOptimizationLoop(alp, **attack_loop_kwargs)
 
     # test metrics
-    test_thresholds = {
-        "l0": [2, 4, 5, 6, 8, 10, 15, 20, 25, 30, 35, 45],
-        'l1': [5, 15, 16, 25, 27, 38, 40, 49, 50, 60, 100, 150, 200, 250],
-        'l2': [0.2, 0.4, 0.6, 0.8, 1.0, 2, 3, 4, 5, 6],
-        'li': np.array([0.25, 0.5, 0.75, 1, 1.25, 2, 4, 6, 8, 10]) / 255.0
-    }
     test_metrics = MetricsDictionary()
 
     @tf.function
