@@ -2,8 +2,9 @@ import multiprocessing
 
 import cv2
 import numpy as np
-from tensorpack import (BatchData, MultiThreadMapData, PrefetchDataZMQ,
-                        dataset, imgaug)
+import tensorflow as tf
+from tensorpack import (BatchData, MapData, MultiThreadMapData,
+                        PrefetchDataZMQ, dataset, imgaug)
 
 
 def fbresnet_augmentor(target_shape, training=True):
@@ -55,4 +56,9 @@ def get_imagenet_dataflow(
         ds = MultiThreadMapData(ds, cpu, mapf, buffer_size=2000, strict=True)
         ds = BatchData(ds, batch_size, remainder=True)
         ds = PrefetchDataZMQ(ds, 1)
+
+        def maptf(dp):
+            im, cls = dp
+            return tf.convert_to_tensor(im), tf.convert_to_tensor(cls)
+        ds = MapData(ds, maptf)
     return ds
