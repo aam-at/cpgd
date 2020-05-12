@@ -300,7 +300,7 @@ def test_jsma_config(runs=1, master_seed=1):
             'working_dir': working_dir,
             'attack_l0_pixel_metric': l0_pixel,
         })
-        name = f"imagenet_jsma_{type}_{'pixel_' if l0_pixel else ''}"
+        name = f"imagenet_jsma_{type}_{targets}_{'pixel_' if l0_pixel else ''}"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:

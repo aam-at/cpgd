@@ -34,6 +34,7 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 flags.DEFINE_bool("attack_l0_pixel_metric", True, "use l0 pixel metric")
 flags.DEFINE_float("attack_theta", 1.0, "theta for jsma")
 flags.DEFINE_float("attack_gamma", 1.0, "gamma for jsma")
+flags.DEFINE_string("attack_targets", "second", "how to select attack target? (choice: 'random', 'second', 'all')")
 
 FLAGS = flags.FLAGS
 
@@ -89,18 +90,29 @@ def main(unused_args):
     @tf.function
     def test_step(image, label):
         label_onehot = tf.one_hot(label, num_classes)
-        indices = tf.argsort(label_onehot)[:, :-1]
-        bestlp = np.inf * tf.ones(image.shape[0])
-        image_adv = tf.identity(image)
-        for i in tf.range(num_classes - 1):
-            target_onehot = tf.one_hot(indices[:, i], num_classes)
-            image_adv_i = jsma.generate(image, y_target=target_onehot)
-            l0 = l0_metric(image_adv_i - image)
-            image_adv = tf.where(tf.reshape(l0 < bestlp, (-1, 1, 1, 1)),
-                                 image_adv_i, image_adv)
-            bestlp = tf.minimum(bestlp, l0)
-
         outs = test_classifier(image)
+        is_corr = outs['pred'] == label
+
+        if FLAGS.attack_targets == 'random':
+            image_adv = jsma.generate(image, y=label_onehot)
+        elif FLAGS.attack_targets == 'all':
+            indices = tf.argsort(label_onehot)[:, :-1]
+            bestlp = tf.where(is_corr, np.inf, 0.0)
+            image_adv = tf.identity(image)
+            for i in tf.range(num_classes - 1):
+                target_onehot = tf.one_hot(indices[:, i], num_classes)
+                image_adv_i = jsma.generate(image, y_target=target_onehot)
+                l0 = l0_metric(image_adv_i - image)
+                image_adv = tf.where(tf.reshape(l0 < bestlp, (-1, 1, 1, 1)),
+                                     image_adv_i, image_adv)
+                bestlp = tf.minimum(bestlp, l0)
+        elif FLAGS.attack_targets == 'second':
+            masked_logits = tf.where(tf.cast(label_onehot, tf.bool), -np.inf,
+                                     outs['logits'])
+            target = tf.argsort(masked_logits, direction='DESCENDING')[:, 0]
+            target_onehot = tf.one_hot(target, num_classes)
+            image_adv = jsma.generate(image, y_target=target_onehot)
+
         outs_l0 = test_classifier(image_adv)
 
         # metrics
