@@ -67,12 +67,13 @@ def main(unused_args):
     num_classes = 10
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
     classifier = MadryCNN(model_type=model_type)
-    fclassifier = TensorFlowModel(lambda x: classifier(x)["logits"],
-                                  bounds=np.array((0.0, 1.0),
-                                                  dtype=np.float64))
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
+
+    fclassifier = TensorFlowModel(lambda x: test_classifier(x)["logits"],
+                                  bounds=np.array((0.0, 1.0),
+                                                  dtype=np.float32))
 
     # load classifier
     X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])

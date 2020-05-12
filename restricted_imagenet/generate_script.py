@@ -11,7 +11,7 @@ from absl import flags
 
 from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.generate_script import format_name, generate_test_optimizer
-from lib.parse_logs import parse_test_optimizer_log
+from lib.parse_logs import parse_test_log
 from lib.utils import ConstantDecay, LinearDecay, import_klass_kwargs_as_flags
 
 models = {
