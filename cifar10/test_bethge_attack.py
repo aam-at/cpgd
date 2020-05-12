@@ -11,13 +11,14 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
+
+from config import test_thresholds
+from data import load_cifar10
 from foolbox.attacks import (DatasetAttack, L0BrendelBethgeAttack,
                              L1BrendelBethgeAttack, L2BrendelBethgeAttack,
                              LinearSearchBlendedUniformNoiseAttack,
                              LinfinityBrendelBethgeAttack)
 from foolbox.models import TensorFlowModel
-
-from data import load_cifar10
 from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
                        l0_pixel_metric, l1_metric, l2_metric, li_metric,
                        log_metrics, make_input_pipeline,
@@ -87,12 +88,6 @@ def main(unused_args):
         "l1": l1_metric,
         "l2": l2_metric,
         "li": li_metric,
-    }
-    test_thresholds = {
-        "l0": np.linspace(1, 200, 200),
-        'l1': [2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 8.75, 9.0, 10.0, 12.0, 12.5, 15.0, 16.25, 20.0],
-        'l2': [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1.0, 1.25],
-        'li': [1 / 255, 1.5 / 255, 2 / 255, 2.5 / 255, 3 / 255, 4 / 255, 6 / 255, 8 / 255, 10 / 255]
     }
     # attacks
     attack_kwargs = {
