@@ -13,11 +13,12 @@ from absl import flags
 
 from cleverhans.attacks.saliency_map_method import SaliencyMapMethod
 from cleverhans.model import Model
+from config import test_thresholds
 from data import load_cifar10
 from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
-                       log_metrics, make_input_pipeline,
+                       l0_pixel_metric, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment, l0_pixel_metric)
+                       setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
@@ -74,7 +75,6 @@ def main(unused_args):
 
     # saliency map method attack
     l0_metric = l0_pixel_metric if FLAGS.attack_l0_pixel_metric else l0_metric
-    l0_thresholds = np.linspace(1, 200, 200)
     jsma = SaliencyMapMethod(MadryModel())
     jsma.parse_params(theta=FLAGS.attack_theta,
                       gamma=FLAGS.attack_gamma,
@@ -118,7 +118,7 @@ def main(unused_args):
         # measure norm
         l0 = l0_metric(image - image_adv)
         is_adv = outs_l0["pred"] != label
-        for threshold in l0_thresholds:
+        for threshold in test_thresholds["l0"]:
             is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
             test_metrics[f"acc_l0_%.2f" % threshold](~is_adv_at_th)
         test_metrics[f"l0"](l0)

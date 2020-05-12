@@ -13,6 +13,7 @@ from absl import flags
 from tensorboard.plugins.hparams import api as hp
 
 import lib
+from config import test_thresholds
 from data import load_cifar10
 from lib.attack_l0 import ProximalL0Attack
 from lib.attack_l1 import GradientL1Attack, ProximalL1Attack
@@ -107,12 +108,6 @@ def main(unused_args):
     allp = AttackOptimizationLoop(alp, **attack_loop_kwargs)
 
     # test metrics
-    test_thresholds = {
-        "l0": [2, 4, 5, 6, 8, 10, 15, 20, 25, 30, 35, 45],
-        'l1': [2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 8.75, 9.0, 10.0, 12.0, 12.5, 15.0, 16.25, 20.0],
-        'l2': [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1.0, 1.25],
-        'li': [1 / 255, 1.5 / 255, 2 / 255, 2.5 / 255, 3 / 255, 4 / 255, 6 / 255, 8 / 255, 10 / 255]
-    }
     test_metrics = MetricsDictionary()
 
     @tf.function
