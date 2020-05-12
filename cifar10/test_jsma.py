@@ -13,16 +13,16 @@ from absl import flags
 
 from cleverhans.attacks.saliency_map_method import SaliencyMapMethod
 from cleverhans.model import Model
-from data import load_mnist
+from data import load_cifar10
 from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
                        log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
+                       setup_experiment, l0_pixel_metric)
 from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_jsma")
+register_experiment_flags(working_dir="../results/cifar10/test_jsma")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -30,6 +30,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
+flags.DEFINE_bool("attack_l0_pixel_metric", True, "use l0 pixel metric")
 flags.DEFINE_float("attack_theta", 1.0, "theta for jsma")
 flags.DEFINE_float("attack_gamma", 1.0, "gamma for jsma")
 
@@ -42,17 +43,16 @@ def main(unused_args):
     setup_experiment(f"madry_jsma_test", [__file__])
 
     # data
-    _, _, test_ds = load_mnist(FLAGS.validation_size,
-                               data_format="NHWC",
-                               seed=FLAGS.data_seed)
+    _, _, test_ds = load_cifar10(
+        FLAGS.validation_size, data_format="NHWC", seed=FLAGS.data_seed
+    )
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(test_ds,
-                                  shuffle=False,
-                                  batch_size=FLAGS.batch_size)
+    test_ds = make_input_pipeline(test_ds, shuffle=False, batch_size=FLAGS.batch_size)
 
     # models
     num_classes = 10
-    classifier = MadryCNN()
+    model_type = Path(FLAGS.load_from).stem.split("_")[-1]
+    classifier = MadryCNN(model_type=model_type)
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
@@ -65,13 +65,16 @@ def main(unused_args):
             return test_classifier(x, **kwargs)["prob"]
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
+    load_madry(FLAGS.load_from,
+               classifier.trainable_variables,
+               model_type=model_type)
 
     # saliency map method attack
-    l0_thresholds = np.linspace(1, 100, 100)
+    l0_metric = l0_pixel_metric if FLAGS.attack_l0_pixel_metric else l0_metric
+    l0_thresholds = np.linspace(1, 200, 200)
     jsma = SaliencyMapMethod(MadryModel())
     jsma.parse_params(theta=FLAGS.attack_theta,
                       gamma=FLAGS.attack_gamma,

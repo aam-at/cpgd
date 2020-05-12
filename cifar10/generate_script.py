@@ -34,6 +34,10 @@ def generate_test_bethge_lp(**kwargs):
     return generate_test_optimizer('test_bethge_attack', **kwargs)
 
 
+def generate_test_jsma(**kwargs):
+    return generate_test_optimizer('test_jsma', **kwargs)
+
+
 def test_random(runs=1, master_seed=1):
     existing_names = []
     for model, N, norm, eps, init in itertools.product(
@@ -246,7 +250,6 @@ def test_bethge_config(norm, runs=1, master_seed=1):
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 100
     attack_args = {
-        'norm': norm,
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
         'seed': 1
@@ -271,6 +274,33 @@ def test_bethge_config(norm, runs=1, master_seed=1):
             continue
         existing_names.append(name)
         print(generate_test_bethge_lp(**attack_args))
+
+
+def test_jsma_config(runs=1, master_seed=1):
+    num_images = 1000
+    batch_size = 100
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
+
+    existing_names = []
+    for model, l0_pixel in itertools.product(models, [True, False]):
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/cifar10_jsma/test_{type}_"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_l0_pixel_metric': l0_pixel,
+        })
+        name = f"cifar10_jsma_{type}_{'pixel_' if l0_pixel else ''}"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_jsma(**attack_args))
 
 
 if __name__ == '__main__':
