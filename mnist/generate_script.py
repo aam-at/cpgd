@@ -305,16 +305,17 @@ def one_pixel_attack_config(runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, iters in itertools.product(models, [100]):
+    for model, iters, es in itertools.product(models, [100], [0]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_jsma/test_{type}"
+        working_dir = f"../results/mnist_one_pixel/test_{type}"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
             'attack_iters': iters,
+            'attack_es': es,
         })
         for threshold in test_model_thresholds[type]["l0"]:
-            attack_args['attack_threshold'] = threshold,
+            attack_args['attack_threshold'] = threshold
             name = f"mnist_one_pixel_{type}_{iters}_{threshold}_"
             attack_args['name'] = name
             p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
