@@ -35,7 +35,7 @@ def generate_test_bethge_lp(**kwargs):
 
 
 def generate_test_jsma(**kwargs):
-    return generate_test_optimizer('test_jsma', **kwargs)
+    return generate_test_optimizer('test_jsma_attack', **kwargs)
 
 
 def test_random(runs=1, master_seed=1):
