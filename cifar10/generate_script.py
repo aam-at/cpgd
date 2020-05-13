@@ -246,7 +246,15 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
 
 
 def test_bethge_config(norm, runs=1, master_seed=1):
-    assert norm in ['l0', 'li', 'l1', 'l2']
+    import test_bethge_attack
+    from test_bethge_attack import lp_attacks
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_bethge_attack)
+    attack_klass = lp_attacks[norm]
+    import_klass_kwargs_as_flags(attack_klass, 'attack_')
+
+    assert norm in lp_attacks
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 100
     attack_args = {
@@ -256,18 +264,16 @@ def test_bethge_config(norm, runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, l0_pixel in itertools.product(models, [True, False]):
+    for model, lr in itertools.product(models, [1.0, 0.5, 0.1, 0.05, 0.01]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/cifar10_bethge/test_{type}_{norm}"
         attack_args.update({
             'norm': norm,
             'load_from': model,
             'working_dir': working_dir,
+            'attack_lr': lr
         })
-        name = f"cifar10_bethge_{type}_{norm}_"
-        if norm == 'l0':
-            attack_args["attack_l0_pixel_metric"] = l0_pixel
-            name = f"{name}{'pixel_' if l0_pixel else ''}"
+        name = f"cifar10_bethge_{type}_{norm}_lr{lr}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
