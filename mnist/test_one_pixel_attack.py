@@ -32,6 +32,7 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 # attack parameters
 flags.DEFINE_integer("attack_threshold", 1, "pixel attack threshold")
 flags.DEFINE_integer("attack_iters", 100, "number of attack iterations")
+flags.DEFINE_integer("attack_es", 0, "cmaes or dae")
 
 FLAGS = flags.FLAGS
 
@@ -69,7 +70,7 @@ def main(unused_args):
         input_shape=X_shape[1:],
         nb_classes=num_classes,
         clip_values=(0, 1))
-    a0 = PixelAttack(art_model, th=FLAGS.attack_threshold)
+    a0 = PixelAttack(art_model, th=FLAGS.attack_threshold, es=FLAGS.attack_es)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
