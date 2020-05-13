@@ -37,8 +37,6 @@ flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
-# attack parameters
-flags.DEFINE_bool("attack_l0_pixel_metric", True, "use l0 pixel metric")
 
 FLAGS = flags.FLAGS
 
@@ -84,7 +82,7 @@ def main(unused_args):
     load_tsipras(FLAGS.load_from, classifier.variables)
 
     lp_metrics = {
-        "l0": l0_pixel_metric if FLAGS.attack_l0_pixel_metric else l0_metric,
+        "l0": l0_pixel_metric,
         "l1": l1_metric,
         "l2": l2_metric,
         "li": li_metric,
@@ -145,6 +143,8 @@ def main(unused_args):
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
         test_metrics[f"{FLAGS.norm}"](lp)
+        if FLAGS.norm == "l0":
+            test_metrics[f"{FLAGS.norm}"](l0_metric(image - image_lp))
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
