@@ -14,6 +14,7 @@ import numpy as np
 import six
 import tensorflow as tf
 from absl import flags
+from absl.flags import DuplicateFlagError
 from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 
 FLAGS = flags.FLAGS
@@ -73,8 +74,12 @@ def import_kwargs_as_flags(f, prefix=''):
         if kwarg_type not in flag_defines:
             logging.debug(f"Uknown {kwarg} type {kwarg_type}")
         else:
-            flag_defines[kwarg_type](f"{prefix}{kwarg}", kwarg_default,
-                                     f"{kwarg}")
+            arg_name = f"{prefix}{kwarg}"
+            try:
+                flag_defines[kwarg_type](arg_name, kwarg_default,
+                                        f"{kwarg}")
+            except DuplicateFlagError as e:
+                logging.debug(e)
 
 
 def prepare_dir(dir_path, subdir_name):
