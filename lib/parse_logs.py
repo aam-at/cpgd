@@ -228,30 +228,22 @@ def org_group_and_summarize(
     return round(org_table, decimals)
 
 
-def output_org_results(logs, norm, summarize=False, group_by=None, topk=100):
-    if summarize:
-        logs = pd.concat(logs, ignore_index=True)
-        assert group_by is not None
-        logs_org = org_group_and_summarize(logs,
-                                           group_by=group_by,
-                                           sort_groups=True,
-                                           sort_keys=norm)
+def output_org_results(df_log,
+                       norm,
+                       allowed_thresholds=None,
+                       topk=100):
+    if allowed_thresholds is None:
+        allowed_thresholds = []
+    if len(allowed_thresholds) > 0:
+        for col in df_log.columns:
+            if col.startswith(f"acc_{norm}_"):
+                threshold = float(col.replace(f"acc_{norm}_", ""))
+                if threshold not in allowed_thresholds:
+                    df_log = df_log.drop(columns=[col])
+    if topk is not None:
+        return org_table(df_log)[:3 + topk] + [None]
     else:
-        logs_org = []
-        first = True
-        for log in logs:
-            if first:
-                if topk is not None:
-                    logs_org.extend(org_table(log)[:3 + topk] + [None])
-                else:
-                    logs_org.extend(org_table(log))
-                    first = False
-            else:
-                if topk is not None:
-                    logs_org.extend(org_table(log)[3:topk + 3] + [None])
-                else:
-                    logs_org.extend(org_table(log)[3:])
-    return logs_org
+        return org_table(df_log)
 
 
 if __name__ == "__main__":

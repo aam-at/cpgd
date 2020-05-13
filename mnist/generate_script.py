@@ -34,10 +34,6 @@ def generate_test_bethge_lp(**kwargs):
     return generate_test_optimizer('test_bethge_attack', **kwargs)
 
 
-def generate_test_jsma(**kwargs):
-    return generate_test_optimizer('test_jsma_attack', **kwargs)
-
-
 def test_random(runs=1, master_seed=1):
     existing_names = []
     for model, N, norm, eps, init in itertools.product(
@@ -266,7 +262,7 @@ def test_bethge_config(norm, runs=1, master_seed=1):
         print(generate_test_bethge_lp(**attack_args))
 
 
-def test_jsma_config(runs=1, master_seed=1):
+def jsma_attack_config(runs=1, master_seed=1):
     num_images = 1000
     batch_size = 100
     attack_args = {
@@ -290,7 +286,7 @@ def test_jsma_config(runs=1, master_seed=1):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_jsma(**attack_args))
+        print(generate_test_optimizer('test_jsma_attack', **attack_args))
 
 if __name__ == '__main__':
     # for norm in ['l0', 'l1', 'l2', 'li']:
