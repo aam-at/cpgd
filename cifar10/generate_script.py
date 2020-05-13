@@ -292,16 +292,14 @@ def test_jsma_config(runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, l0_pixel, targets in itertools.product(models, [True, False],
-                                                      ["random", "second"]):
+    for model, targets in itertools.product(models, ["random", "second"]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/cifar10_jsma/test_{type}"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
-            'attack_l0_pixel_metric': l0_pixel,
         })
-        name = f"cifar10_jsma_{type}_{targets}_{'pixel_' if l0_pixel else ''}"
+        name = f"cifar10_jsma_{type}_{targets}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
