@@ -250,14 +250,14 @@ def test_bethge_config(norm, runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model in models:
+    for model, lr in itertools.product(models, [1.0, 0.5, 0.1]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_bethge/test_{type}_{norm}"
         attack_args.update({
             'norm': norm,
             'load_from': model,
             'working_dir': working_dir,
-            'attack_lr': 0.01
+            'attack_lr': lr
         })
         name = f"mnist_bethge_{type}_{norm}_lr{attack_args['attack_lr']}_"
         attack_args['name'] = name
