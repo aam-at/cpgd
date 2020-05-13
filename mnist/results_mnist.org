@@ -125,7 +125,6 @@
 *** Linf
 #+BEGIN_SRC python :noweb yes :var norm="l1" :var type="linf" :results value :return df_org
   <<init_block>>
-  thresholds = np.linspace(2.5, 12.5, 5)
   <<output_results>>
 #+END_SRC
 
@@ -134,7 +133,6 @@
 *** L2
 #+BEGIN_SRC python :noweb yes :var norm="l1" :var type="l2" :results value :return df_org
   <<init_block>>
-  thresholds = np.linspace(5, 20, 5)
   <<output_results>>
 #+END_SRC
 
@@ -297,7 +295,6 @@
 *** L2
 #+BEGIN_SRC python :noweb yes :var dataset="mnist" :var norm="li" :var type="l2" :results value :return df_org
   <<init_bethge_block>>
-  thresholds = np.linspace(0.05, 0.25, 5)
   <<output_results>>
 #+END_SRC
 
