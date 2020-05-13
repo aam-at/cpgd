@@ -157,7 +157,6 @@ def register_experiment_flags(working_dir="runs", seed=1):
     flags.DEFINE_integer("seed", seed, "experiment seed")
     flags.DEFINE_integer("data_seed", 1, "experiment seed")
     flags.DEFINE_string("working_dir", working_dir, "path to working dir")
-    flags.DEFINE_string("chks_dir", "chks", "path to checks dir")
     flags.DEFINE_string("samples_dir", "samples", "path to samples dir")
     flags.DEFINE_string("git_revision", None, "git revision")
 
@@ -175,9 +174,7 @@ def setup_experiment(default_name, snapshot_files=None):
         FLAGS.name = default_name % dict_values
     FLAGS.git_revision = get_sha()
     FLAGS.working_dir = prepare_dir(FLAGS.working_dir, FLAGS.name)
-    FLAGS.chks_dir = os.path.join(FLAGS.working_dir, FLAGS.chks_dir)
     FLAGS.samples_dir = os.path.join(FLAGS.working_dir, FLAGS.samples_dir)
-    Path(FLAGS.chks_dir).mkdir()
     Path(FLAGS.samples_dir).mkdir()
 
     # configure logging
