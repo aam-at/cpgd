@@ -1,14 +1,33 @@
 import numpy as np
 
+test_model_thresholds = {
+    "plain": {
+        "l0": np.linspace(0, 15, 16),
+        "l1": np.linspace(2, 10, 5),
+        "l2": [0.1, 0.15, 0.2, 0.3, 0.4],
+        "li": np.linspace(1, 3, 5) / 255.0
+    },
+    "linf": {
+        "l0": np.linspace(0, 15, 16),
+        "l1": np.linspace(5, 20, 5),
+        "l2": np.linspace(0.25, 1.25, 5),
+        "li": np.linspace(2, 10, 5) / 255.0
+    },
+    "l2": {
+        "l0": np.linspace(0, 15, 16),
+        "l1": np.linspace(3, 15, 5),
+        "l2": np.linspace(0.25, 1.25, 5),
+        "li": np.linspace(2, 10, 5) / 255.0
+    }
+}
+
+test_thresholds = {"l0": [], "l1": [], "l2": [], "li": []}
+for model in test_model_thresholds.keys():
+    thresholds = test_model_thresholds[model]
+    for norm in thresholds:
+        test_thresholds[norm].extend(thresholds[norm])
+
 test_thresholds = {
-    "l0": np.linspace(1, 200, 200),
-    'l1': [
-        2.0, 3.0, 4.0, 5.0, 6.0, 8.0, 8.75, 9.0, 10.0, 12.0, 12.5, 15.0, 16.25,
-        20.0
-    ],
-    'l2': [0.1, 0.15, 0.2, 0.25, 0.3, 0.4, 0.5, 0.75, 1.0, 1.25],
-    'li': [
-        1 / 255, 1.5 / 255, 2 / 255, 2.5 / 255, 3 / 255, 4 / 255, 6 / 255,
-        8 / 255, 10 / 255
-    ]
+    norm: sorted(list(set(thresholds)))
+    for norm, thresholds in test_thresholds.items()
 }

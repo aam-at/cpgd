@@ -25,7 +25,7 @@ test_thresholds = {"l0": [], "l1": [], "l2": [], "li": []}
 for model in test_model_thresholds.keys():
     thresholds = test_model_thresholds[model]
     for norm in thresholds:
-        test_thresholds[norm].extend(list(np.round(thresholds[norm], 2)))
+        test_thresholds[norm].extend(thresholds[norm])
 
 test_thresholds = {
     norm: sorted(list(set(thresholds)))
