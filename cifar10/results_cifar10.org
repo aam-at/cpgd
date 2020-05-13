@@ -77,7 +77,7 @@
 
 #+NAME: output_results
 #+BEGIN_SRC python :noweb yes
-  dirs = glob.glob("./results/cifar10*")
+  dirs = glob.glob("../results/cifar10*")
   df = parse_output_logs(dirs, norm, type, allowed_thresholds=thresholds)
   df = df[getattr(df, f"acc_{norm}") == 0]
   df_org = output_org_results([df], norm, summarize=False, topk=100)
