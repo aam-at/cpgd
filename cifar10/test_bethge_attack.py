@@ -143,7 +143,7 @@ def main(unused_args):
             test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
         test_metrics[f"{FLAGS.norm}"](lp)
         if FLAGS.norm == "l0":
-            test_metrics[f"{FLAGS.norm}"](l0_metric(image - image_lp))
+            test_metrics[f"{FLAGS.norm}_all"](l0_metric(image - image_lp))
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
