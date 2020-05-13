@@ -31,10 +31,6 @@ def generate_test_optimizer_lp(**kwargs):
     return generate_test_optimizer('test_optimizer_lp_madry', **kwargs)
 
 
-def generate_test_bethge_lp(**kwargs):
-    return generate_test_optimizer('test_bethge_attack', **kwargs)
-
-
 def test_random(runs=1, master_seed=1):
     existing_names = []
     for model, N, norm, eps, init in itertools.product(
@@ -235,7 +231,15 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
 
 
 def test_bethge_config(norm, runs=1, master_seed=1):
-    assert norm in ['l0', 'li', 'l1', 'l2']
+    import test_bethge_attack
+    from test_bethge_attack import lp_attacks
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_bethge_attack)
+    attack_klass = lp_attacks[norm]
+    import_klass_kwargs_as_flags(attack_klass, 'attack_')
+
+    assert norm in lp_attacks
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 100
     attack_args = {
@@ -253,14 +257,15 @@ def test_bethge_config(norm, runs=1, master_seed=1):
             'norm': norm,
             'load_from': model,
             'working_dir': working_dir,
+            'attack_lr': 0.01
         })
-        name = f"mnist_bethge_{type}_{norm}_"
+        name = f"mnist_bethge_{type}_{norm}_lr{attack_args['attack_lr']}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_bethge_lp(**attack_args))
+        print(generate_test_optimizer('test_bethge_attack', **attack_args))
 
 
 def jsma_attack_config(runs=1, master_seed=1):
