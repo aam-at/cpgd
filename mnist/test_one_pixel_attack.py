@@ -77,7 +77,10 @@ def main(unused_args):
         nb_classes=num_classes,
         channel_index=3,
         clip_values=(0, 1))
-    a0 = PixelAttack(art_model, th=FLAGS.attack_threshold, es=FLAGS.attack_es, verbose=True)
+    a0 = PixelAttack(art_model,
+                     th=FLAGS.attack_threshold,
+                     es=FLAGS.attack_es,
+                     verbose=FLAGS.attack_verbose)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
