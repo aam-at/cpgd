@@ -230,7 +230,7 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
                     print(generate_test_optimizer_lp(**attack_args))
 
 
-def test_bethge_config(norm, runs=1, master_seed=1):
+def bethge_config(norm, runs=1, master_seed=1):
     import test_bethge_attack
     from test_bethge_attack import lp_attacks
 
@@ -250,7 +250,7 @@ def test_bethge_config(norm, runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, lr in itertools.product(models, [1.0, 0.5, 0.1]):
+    for model, lr in itertools.product(models, [1.0, 0.5, 0.1, 0.05, 0.01]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_bethge/test_{type}_{norm}"
         attack_args.update({

@@ -32,13 +32,6 @@ def generate_test_optimizer_lp(**kwargs):
     return generate_test_optimizer('test_optimizer_lp_madry', **kwargs)
 
 
-def generate_test_bethge_lp(**kwargs):
-    return generate_test_optimizer('test_bethge_attack', **kwargs)
-
-
-def generate_test_jsma(**kwargs):
-    return generate_test_optimizer('test_jsma', **kwargs)
-
 def test_random(runs=1, master_seed=1):
     existing_names = []
     for model, N, norm, eps, init in itertools.product(
@@ -252,7 +245,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                     print(generate_test_optimizer_lp(**attack_args))
 
 
-def test_bethge_config(norm, runs=1, master_seed=1):
+def bethge_config(norm, runs=1, master_seed=1):
     import test_bethge_attack
     from test_bethge_attack import lp_attacks
 
@@ -272,7 +265,7 @@ def test_bethge_config(norm, runs=1, master_seed=1):
     }
 
     existing_names = []
-    for type, lr in itertools.product(models.keys(), [1.0, 0.5, 0.1]):
+    for type, lr in itertools.product(models.keys(), [1.0, 0.5, 0.1, 0.05, 0.01]):
         working_dir = f"../results/imagenet_bethge/test_{type}_{norm}"
         attack_args.update({
             'norm': norm,
@@ -280,16 +273,16 @@ def test_bethge_config(norm, runs=1, master_seed=1):
             'working_dir': working_dir,
             'attack_lr': lr
         })
-        name = f"imagenet_bethge_{type}_{norm}_lr{lr}"
+        name = f"imagenet_bethge_{type}_{norm}_lr{lr}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_bethge_lp(**attack_args))
+        print(generate_test_optimizer('test_bethge_attack', **attack_args))
 
 
-def test_jsma_config(runs=1, master_seed=1):
+def jsma_config(runs=1, master_seed=1):
     num_images = 1000
     batch_size = 100
     attack_args = {
@@ -299,20 +292,19 @@ def test_jsma_config(runs=1, master_seed=1):
     }
 
     existing_names = []
-    for type, l0_pixel in itertools.product(models.keys(), [True, False]):
+    for model, targets in itertools.product(models, ["random", "second"]):
         working_dir = f"../results/imagenet_jsma/test_{type}"
         attack_args.update({
             'load_from': models[type],
             'working_dir': working_dir,
-            'attack_l0_pixel_metric': l0_pixel,
         })
-        name = f"imagenet_jsma_{type}_{targets}_{'pixel_' if l0_pixel else ''}"
+        name = f"imagenet_jsma_{type}_{targets}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_jsma(**attack_args))
+        print(generate_test_optimizer('test_jsma', **attack_args))
 
 
 if __name__ == '__main__':
