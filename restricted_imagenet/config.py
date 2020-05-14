@@ -1,8 +1,38 @@
 import numpy as np
 
+test_model_thresholds = {
+    "plain": {
+        "l0": [],
+        "l1": np.linspace(5, 49, 5, dtype=np.int32),
+        "l2": np.round(np.linspace(0.2, 1, 5), 2),
+        "li": np.round(np.linspace(0.25, 1.25, 5), 2) / 255.0
+    },
+    "linf": {
+        "l0": [],
+        "l1": [15, 25, 40, 60, 100],
+        "l2": np.linspace(1, 5, 5, dtype=np.int32),
+        "li": np.linspace(2, 10, 5, dtype=np.int32) / 255.0
+    },
+    "l2": {
+        "l0": [],
+        "l1": np.linspace(50, 250, 5, dtype=np.int32),
+        "l2": np.linspace(2, 6, 5, dtype=np.int32),
+        "li": np.linspace(2, 10, 5, dtype=np.int32) / 255.0
+    }
+}
+
 test_thresholds = {
-    "l0": np.linspace(1, 500, 500),
-    'l1': [5, 15, 16, 25, 27, 38, 40, 49, 50, 60, 100, 150, 200, 250],
-    'l2': [0.2, 0.4, 0.6, 0.8, 1.0, 2, 3, 4, 5, 6],
-    'li': np.array([0.25, 0.5, 0.75, 1, 1.25, 2, 4, 6, 8, 10]) / 255.0
+    "l0": list(np.linspace(1, 500, 500, dtype=np.int32)),
+    "l1": [],
+    "l2": [],
+    "li": []
+}
+for model in test_model_thresholds.keys():
+    thresholds = test_model_thresholds[model]
+    for norm in thresholds:
+        test_thresholds[norm].extend(thresholds[norm])
+
+test_thresholds = {
+    norm: sorted(list(set(thresholds)))
+    for norm, thresholds in test_thresholds.items()
 }
