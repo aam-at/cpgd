@@ -42,7 +42,7 @@
       df_sublist.append(df)
   df = pd.concat(df_sublist, ignore_index=True)
   df = df.sort_values(norm, ascending=True)
-  df_org = output_org_results(df, norm, allowed_thresholds=thresholds)
+  df_org = output_org_results(df, norm, allowed_thresholds=thresholds, topk=None)
 #+END_SRC
 
 * All
