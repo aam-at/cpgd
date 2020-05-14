@@ -31,6 +31,20 @@
                               topk=topk)
 #+END_SRC
 
+#+NAME: output_dir_results
+#+BEGIN_SRC python :noweb yes
+  df_sublist = []
+  for p in dirs:
+      path = Path(p) / f"test_{type}" / "*"
+      df = parse_test_log(path,
+                          exclude=["nll_loss", "conf"],
+                          export_test_params=test_params)
+      df_sublist.append(df)
+  df = pd.concat(df_sublist, ignore_index=True)
+  df = df.sort_values(norm, ascending=True)
+  df_org = output_org_results(df, norm, allowed_thresholds=thresholds)
+#+END_SRC
+
 * Init
 #+NAME: init_block_random
 #+BEGIN_SRC python :noweb yes
@@ -237,39 +251,57 @@
 #+END_SRC
 
 * JSMA attack
-#+NAME: jsma_attack_results
+#+NAME: init_jsma_block
 #+BEGIN_SRC python :noweb yes
   <<init_block>>
 
   test_params = []
   dirs = glob.glob("../results/mnist*_jsma")
-
-  # parse log
-  df_sublist = []
-  for p in dirs:
-      path = Path(p) / f"test_{type}" / "*"
-      df = parse_test_log(path,
-                          exclude=["nll_loss", "conf"],
-                          export_test_params=test_params)
-      df_sublist.append(df)
-  df = pd.concat(df_sublist, ignore_index=True)
-  df = df.sort_values(norm, ascending=True)
-  df_org = output_org_results(df, norm, allowed_thresholds=thresholds, topk=None)
 #+END_SRC
 
 ** Plain
 #+BEGIN_SRC python :noweb yes :var norm="l0" :var type="plain" :results value :return df_org
-  <<jsma_attack_results>>
+  <<init_jsma_block>>
+  <<output_dir_results>>
 #+END_SRC
 
 ** Linf
 #+BEGIN_SRC python :noweb yes :var norm="l0" :var type="linf" :results value :return df_org
+  <<init_jsma_block>>
   <<jsma_attack_results>>
 #+END_SRC
 
 ** L2
 #+BEGIN_SRC python :noweb yes :var norm="l0" :var type="l2" :results value :return df_org
+  <<init_jsma_block>>
   <<jsma_attack_results>>
+#+END_SRC
+
+* Pixel attack
+#+NAME: init_one_pixel_block
+#+BEGIN_SRC python :noweb yes
+  <<init_block>>
+
+  test_params = []
+  dirs = glob.glob("../results/mnist*_one_pixel")
+#+END_SRC
+
+** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="plain" :results value :return df_org
+  <<init_one_pixel_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="linf" :results value :return df_org
+  <<init_one_pixel_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+** L2
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="l2" :results value :return df_org
+  <<init_one_pixel_block>>
+  <<output_dir_results>>
 #+END_SRC
 
 * COMMENT Local Variables
