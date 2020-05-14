@@ -217,7 +217,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
             attack_args.update(
                 {col: df[col]
                  for col in df.keys() if col in test_params})
-            # change args
+            # check args
             if attack_args['attack_accelerated']:
                 continue
             if attack_args['attack_loop_c0_initial_const'] != 0.01:
@@ -236,6 +236,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                      flr_config['config']['minimal_learning_rate']) != 10:
                 continue
 
+            # change args
             for R in [1, 10, 100]:
                 attack_args['attack_loop_number_restarts'] = R
                 # generate unique name
