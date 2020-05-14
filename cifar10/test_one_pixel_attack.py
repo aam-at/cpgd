@@ -13,15 +13,15 @@ from absl import flags
 from art.attacks import PixelAttack
 from art.classifiers import TensorFlowV2Classifier
 
-from data import load_mnist
-from lib.utils import (MetricsDictionary, l0_metric, log_metrics,
+from data import load_cifar10
+from lib.utils import (MetricsDictionary, l0_metric, l0_pixel_metric, log_metrics,
                        make_input_pipeline, register_experiment_flags,
                        reset_metrics, save_images, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_one_pixel")
+register_experiment_flags(working_dir="../results/cifar10/test_one_pixel")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -43,9 +43,9 @@ def main(unused_args):
     setup_experiment(f"madry_one_pixel_test", [__file__])
 
     # data
-    _, _, test_ds = load_mnist(FLAGS.validation_size,
-                               data_format="NHWC",
-                               seed=FLAGS.data_seed)
+    _, _, test_ds = load_cifar10(FLAGS.validation_size,
+                                 data_format="NHWC",
+                                 seed=FLAGS.data_seed)
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
     test_ds = make_input_pipeline(test_ds,
                                   shuffle=False,
@@ -53,17 +53,20 @@ def main(unused_args):
 
     # models
     num_classes = 10
-    classifier = MadryCNN()
+    model_type = Path(FLAGS.load_from).stem.split("_")[-1]
+    classifier = MadryCNN(model_type=model_type)
 
     @tf.function
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
+    load_madry(FLAGS.load_from,
+               classifier.trainable_variables,
+               model_type=model_type)
 
     # one pixel attack
     def art_classifier(x):
@@ -105,11 +108,12 @@ def main(unused_args):
         test_metrics["conf_l0"](outs_l0["conf"])
 
         # measure norm
-        l0 = l0_metric(image - image_adv)
+        l0 = l0_pixel_metric(image - image_adv, art_model.channel_index)
         is_adv = outs_l0["pred"] != label
         is_adv_at_th = tf.logical_and(l0 <= FLAGS.attack_threshold, is_adv)
         test_metrics["acc_l0_%.2f" % FLAGS.attack_threshold](~is_adv_at_th)
         test_metrics["l0"](l0)
+        test_metrics["l0_all"](l0_metric(image - image_adv))
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
         test_metrics["l0_corr"](l0[is_corr])
