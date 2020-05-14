@@ -259,7 +259,7 @@ def test_bethge_config(norm, runs=1, master_seed=1):
             'working_dir': working_dir,
             'attack_lr': lr
         })
-        name = f"mnist_bethge_{type}_{norm}_lr{attack_args['attack_lr']}_"
+        name = f"mnist_bethge_{type}_{norm}_lr{lr}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
