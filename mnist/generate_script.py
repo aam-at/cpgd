@@ -236,20 +236,20 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                      flr_config['config']['minimal_learning_rate']) != 10:
                 continue
 
-            # generate unique name
-            base_name = f"mnist_{type}"
-            name = format_name(base_name, attack_args) + '_'
-            attack_args["name"] = name
-            if name in existing_names:
-                continue
-            j += 1
-            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-            if name in p or j > topk:
-                continue
-            existing_names.append(name)
-            np.random.seed(master_seed)
             for R in [1, 10, 100]:
                 attack_args['attack_loop_number_restarts'] = R
+                # generate unique name
+                base_name = f"mnist_{type}"
+                name = format_name(base_name, attack_args) + '_'
+                attack_args["name"] = name
+                if name in existing_names:
+                    continue
+                j += 1
+                p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+                if name in p or j > topk:
+                    continue
+                existing_names.append(name)
+                np.random.seed(master_seed)
                 for i in range(runs):
                     seed = np.random.randint(1000)
                     attack_args["seed"] = seed
