@@ -21,7 +21,12 @@ test_model_thresholds = {
     }
 }
 
-test_thresholds = {"l0": [], "l1": [], "l2": [], "li": []}
+test_thresholds = {
+    "l0": list(np.linspace(1, 100, 100)),
+    "l1": [],
+    "l2": [],
+    "li": []
+}
 for model in test_model_thresholds.keys():
     thresholds = test_model_thresholds[model]
     for norm in thresholds:
