@@ -8,6 +8,7 @@ from pathlib import Path
 import numpy as np
 from absl import flags
 
+from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_test_log
@@ -28,14 +29,6 @@ def generate_test_random(**kwargs):
 
 def generate_test_optimizer_lp(**kwargs):
     return generate_test_optimizer('test_optimizer_lp_madry', **kwargs)
-
-
-def generate_test_bethge_lp(**kwargs):
-    return generate_test_optimizer('test_bethge_attack', **kwargs)
-
-
-def generate_test_jsma(**kwargs):
-    return generate_test_optimizer('test_jsma', **kwargs)
 
 
 def test_random(runs=1, master_seed=1):
@@ -245,7 +238,7 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
                     print(generate_test_optimizer_lp(**attack_args))
 
 
-def test_bethge_config(norm, runs=1, master_seed=1):
+def bethge_config(norm, runs=1, master_seed=1):
     import test_bethge_attack
     from test_bethge_attack import lp_attacks
 
@@ -279,10 +272,10 @@ def test_bethge_config(norm, runs=1, master_seed=1):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_bethge_lp(**attack_args))
+        print(generate_test_optimizer('test_bethge_attack', **attack_args))
 
 
-def test_jsma_config(runs=1, master_seed=1):
+def jsma_config(runs=1, master_seed=1):
     num_images = 1000
     batch_size = 100
     attack_args = {
@@ -305,7 +298,39 @@ def test_jsma_config(runs=1, master_seed=1):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_jsma(**attack_args))
+        print(generate_test_optimizer('test_jsma', **attack_args))
+
+
+def one_pixel_attack_config(runs=1, master_seed=1):
+    num_images = 1000
+    batch_size = 100
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
+
+    existing_names = []
+    for model, iters, es in itertools.product(models, [100], [0]):
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/cifar10_one_pixel/test_{type}"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_iters': iters,
+            'attack_es': es,
+        })
+        for threshold in test_model_thresholds[type]["l0"]:
+            attack_args['attack_threshold'] = threshold
+            name = f"cifar10_one_pixel_{type}_{iters}_{threshold}_"
+            attack_args['name'] = name
+            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+            if name in p or name in existing_names:
+                continue
+            existing_names.append(name)
+            print(
+                generate_test_optimizer('test_one_pixel_attack',
+                                        **attack_args))
 
 
 if __name__ == '__main__':
