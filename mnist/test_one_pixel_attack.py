@@ -13,7 +13,6 @@ from absl import flags
 from art.attacks import PixelAttack
 from art.classifiers import TensorFlowV2Classifier
 
-from config import test_thresholds
 from data import load_mnist
 from lib.utils import (MetricsDictionary, l0_metric, log_metrics,
                        make_input_pipeline, register_experiment_flags,
@@ -33,6 +32,7 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 flags.DEFINE_integer("attack_threshold", 1, "pixel attack threshold")
 flags.DEFINE_integer("attack_iters", 100, "number of attack iterations")
 flags.DEFINE_integer("attack_es", 0, "cmaes or dae")
+flags.DEFINE_bool("attack_verbose", False, "verbose?")
 
 FLAGS = flags.FLAGS
 
@@ -55,6 +55,7 @@ def main(unused_args):
     num_classes = 10
     classifier = MadryCNN()
 
+    @tf.function
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
 
@@ -64,24 +65,31 @@ def main(unused_args):
     classifier(tf.zeros(X_shape))
     load_madry(FLAGS.load_from, classifier.trainable_variables)
 
-    # saliency map method attack
+    # one pixel attack
+    def art_classifier(x):
+        assert x.max() > 1 and x.max() <= 255
+        x = tf.cast(x / 255.0, tf.float32)
+        return test_classifier(x)['logits']
+
     art_model = TensorFlowV2Classifier(
-        model=lambda x: test_classifier(x)['logits'],
+        model=art_classifier,
         input_shape=X_shape[1:],
         nb_classes=num_classes,
+        channel_index=3,
         clip_values=(0, 1))
-    a0 = PixelAttack(art_model, th=FLAGS.attack_threshold, es=FLAGS.attack_es)
+    a0 = PixelAttack(art_model, th=FLAGS.attack_threshold, es=FLAGS.attack_es, verbose=True)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
 
     test_metrics = MetricsDictionary()
 
-    # @tf.function
     def test_step(image, label):
-        label_onehot = tf.one_hot(label, num_classes)
         outs = test_classifier(image)
-        image_adv = a0.generate(image, label)
+        image_int = np.cast[np.int32](image * 255)
+        image_adv = np.cast[np.float32](
+            a0.generate(x=image_int, y=label, maxiter=FLAGS.attack_iters) /
+            255.0)
         outs_l0 = test_classifier(image_adv)
 
         # metrics
