@@ -2,7 +2,7 @@ import numpy as np
 
 test_model_thresholds = {
     "plain": {
-        "l0": [1, 3, 5, 8, 10],
+        "l0": [1, 3, 5, 8, 12],
         "l1": np.linspace(2, 10, 5),
         "l2": [0.1, 0.15, 0.2, 0.3, 0.4],
         "li": np.linspace(1, 3, 5) / 255.0
