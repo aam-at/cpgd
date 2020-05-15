@@ -318,7 +318,7 @@ def jsma_attack_config(runs=1, master_seed=1):
             'attack_targets': targets,
             'attack_theta': theta,
             'attack_gamma': 1.0,
-            'attack_method': lib
+            'attack_impl': lib
         })
         name = f"mnist_jsma_{type}_{targets}_t{theta}_g1.0_lib{lib}_"
         attack_args['name'] = name
