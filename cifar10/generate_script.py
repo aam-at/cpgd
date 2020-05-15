@@ -316,14 +316,21 @@ def jsma_config(runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, targets in itertools.product(models, ["random", "second"]):
+    for model, targets, theta, mul, lib in itertools.product(
+            models, ["random", "second"],
+            [1.0, 0.1], [1, -1], ["cleverhans", "art"]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/cifar10_jsma/test_{type}"
+        theta *= mul
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
+            'attack_targets': targets,
+            'attack_theta': theta,
+            'attack_gamma': 1.0,
+            'attack_impl': lib
         })
-        name = f"cifar10_jsma_{type}_{targets}_"
+        name = f"cifar10_jsma_{type}_{targets}_t{theta}_g1.0_lib{lib}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:

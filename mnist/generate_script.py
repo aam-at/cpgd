@@ -308,7 +308,7 @@ def jsma_attack_config(runs=1, master_seed=1):
     existing_names = []
     for model, targets, theta, mul, lib in itertools.product(
             models, ["random", "second"],
-            [1.0, 0.1, 0.01], [1, -1], ["cleverhans", "art"]):
+            [1.0, 0.1], [1, -1], ["cleverhans", "art"]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_jsma/test_{type}"
         theta *= mul
