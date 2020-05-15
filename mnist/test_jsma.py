@@ -103,7 +103,7 @@ def main(unused_args):
         jsma = SaliencyMapMethod(art_model,
                                  theta=FLAGS.attack_theta,
                                  gamma=FLAGS.attack_gamma,
-                                 batch_size=FLAGS.batch_size)
+                                 batch_size=1)
 
         def jsma_generate(x, y_target):
             y_target = tf.one_hot(y_target, num_classes)
