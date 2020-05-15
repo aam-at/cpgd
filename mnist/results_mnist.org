@@ -268,13 +268,13 @@
 ** Linf
 #+BEGIN_SRC python :noweb yes :var norm="l0" :var type="linf" :results value :return df_org
   <<init_jsma_block>>
-  <<jsma_attack_results>>
+  <<output_dir_results>>
 #+END_SRC
 
 ** L2
 #+BEGIN_SRC python :noweb yes :var norm="l0" :var type="l2" :results value :return df_org
   <<init_jsma_block>>
-  <<jsma_attack_results>>
+  <<output_dir_results>>
 #+END_SRC
 
 * Pixel attack

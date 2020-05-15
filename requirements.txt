@@ -4,8 +4,8 @@ foolbox>=3.0.0
 git+git://github.com/aam-at/adversarial-robustness-toolbox@master#egg=adversarial-robustness-toolbox
 git+git://github.com/aam-at/cleverhans_tf2@master#egg=cleverhans
 numba==0.47
-tensorboard>=2.1.0
-tensorflow-gpu>=2.1.0
+tensorboard>=2.2.0
+tensorflow-gpu>=2.2.0
 tensorflow-probability==0.9.0
 torch>=1.5.0
 torchvision>=0.6.0
