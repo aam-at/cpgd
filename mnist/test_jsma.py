@@ -29,7 +29,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-flags.DEFINE_string("attack_method", "cleverhans", "JSMA implementation (cleverhans or art)")
+flags.DEFINE_string("attack_impl", "cleverhans", "JSMA implementation (cleverhans or art)")
 flags.DEFINE_float("attack_theta", 1.0, "theta for jsma")
 flags.DEFINE_float("attack_gamma", 1.0, "gamma for jsma")
 flags.DEFINE_string("attack_targets", "second", "how to select attack target? (choice: 'random', 'second', 'all')")
@@ -65,7 +65,7 @@ def main(unused_args):
     load_madry(FLAGS.load_from, classifier.trainable_variables)
 
     # saliency map method attack
-    if FLAGS.attack_method == 'cleverhans':
+    if FLAGS.attack_impl == 'cleverhans':
         from cleverhans.attacks.saliency_map_method import SaliencyMapMethod
         from cleverhans.model import Model
 
@@ -87,28 +87,57 @@ def main(unused_args):
             y_target = tf.one_hot(y_target, num_classes)
             return tf_jsma_generate(x, y_target=y_target)
 
-    elif FLAGS.attack_method == 'art':
+    elif FLAGS.attack_impl == 'art':
         from art.attacks import SaliencyMapMethod
         from art.classifiers import TensorFlowV2Classifier
 
-        @tf.function
         def art_classifier(x):
             return test_classifier(x)['logits']
 
-        art_model = TensorFlowV2Classifier(model=art_classifier,
-                                           input_shape=X_shape[1:],
-                                           nb_classes=num_classes,
-                                           channel_index=3,
-                                           clip_values=(0, 1))
+        class PatchedTensorflowClassifier(TensorFlowV2Classifier):
+
+            def class_gradient(self, x, label=None, **kwargs):
+                import tensorflow as tf
+
+                if label is None or isinstance(label, (int, np.integer)):
+                    gradients = super().class_gradient(x,
+                                                       label=label,
+                                                       **kwargs)
+                else:
+                    # Apply preprocessing
+                    x_preprocessed, _ = self._apply_preprocessing(x, y=None, fit=False)
+                    x_preprocessed_tf = tf.convert_to_tensor(x_preprocessed)
+
+                    def grad_targets(x, y_t):
+                        batch_indices = tf.range(x.shape[0], dtype=y_t.dtype)
+                        y_t_idx = tf.stack([batch_indices, y_t], axis=1)
+                        with tf.GradientTape() as tape:
+                            tape.watch(x)
+                            predictions = self._model(x)
+                            prediction = tf.gather_nd(predictions, y_t_idx)
+
+                        return tape.gradient(prediction, x)
+
+                    gradients = grad_targets(x_preprocessed_tf, label)
+                    gradients = tf.expand_dims(gradients, axis=1).numpy()
+
+                return gradients
+
+
+        art_model = PatchedTensorflowClassifier(model=art_classifier,
+                                                input_shape=X_shape[1:],
+                                                nb_classes=num_classes,
+                                                channel_index=3,
+                                                clip_values=(0, 1))
+
         jsma = SaliencyMapMethod(art_model,
                                  theta=FLAGS.attack_theta,
                                  gamma=FLAGS.attack_gamma,
-                                 batch_size=1)
+                                 batch_size=FLAGS.batch_size)
 
         def jsma_generate(x, y_target):
             y_target = tf.one_hot(y_target, num_classes)
-            x_adv = tf.py_function(jsma.generate, [x, y_target], tf.float32)
-            x_adv.set_shape(x.shape)
+            x_adv = jsma.generate(x, y_target)
             return x_adv
     else:
         raise ValueError
@@ -118,7 +147,6 @@ def main(unused_args):
 
     test_metrics = MetricsDictionary()
 
-    @tf.function
     def test_step(image, label):
         label_onehot = tf.one_hot(label, num_classes)
         outs = test_classifier(image)
