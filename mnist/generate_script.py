@@ -305,27 +305,28 @@ def jsma_attack_config(runs=1, master_seed=1):
         'batch_size': batch_size,
         'seed': 1
     }
-
     existing_names = []
-    for model, targets, theta, gamma in itertools.product(
-            models, ["random", "all", "second"], [1.0, 0.1, 0.01],
-        [1.0, 0.5, 0.1]):
+    for model, targets, theta, mul, lib in itertools.product(
+            models, ["random", "second"],
+            [1.0, 0.1, 0.01], [1, -1], ["cleverhans", "art"]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_jsma/test_{type}"
+        theta *= mul
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
             'attack_targets': targets,
             'attack_theta': theta,
-            'attack_gamma': gamma
+            'attack_gamma': 1.0,
+            'attack_method': lib
         })
-        name = f"mnist_jsma_{type}_{targets}_t{theta}_g{gamma}_"
+        name = f"mnist_jsma_{type}_{targets}_t{theta}_g1.0_lib{lib}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_jsma_attack', **attack_args))
+        print(generate_test_optimizer('test_jsma', **attack_args))
 
 
 def one_pixel_attack_config(runs=1, master_seed=1):
