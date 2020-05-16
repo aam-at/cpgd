@@ -77,11 +77,13 @@ def main(unused_args):
                 return test_classifier(x, **kwargs)["prob"]
 
         jsma = SaliencyMapMethod(MadryModel())
-        jsma.parse_params(theta=FLAGS.attack_theta,
-                          gamma=FLAGS.attack_gamma,
-                          clip_min=0.0,
-                          clip_max=1.0)
         tf_jsma_generate = tf.function(jsma.generate)
+
+        def update_params(theta_mul=1.0):
+            jsma.parse_params(theta=theta_mul * FLAGS.attack_theta,
+                              gamma=FLAGS.attack_gamma,
+                              clip_min=0.0,
+                              clip_max=1.0)
 
         def jsma_generate(x, y_target):
             y_target = tf.one_hot(y_target, num_classes)
@@ -135,6 +137,10 @@ def main(unused_args):
                                  gamma=FLAGS.attack_gamma,
                                  batch_size=FLAGS.batch_size)
 
+        def update_params(theta_mul=1.0):
+            jsma.set_params(theta=theta_mul * FLAGS.attack_theta,
+                            gamma=FLAGS.attack_gamma)
+
         def jsma_generate(x, y_target):
             y_target = tf.one_hot(y_target, num_classes)
             x_adv = jsma.generate(x, y_target)
@@ -147,11 +153,9 @@ def main(unused_args):
 
     test_metrics = MetricsDictionary()
 
-    def test_step(image, label):
-        label_onehot = tf.one_hot(label, num_classes)
+    def test_jsma_generate(image, label_onehot):
         outs = test_classifier(image)
         is_corr = outs['pred'] == label
-
         if FLAGS.attack_targets == 'random':
             target = random_targets(num_classes, label_onehot=label_onehot)
             image_adv = jsma_generate(image, target)
@@ -171,6 +175,22 @@ def main(unused_args):
                                      outs['logits'])
             target = tf.argsort(masked_logits, direction='DESCENDING')[:, 0]
             image_adv = jsma_generate(image, target)
+        return image_adv
+
+    def test_step(image, label):
+        label_onehot = tf.one_hot(label, num_classes)
+        outs = test_classifier(image)
+        is_corr = outs['pred'] == label
+
+        bestlp = np.inf * tf.ones(image.shape[0])
+        image_adv = tf.identity(image)
+        for mul in [1.0, -1.0]:
+            update_params(mul)
+            image_adv_ = test_jsma_generate(image, label_onehot)
+            is_adv_ = test_classifier(image_adv_)['pred'] != label
+            l0_ = tf.where(is_adv_, l0_metric(image - image_adv_), np.inf)
+            image_adv = tf.where(tf.reshape(l0_ < bestlp, (-1, 1, 1, 1)), image_adv_, image_adv)
+            bestlp = tf.minimum(l0_, bestlp)
 
         outs_l0 = test_classifier(image_adv)
 
