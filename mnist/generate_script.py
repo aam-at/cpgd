@@ -298,7 +298,7 @@ def bethge_config(norm, runs=1, master_seed=1):
         print(generate_test_optimizer('test_bethge_attack', **attack_args))
 
 
-def jsma_attack_config(runs=1, master_seed=1):
+def jsma_config(runs=1, master_seed=1):
     num_images = 1000
     batch_size = 100
     attack_args = {
