@@ -265,15 +265,16 @@ def bethge_config(norm, runs=1, master_seed=1):
     }
 
     existing_names = []
-    for type, lr in itertools.product(models.keys(), [1.0, 0.5, 0.1, 0.05, 0.01]):
+    for type, lr, num_decay in itertools.product(models.keys(), [1.0], [20]):
         working_dir = f"../results/imagenet_bethge/test_{type}_{norm}"
         attack_args.update({
             'norm': norm,
             'load_from': models[type],
             'working_dir': working_dir,
-            'attack_lr': lr
+            'attack_lr': lr,
+            'attack_lr_num_decay': num_decay
         })
-        name = f"imagenet_bethge_{type}_{norm}_lr{lr}_"
+        name = f"imagenet_bethge_{type}_{norm}_lr{lr}_nd{num_decay}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
