@@ -11,28 +11,26 @@ import numpy as np
 import tensorflow as tf
 from absl import flags
 
-from cleverhans.attacks.saliency_map_method import SaliencyMapMethod
-from cleverhans.model import Model
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
-                       l0_pixel_metric, log_metrics, make_input_pipeline,
+from lib.utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                       log_metrics, make_input_pipeline, random_targets,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/cifar10/test_jsma")
+register_experiment_flags(working_dir="../results/imagenet/test_jsma")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
-flags.DEFINE_integer("batch_size", 100, "batch size")
+flags.DEFINE_integer("batch_size", 50, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-flags.DEFINE_bool("attack_l0_pixel_metric", True, "use l0 pixel metric")
+flags.DEFINE_string("attack_impl", "cleverhans", "JSMA implementation (cleverhans or art)")
 flags.DEFINE_float("attack_theta", 1.0, "theta for jsma")
 flags.DEFINE_float("attack_gamma", 1.0, "gamma for jsma")
 flags.DEFINE_string("attack_targets", "second", "how to select attack target? (choice: 'random', 'second', 'all')")
@@ -42,7 +40,6 @@ FLAGS = flags.FLAGS
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-
     assert FLAGS.load_from is not None
     assert FLAGS.data_dir is not None
     if FLAGS.data_dir.startswith("$"):
@@ -63,13 +60,6 @@ def main(unused_args):
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
 
-    class MadryModel(Model):
-        def get_logits(self, x, **kwargs):
-            return test_classifier(x, **kwargs)["logits"]
-
-        def get_probs(self, x, **kwargs):
-            return test_classifier(x, **kwargs)["prob"]
-
     # load classifier
     X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
@@ -77,33 +67,107 @@ def main(unused_args):
     load_tsipras(FLAGS.load_from, classifier.variables)
 
     # saliency map method attack
-    metric = l0_pixel_metric if FLAGS.attack_l0_pixel_metric else l0_metric
-    jsma = SaliencyMapMethod(MadryModel())
-    jsma.parse_params(theta=FLAGS.attack_theta,
-                      gamma=FLAGS.attack_gamma,
-                      clip_min=0.0,
-                      clip_max=1.0)
+    if FLAGS.attack_impl == 'cleverhans':
+        from cleverhans.attacks.saliency_map_method import SaliencyMapMethod
+        from cleverhans.model import Model
+
+        class MadryModel(Model):
+            def get_logits(self, x, **kwargs):
+                return test_classifier(x, **kwargs)["logits"]
+
+            def get_probs(self, x, **kwargs):
+                return test_classifier(x, **kwargs)["prob"]
+
+        jsma = SaliencyMapMethod(MadryModel())
+        tf_jsma_generate = tf.function(jsma.generate)
+
+        def update_params(theta_mul=1.0):
+            jsma.parse_params(theta=theta_mul * FLAGS.attack_theta,
+                              gamma=FLAGS.attack_gamma,
+                              clip_min=0.0,
+                              clip_max=1.0)
+
+        def jsma_generate(x, y_target):
+            y_target = tf.one_hot(y_target, num_classes)
+            return tf_jsma_generate(x, y_target=y_target)
+
+    elif FLAGS.attack_impl == 'art':
+        from art.attacks import SaliencyMapMethod
+        from art.classifiers import TensorFlowV2Classifier
+
+        def art_classifier(x):
+            return test_classifier(x)['logits']
+
+        class PatchedTensorflowClassifier(TensorFlowV2Classifier):
+
+            def class_gradient(self, x, label=None, **kwargs):
+                import tensorflow as tf
+
+                if label is None or isinstance(label, (int, np.integer)):
+                    gradients = super().class_gradient(x,
+                                                       label=label,
+                                                       **kwargs)
+                else:
+                    # Apply preprocessing
+                    x_preprocessed, _ = self._apply_preprocessing(x, y=None, fit=False)
+                    x_preprocessed_tf = tf.convert_to_tensor(x_preprocessed)
+
+                    def grad_targets(x, y_t):
+                        batch_indices = tf.range(x.shape[0], dtype=y_t.dtype)
+                        y_t_idx = tf.stack([batch_indices, y_t], axis=1)
+                        with tf.GradientTape() as tape:
+                            tape.watch(x)
+                            predictions = self._model(x)
+                            prediction = tf.gather_nd(predictions, y_t_idx)
+
+                        return tape.gradient(prediction, x)
+
+                    gradients = grad_targets(x_preprocessed_tf, label)
+                    gradients = tf.expand_dims(gradients, axis=1).numpy()
+
+                return gradients
+
+
+        art_model = PatchedTensorflowClassifier(model=art_classifier,
+                                                input_shape=X_shape[1:],
+                                                nb_classes=num_classes,
+                                                channel_index=3,
+                                                clip_values=(0, 1))
+
+        jsma = SaliencyMapMethod(art_model,
+                                 theta=FLAGS.attack_theta,
+                                 gamma=FLAGS.attack_gamma,
+                                 batch_size=FLAGS.batch_size)
+
+        def update_params(theta_mul=1.0):
+            jsma.set_params(theta=theta_mul * FLAGS.attack_theta,
+                            gamma=FLAGS.attack_gamma)
+
+        def jsma_generate(x, y_target):
+            y_target = tf.one_hot(y_target, num_classes)
+            x_adv = jsma.generate(x, y_target)
+            return x_adv
+    else:
+        raise ValueError
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
 
     test_metrics = MetricsDictionary()
 
-    @tf.function
-    def test_step(image, label):
-        label_onehot = tf.one_hot(label, num_classes)
+    def test_jsma_generate(image, label_onehot):
         outs = test_classifier(image)
         is_corr = outs['pred'] == label
-
         if FLAGS.attack_targets == 'random':
-            image_adv = jsma.generate(image, y=label_onehot)
+            target = random_targets(num_classes, label_onehot=label_onehot)
+            image_adv = jsma_generate(image, target)
         elif FLAGS.attack_targets == 'all':
             indices = tf.argsort(label_onehot)[:, :-1]
             bestlp = tf.where(is_corr, np.inf, 0.0)
             image_adv = tf.identity(image)
             for i in tf.range(num_classes - 1):
-                target_onehot = tf.one_hot(indices[:, i], num_classes)
-                image_adv_i = jsma.generate(image, y_target=target_onehot)
+                target = indices[:, i]
+                image_adv_i = jsma_generate(image, target)
                 l0 = l0_metric(image_adv_i - image)
                 image_adv = tf.where(tf.reshape(l0 < bestlp, (-1, 1, 1, 1)),
                                      image_adv_i, image_adv)
@@ -112,8 +176,23 @@ def main(unused_args):
             masked_logits = tf.where(tf.cast(label_onehot, tf.bool), -np.inf,
                                      outs['logits'])
             target = tf.argsort(masked_logits, direction='DESCENDING')[:, 0]
-            target_onehot = tf.one_hot(target, num_classes)
-            image_adv = jsma.generate(image, y_target=target_onehot)
+            image_adv = jsma_generate(image, target)
+        return image_adv
+
+    def test_step(image, label):
+        label_onehot = tf.one_hot(label, num_classes)
+        outs = test_classifier(image)
+        is_corr = outs['pred'] == label
+
+        bestlp = np.inf * tf.ones(image.shape[0])
+        image_adv = tf.identity(image)
+        for mul in [1.0, -1.0]:
+            update_params(mul)
+            image_adv_ = test_jsma_generate(image, label_onehot)
+            is_adv_ = test_classifier(image_adv_)['pred'] != label
+            l0_ = tf.where(is_adv_, l0_metric(image - image_adv_), np.inf)
+            image_adv = tf.where(tf.reshape(l0_ < bestlp, (-1, 1, 1, 1)), image_adv_, image_adv)
+            bestlp = tf.minimum(l0_, bestlp)
 
         outs_l0 = test_classifier(image_adv)
 
@@ -130,15 +209,16 @@ def main(unused_args):
         test_metrics["conf_l0"](outs_l0["conf"])
 
         # measure norm
-        l0 = metric(image - image_adv)
+        l0 = l0_pixel_metric(image - image_adv)
         is_adv = outs_l0["pred"] != label
         for threshold in test_thresholds["l0"]:
             is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
             test_metrics["acc_l0_%.2f" % threshold](~is_adv_at_th)
         test_metrics["l0"](l0)
+        test_metrics["l0_all"](l0_metric(image - image_adv))
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
-        test_metrics["l0_corr"](l0[is_corr])
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
 
         return image_adv
 
