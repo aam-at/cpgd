@@ -241,7 +241,7 @@ def main(unused_args):
                                      "epoch_orig-%d.png" % batch_index)
             save_images(image, save_path, data_format="NHWC")
             save_path = os.path.join(FLAGS.samples_dir,
-                                     f"epoch_l0-%d.png" % batch_index)
+                                     "epoch_l0-%d.png" % batch_index)
             save_images(X_lp, save_path, data_format="NHWC")
             # save adversarial data
             X_lp_list.append(X_lp)

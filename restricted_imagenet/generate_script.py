@@ -284,7 +284,7 @@ def bethge_config(norm, runs=1, master_seed=1):
 
 
 def jsma_config(runs=1, master_seed=1):
-    num_images = 1000
+    num_images = 500
     batch_size = 100
     attack_args = {
         'num_batches': num_images // batch_size,
@@ -293,13 +293,21 @@ def jsma_config(runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, targets in itertools.product(models, ["random", "second"]):
+    for type, targets, theta, lib in itertools.product(
+            models.keys(), ["all", "random", "second"],
+            [1.0], ["cleverhans", "art"]):
+        if lib == 'cleverhans':
+            continue
         working_dir = f"../results/imagenet_jsma/test_{type}"
         attack_args.update({
             'load_from': models[type],
             'working_dir': working_dir,
+            'attack_targets': targets,
+            'attack_theta': theta,
+            'attack_gamma': 1.0,
+            'attack_impl': lib
         })
-        name = f"imagenet_jsma_{type}_{targets}_"
+        name = f"imagenet_jsma_{type}_{targets}_t{theta}_g1.0_lib{lib}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
