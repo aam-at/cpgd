@@ -185,6 +185,7 @@ def main(unused_args):
         is_corr = outs['pred'] == label
 
         bestlp = np.inf * tf.ones(image.shape[0])
+        bestlp = tf.where(is_corr, 0.0, bestlp)
         image_adv = tf.identity(image)
         for mul in [1.0, -1.0]:
             update_params(mul)
