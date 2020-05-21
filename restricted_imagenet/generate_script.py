@@ -9,6 +9,7 @@ from pathlib import Path
 import numpy as np
 from absl import flags
 
+from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_test_log
@@ -316,17 +317,38 @@ def jsma_config(runs=1, master_seed=1):
         print(generate_test_optimizer('test_jsma', **attack_args))
 
 
+
+def one_pixel_attack_config(runs=1, master_seed=1):
+    num_images = 500
+    batch_size = 50
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
+
+    existing_names = []
+    for model, iters, es in itertools.product(models, [100], [0]):
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/imagenet_one_pixel/test_{type}"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_iters': iters,
+            'attack_es': es,
+        })
+        for threshold in test_model_thresholds[type]["l0"]:
+            attack_args['attack_threshold'] = threshold
+            name = f"imagenet_one_pixel_{type}_{iters}_{threshold}_"
+            attack_args['name'] = name
+            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+            if name in p or name in existing_names:
+                continue
+            existing_names.append(name)
+            print(
+                generate_test_optimizer('test_one_pixel_attack',
+                                        **attack_args))
+
+
 if __name__ == '__main__':
-    test_random()
-    # import test_optimizer_lp_madry
-    # from test_optimizer_lp_madry import lp_attacks
-    # for attack in lp_attacks:
-    #     norm, _ = lp_attacks[attack]
-    #     if norm not in ['l0']:
-    #         continue
-    #     flags.FLAGS._flags().clear()
-    #     importlib.reload(test_optimizer_lp_madry)
-    #     _, attack_klass = lp_attacks[attack]
-    #     import_klass_kwargs_as_flags(attack_klass, 'attack_')
-    #     test_lp_config(attack)
-    #     # test_lp_custom_config(attack)
+    pass
