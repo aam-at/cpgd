@@ -90,10 +90,13 @@ def main(unused_args):
 
     def test_step(image, label):
         outs = test_classifier(image)
+        is_corr = outs['pred'] == label
+
         image_int = np.cast[np.int32](image * 255)
         image_adv = np.cast[np.float32](
             a0.generate(x=image_int, y=label, maxiter=FLAGS.attack_iters) /
             255.0)
+        image_adv = tf.where(is_corr, image_adv, image)
         outs_l0 = test_classifier(image_adv)
 
         # metrics
@@ -116,8 +119,7 @@ def main(unused_args):
         test_metrics["l0"](l0)
         test_metrics["l0_all"](l0_metric(image - image_adv))
         # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics["l0_corr"](l0[is_corr])
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
 
         return image_adv
 
