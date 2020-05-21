@@ -48,9 +48,10 @@ def main(unused_args):
 
     # data
     augmentors = fbresnet_augmentor(224, training=False)
-    val_ds = get_imagenet_dataflow(
-        FLAGS.data_dir, FLAGS.batch_size,
-        augmentors, mode='val')
+    val_ds = get_imagenet_dataflow(FLAGS.data_dir,
+                                   FLAGS.batch_size,
+                                   augmentors,
+                                   mode='val')
     val_ds.reset_state()
 
     # models
@@ -99,7 +100,6 @@ def main(unused_args):
             return test_classifier(x)['logits']
 
         class PatchedTensorflowClassifier(TensorFlowV2Classifier):
-
             def class_gradient(self, x, label=None, **kwargs):
                 import tensorflow as tf
 
@@ -109,7 +109,9 @@ def main(unused_args):
                                                        **kwargs)
                 else:
                     # Apply preprocessing
-                    x_preprocessed, _ = self._apply_preprocessing(x, y=None, fit=False)
+                    x_preprocessed, _ = self._apply_preprocessing(x,
+                                                                  y=None,
+                                                                  fit=False)
                     x_preprocessed_tf = tf.convert_to_tensor(x_preprocessed)
 
                     def grad_targets(x, y_t):
@@ -126,7 +128,6 @@ def main(unused_args):
                     gradients = tf.expand_dims(gradients, axis=1).numpy()
 
                 return gradients
-
 
         art_model = PatchedTensorflowClassifier(model=art_classifier,
                                                 input_shape=X_shape[1:],
@@ -192,7 +193,8 @@ def main(unused_args):
             image_adv_ = test_jsma_generate(image, label_onehot)
             is_adv_ = test_classifier(image_adv_)['pred'] != label
             l0_ = tf.where(is_adv_, l0_metric(image - image_adv_), np.inf)
-            image_adv = tf.where(tf.reshape(l0_ < bestlp, (-1, 1, 1, 1)), image_adv_, image_adv)
+            image_adv = tf.where(tf.reshape(l0_ < bestlp, (-1, 1, 1, 1)),
+                                 image_adv_, image_adv)
             bestlp = tf.minimum(l0_, bestlp)
 
         outs_l0 = test_classifier(image_adv)
