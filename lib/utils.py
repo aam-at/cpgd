@@ -14,6 +14,7 @@ import numpy as np
 import six
 import tensorflow as tf
 from absl import flags
+from absl.flags import DuplicateFlagError
 from tensorflow.keras.optimizers.schedules import LearningRateSchedule
 
 FLAGS = flags.FLAGS
@@ -52,6 +53,11 @@ def flags_to_params(fls):
     return Namespace(**{k: f.value for k, f in fls.__flags.items()})
 
 
+def import_klass_kwargs_as_flags(klass, prefix=''):
+    for base_klass in klass.mro():
+        import_kwargs_as_flags(base_klass.__init__, prefix)
+
+
 def import_kwargs_as_flags(f, prefix=''):
     spec = inspect.getfullargspec(f)
     flag_defines = {
@@ -68,8 +74,12 @@ def import_kwargs_as_flags(f, prefix=''):
         if kwarg_type not in flag_defines:
             logging.debug(f"Uknown {kwarg} type {kwarg_type}")
         else:
-            flag_defines[kwarg_type](f"{prefix}{kwarg}", kwarg_default,
-                                     f"{kwarg}")
+            arg_name = f"{prefix}{kwarg}"
+            try:
+                flag_defines[kwarg_type](arg_name, kwarg_default,
+                                        f"{kwarg}")
+            except DuplicateFlagError as e:
+                logging.debug(e)
 
 
 def prepare_dir(dir_path, subdir_name):
@@ -147,7 +157,6 @@ def register_experiment_flags(working_dir="runs", seed=1):
     flags.DEFINE_integer("seed", seed, "experiment seed")
     flags.DEFINE_integer("data_seed", 1, "experiment seed")
     flags.DEFINE_string("working_dir", working_dir, "path to working dir")
-    flags.DEFINE_string("chks_dir", "chks", "path to checks dir")
     flags.DEFINE_string("samples_dir", "samples", "path to samples dir")
     flags.DEFINE_string("git_revision", None, "git revision")
 
@@ -165,9 +174,7 @@ def setup_experiment(default_name, snapshot_files=None):
         FLAGS.name = default_name % dict_values
     FLAGS.git_revision = get_sha()
     FLAGS.working_dir = prepare_dir(FLAGS.working_dir, FLAGS.name)
-    FLAGS.chks_dir = os.path.join(FLAGS.working_dir, FLAGS.chks_dir)
     FLAGS.samples_dir = os.path.join(FLAGS.working_dir, FLAGS.samples_dir)
-    Path(FLAGS.chks_dir).mkdir()
     Path(FLAGS.samples_dir).mkdir()
 
     # configure logging
@@ -197,6 +204,24 @@ def setup_experiment(default_name, snapshot_files=None):
 
 
 # tensorflow utils
+def create_optimizer(opt, lr, **kwargs):
+    config = {'learning_rate': lr}
+    config.update(kwargs)
+    return tf.keras.optimizers.get({'class_name': opt, 'config': config})
+
+
+def reset_optimizer(opt):
+    [var.assign(tf.zeros_like(var)) for var in opt.variables()]
+
+
+def create_lr_schedule(schedule, **kwargs):
+    if schedule == 'constant':
+        lr = kwargs['learning_rate']
+    elif schedule == 'linear':
+        lr = LinearDecay(**kwargs)
+    return lr
+
+
 def reset_metrics(metrics):
     for metric in metrics.values():
         metric.reset_states()
@@ -252,6 +277,19 @@ def power_iteration(Ax, x0, num_iterations):
     return xk
 
 
+class ConstantDecay(LearningRateSchedule):
+    def __init__(self, learning_rate, name=None):
+        super(ConstantDecay, self).__init__()
+        self.learning_rate = learning_rate
+        self.name = name
+
+    def __call__(self, step):
+        return self.learning_rate
+
+    def get_config(self):
+        return {"learning_rate": self.learning_rate, "name": self.name}
+
+
 class LinearDecay(LearningRateSchedule):
     def __init__(self,
                  initial_learning_rate,
@@ -259,27 +297,27 @@ class LinearDecay(LearningRateSchedule):
                  decay_steps,
                  name=None):
         super(LinearDecay, self).__init__()
-        assert initial_learning_rate > minimal_learning_rate
+        assert initial_learning_rate > minimal_learning_rate, (
+            initial_learning_rate, minimal_learning_rate)
         self.initial_learning_rate = initial_learning_rate
         self.minimal_learning_rate = minimal_learning_rate
         self.decay_steps = decay_steps
         self.name = name
 
     def __call__(self, step):
-        with tf.name_scope(self.name or "LinearDecay") as name:
-            initial_learning_rate = tf.convert_to_tensor(
-                self.initial_learning_rate, name="initial_learning_rate")
-            dtype = initial_learning_rate.dtype
-            minimal_learning_rate = tf.cast(self.minimal_learning_rate, dtype)
-            decay_steps = tf.cast(self.decay_steps, dtype)
+        initial_learning_rate = tf.convert_to_tensor(
+            self.initial_learning_rate, name="initial_learning_rate")
+        dtype = initial_learning_rate.dtype
+        minimal_learning_rate = tf.cast(self.minimal_learning_rate, dtype)
+        decay_steps = tf.cast(self.decay_steps, dtype)
 
-            global_step_recomp = tf.cast(step, dtype)
-            p = global_step_recomp / decay_steps
+        global_step_recomp = tf.cast(step, dtype)
+        p = global_step_recomp / decay_steps
 
-            assert_op = tf.Assert(decay_steps >= global_step_recomp, [step])
-            with tf.control_dependencies([assert_op]):
-                return minimal_learning_rate + (
-                    initial_learning_rate - minimal_learning_rate) * (1 - p)
+        assert_op = tf.Assert(decay_steps >= global_step_recomp, [step])
+        with tf.control_dependencies([assert_op]):
+            return (minimal_learning_rate +
+                    (initial_learning_rate - minimal_learning_rate) * (1 - p))
 
     def get_config(self):
         return {
@@ -297,6 +335,11 @@ def l0_metric(x, axes=None, keepdims=False):
     return tf.reduce_sum(tf.cast(tf.abs(x) > 0, x.dtype),
                          axes,
                          keepdims=keepdims)
+
+
+def l0_pixel_metric(u, channel_dim=-1, keepdims=False):
+    u_c = tf.reduce_max(tf.abs(u), axis=channel_dim)
+    return l0_metric(u_c, keepdims=keepdims)
 
 
 def li_metric(x, axes=None, keepdims=False):

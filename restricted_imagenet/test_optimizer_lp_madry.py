@@ -14,7 +14,7 @@ from tensorboard.plugins.hparams import api as hp
 
 import lib
 from config import test_thresholds
-from data import load_mnist
+from data import fbresnet_augmentor, get_imagenet_dataflow
 from lib.attack_l0 import ProximalL0Attack
 from lib.attack_l1 import GradientL1Attack, ProximalL1Attack
 from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
@@ -22,21 +22,21 @@ from lib.attack_li import ProximalLiAttack
 from lib.attack_utils import AttackOptimizationLoop
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
                        import_klass_kwargs_as_flags, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
-from models import MadryCNN
-from utils import load_madry
+                       register_experiment_flags, reset_metrics, save_images,
+                       setup_experiment)
+from models import TsiprasCNN
+from utils import load_tsipras
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/mnist/test_lp")
 flags.DEFINE_string(
     "attack", None, "choice of the attack ('l0', 'l1', 'l2', 'l2g', 'li')"
 )
+flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
-flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
 import_klass_kwargs_as_flags(AttackOptimizationLoop, "attack_loop_")
@@ -58,6 +58,9 @@ def main(unused_args):
     norm, attack_klass = lp_attacks[FLAGS.attack]
 
     assert FLAGS.load_from is not None
+    assert FLAGS.data_dir is not None
+    if FLAGS.data_dir.startswith("$"):
+        FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
     setup_experiment(
         f"madry_{norm}_test",
         [
@@ -70,24 +73,23 @@ def main(unused_args):
     )
 
     # data
-    _, _, test_ds = load_mnist(
-        FLAGS.validation_size, data_format="NHWC", seed=FLAGS.data_seed
-    )
-    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(test_ds, shuffle=False, batch_size=FLAGS.batch_size)
+    augmentors = fbresnet_augmentor(224, training=False)
+    val_ds = get_imagenet_dataflow(
+        FLAGS.data_dir, FLAGS.batch_size,
+        augmentors, mode='val')
 
     # models
-    num_classes = 10
-    classifier = MadryCNN()
+    num_classes = len(TsiprasCNN.LABEL_RANGES)
+    classifier = TsiprasCNN()
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
+    load_tsipras(FLAGS.load_from, classifier.variables)
 
     # attacks
     attack_loop_kwargs = {
@@ -120,6 +122,7 @@ def main(unused_args):
             label, outs["logits"]
         )
         acc_fn = tf.keras.metrics.sparse_categorical_accuracy
+        label = tf.convert_to_tensor(label)
         acc = acc_fn(label, outs["logits"])
         acc_lp = acc_fn(label, outs_lp["logits"])
 
@@ -129,7 +132,7 @@ def main(unused_args):
         test_metrics["conf"](outs["conf"])
         test_metrics[f"acc_{norm}"](acc_lp)
         test_metrics[f"conf_{norm}"](outs_lp["conf"])
-
+        
         # measure norm
         lp = alp.lp_metric(image - image_lp)
         for threshold in test_thresholds[norm]:
@@ -141,7 +144,7 @@ def main(unused_args):
                 lp,
                 threshold,
             )
-            test_metrics[f"acc_{norm}_%.2f" % threshold](acc_th)
+            test_metrics[f"acc_{norm}_%.4f" % threshold](acc_th)
         test_metrics[f"{norm}"](lp)
         # compute statistics only for correctly classified inputs
         is_corr = outs["pred"] == label
@@ -156,7 +159,8 @@ def main(unused_args):
     start_time = time.time()
     try:
         is_completed = False
-        for batch_index, (image, label) in enumerate(test_ds, 1):
+        val_ds.reset_state()
+        for batch_index, (image, label) in enumerate(val_ds, 1):
             X_lp = test_step(image, label)
             log_metrics(
                 test_metrics,
@@ -206,8 +210,10 @@ def main(unused_args):
                 final_lp_corr = test_metrics[f"{norm}_corr"].result()
                 tf.summary.scalar(f"final_{norm}_corr", final_lp_corr, step=1)
                 tf.summary.flush()
-    except:
+    except KeyboardInterrupt:
         logging.info("Stopping after {}".format(batch_index))
+    except:
+        raise
     finally:
         log_metrics(
             test_metrics,

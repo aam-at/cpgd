@@ -13,27 +13,30 @@ import tensorflow as tf
 from absl import flags
 
 from config import test_thresholds
-from data import load_mnist
+from data import fbresnet_augmentor, get_imagenet_dataflow
 from foolbox.attacks import (DatasetAttack, L0BrendelBethgeAttack,
                              L1BrendelBethgeAttack, L2BrendelBethgeAttack,
                              LinearSearchBlendedUniformNoiseAttack,
                              LinfinityBrendelBethgeAttack)
 from foolbox.models import TensorFlowModel
 from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
-                       l1_metric, l2_metric, li_metric, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
-from models import MadryCNN
-from utils import load_madry
+                       l0_pixel_metric, l1_metric, l2_metric, li_metric,
+                       log_metrics, make_input_pipeline,
+                       register_experiment_flags, reset_metrics, save_images,
+                       setup_experiment)
+from models import TsiprasCNN
+from utils import load_tsipras
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_brendel_lp")
+register_experiment_flags(working_dir="../results/imagenet/test_brendel_lp")
 flags.DEFINE_string("norm", "l1", "lp-norm attack")
+flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
+
 
 FLAGS = flags.FLAGS
 
@@ -47,21 +50,23 @@ lp_attacks = {
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
+
     assert FLAGS.load_from is not None
+    assert FLAGS.data_dir is not None
+    if FLAGS.data_dir.startswith("$"):
+        FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
     setup_experiment(f"madry_bethge_{FLAGS.norm}_test", [__file__])
 
     # data
-    _, _, test_ds = load_mnist(FLAGS.validation_size,
-                               data_format="NHWC",
-                               seed=FLAGS.data_seed)
-    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(test_ds,
-                                  shuffle=False,
-                                  batch_size=FLAGS.batch_size)
+    augmentors = fbresnet_augmentor(224, training=False)
+    val_ds = get_imagenet_dataflow(
+        FLAGS.data_dir, FLAGS.batch_size,
+        augmentors, mode='val')
+    val_ds.reset_state()
 
     # models
-    num_classes = 10
-    classifier = MadryCNN()
+    num_classes = len(TsiprasCNN.LABEL_RANGES)
+    classifier = TsiprasCNN()
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
@@ -71,27 +76,28 @@ def main(unused_args):
                                                   dtype=np.float32))
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
+    load_tsipras(FLAGS.load_from, classifier.variables)
 
     lp_metrics = {
-        "l0": l0_metric,
+        "l0": l0_pixel_metric,
         "l1": l1_metric,
         "l2": l2_metric,
-        "li": li_metric
+        "li": li_metric,
     }
     # attacks
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
+        if kwarg not in ["attack_l0_pixel_metric"]
     }
     olp = lp_attacks[FLAGS.norm](**attack_kwargs)
     # init attacks
     a0 = LinearSearchBlendedUniformNoiseAttack()
     a0_2 = DatasetAttack()
-    for image, _ in test_ds:
+    for image, _ in val_ds:
         a0_2.feed(fclassifier, image)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
@@ -135,8 +141,10 @@ def main(unused_args):
         is_adv = outs_lp["pred"] != label
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
         test_metrics[f"{FLAGS.norm}"](lp)
+        if FLAGS.norm == "l0":
+            test_metrics[f"{FLAGS.norm}_all"](l0_metric(image - image_lp))
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
@@ -149,7 +157,7 @@ def main(unused_args):
     y_list = []
     start_time = time.time()
     try:
-        for batch_index, (image, label) in enumerate(test_ds, 1):
+        for batch_index, (image, label) in enumerate(val_ds, 1):
             X_lp = test_step(image, label)
             log_metrics(
                 test_metrics,
