@@ -317,7 +317,6 @@ def jsma_config(runs=1, master_seed=1):
         print(generate_test_optimizer('test_jsma', **attack_args))
 
 
-
 def one_pixel_attack_config(runs=1, master_seed=1):
     num_images = 500
     batch_size = 50
@@ -328,11 +327,10 @@ def one_pixel_attack_config(runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, iters, es in itertools.product(models, [100], [0]):
-        type = Path(model).stem.split("_")[-1]
+    for type, iters, es in itertools.product(models.keys(), [100], [1]):
         working_dir = f"../results/imagenet_one_pixel/test_{type}"
         attack_args.update({
-            'load_from': model,
+            'load_from': models[type],
             'working_dir': working_dir,
             'attack_iters': iters,
             'attack_es': es,

@@ -42,6 +42,9 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
+    assert FLAGS.data_dir is not None
+    if FLAGS.data_dir.startswith("$"):
+        FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
     setup_experiment(f"madry_one_pixel_test", [__file__])
 
     # data
@@ -61,7 +64,7 @@ def main(unused_args):
         return classifier(x, training=False, **kwargs)
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
     load_tsipras(FLAGS.load_from, classifier.variables)
@@ -96,7 +99,8 @@ def main(unused_args):
         image_adv = np.cast[np.float32](
             a0.generate(x=image_int, y=label, maxiter=FLAGS.attack_iters) /
             255.0)
-        image_adv = tf.where(is_corr, image_adv, image)
+        image_adv = tf.where(tf.reshape(is_corr, (-1, 1, 1, 1)), image_adv,
+                             image)
         outs_l0 = test_classifier(image_adv)
 
         # metrics
@@ -129,7 +133,7 @@ def main(unused_args):
     y_list = []
     start_time = time.time()
     try:
-        for batch_index, (image, label) in enumerate(test_ds, 1):
+        for batch_index, (image, label) in enumerate(val_ds, 1):
             X_lp = test_step(image, label)
             log_metrics(
                 test_metrics,
