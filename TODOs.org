@@ -33,15 +33,30 @@ CLOSED: [2020-03-26 Thu 15:06]
 CLOSED: [2020-03-26 Thu 15:06]
 *** DONE Make a connection to multiplicative updates external regret minimization
 CLOSED: [2020-03-26 Thu 15:06]
-** Mnist experiments
+** Mnist experiments [4/4]
 *** DONE Import MNIST challenge model
 CLOSED: [2020-02-07 Fri 17:22]
 This model was already used in fab-paper.
-** TODO Cifar10 experiments [1/1]
+*** DONE Bethge results
+CLOSED: [2020-05-20 Wed 00:31]
+*** DONE JSMA results (double check with art toolbox)
+CLOSED: [2020-05-15 Fri 18:46]
+*** DONE One pixel results
+CLOSED: [2020-05-20 Wed 00:31]
+** TODO Cifar10 experiments [3/3]
 *** DONE Import Cifar10 challenge model
 CLOSED: [2020-03-26 Thu 15:38]
-** TODO Imagenet experiments [0/1]
-*** TODO Import robust model trained on Restricted Imagenet
+*** DONE Experiment one pixel attack
+CLOSED: [2020-05-20 Wed 00:31]
+*** DONE Double check JSMA results with art toolbox
+CLOSED: [2020-05-20 Wed 00:31]
+** TODO Imagenet experiments [2/4]
+*** DONE Import robust model trained on Restricted Imagenet
+CLOSED: [2020-05-15 Fri 03:23]
+*** DONE Bethge results
+CLOSED: [2020-05-20 Wed 00:31]
+*** TODO JSMA experiments
+*** TODO One pixel results
 ** Main parameters of the algorithm
 - Number of iterations
 - Minimum number of iterations before restarting if the stopping condition is satisfied

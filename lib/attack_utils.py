@@ -1,8 +1,10 @@
+import ast
+
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from .utils import l2_metric
+from .utils import create_lr_schedule, l2_metric
 
 
 def margin(logits, y_onehot, delta=0.0, targeted=False):
@@ -19,8 +21,29 @@ def margin(logits, y_onehot, delta=0.0, targeted=False):
     return margin
 
 
+def init_r0(shape, epsilon, norm, init='uniform'):
+    if epsilon is not None and epsilon > 0:
+        if init == 'sign':
+            r0 = tf.sign(tf.random.normal(shape))
+            r0 = epsilon * r0
+        elif init == 'uniform':
+            r0 = tf.random.uniform(shape, -1.0, 1.0)
+            r0 = epsilon * r0
+        elif init == 'lp_sphere':
+            r0 = random_lp_vector(shape, norm, epsilon)
+        else:
+            raise ValueError
+    else:
+        r0 = tf.zeros(shape)
+    return r0
+
+
+def hard_threshold(u, th):
+    return tf.where(tf.abs(u) <= th, 0.0, u)
+
+
 def proximal_l0(u, lambd):
-    return tf.where(tf.abs(u) <= tf.sqrt(2 * lambd), 0.0, u)
+    return hard_threshold(u, tf.sqrt(2 * lambd))
 
 
 def proximal_l1(u, lambd):
@@ -87,6 +110,8 @@ def project_l1ball(v, radius):
 
 
 def project_log_distribution_wrt_kl_divergence(log_distribution, axis=1):
+    """Projects onto the set of log-multinoulli distributions.
+    """
     # For numerical reasons, make sure that the largest element is zero before
     # exponentiating.
     log_distribution = log_distribution - tf.reduce_max(
@@ -170,3 +195,59 @@ def random_lp_vector(shape, ord, eps, dtype=tf.float32, seed=None):
         r = eps * tf.reshape(w * x / norm, shape)
 
     return r
+
+
+class AttackOptimizationLoop(object):
+    def __init__(self,
+                 attack,
+                 number_restarts: int = 1,
+                 r0_sampling_algorithm: str = 'uniform',
+                 r0_sampling_epsilon: float = 0.1,
+                 c0_initial_const: float = 0.01,
+                 lr: float = 0.01,
+                 lr_config: str = None,
+                 finetune: bool = True,
+                 finetune_lr: float = 0.01,
+                 finetune_lr_config: str = None):
+        self.attack = attack
+        self.number_restarts = number_restarts
+        self.r0_sampling_algorithm = r0_sampling_algorithm
+        self.r0_sampling_epsilon = r0_sampling_epsilon
+        self.c0_initial_const = c0_initial_const
+        if lr_config is not None:
+            if isinstance(lr_config, str):
+                lr_config = ast.literal_eval(lr_config)
+            self.lr = create_lr_schedule(lr_config['schedule'],
+                                         **lr_config['config'])
+        else:
+            self.lr = lr
+        self.finetune = finetune
+        if finetune_lr_config is not None:
+            if isinstance(finetune_lr_config, str):
+                finetune_lr_config = ast.literal_eval(finetune_lr_config)
+            self.finetune_lr = create_lr_schedule(
+                finetune_lr_config['schedule'], **finetune_lr_config['config'])
+        else:
+            self.finetune_lr = finetune_lr
+
+    def _run_loop(self, X, y_onehot):
+        self.attack.restart_attack(X, y_onehot)
+        self.attack.primal_lr = self.lr
+        for i in range(self.number_restarts):
+            r0 = init_r0(X.shape, self.r0_sampling_epsilon, self.attack.ord,
+                         self.r0_sampling_algorithm)
+            r0 = self.attack.project_box(X, r0)
+            c0 = self.c0_initial_const
+            self.attack.reset_attack(r0, c0)
+            self.attack.run(X, y_onehot)
+        if self.finetune:
+            self.attack.primal_lr = self.finetune_lr
+            rbest = self.attack.attack.read_value() - X
+            cbest = self.attack.bestlambd.read_value()
+            self.attack.reset_attack(rbest, cbest)
+            self.attack.run(X, y_onehot)
+
+    def run_loop(self, X, y_onehot):
+        with tf.control_dependencies(
+            [tf.py_function(self._run_loop, [X, y_onehot], [])]):
+            return self.attack.attack.read_value()

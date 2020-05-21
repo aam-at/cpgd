@@ -1,0 +1,309 @@
+#+options: tex:verbatim
+#+TITLE: Results on restricted imagenet dataset
+
+* General
+#+NAME: init_block
+#+BEGIN_SRC python
+  import numpy as np
+  from pathlib import Path
+  import pandas as pd
+  import glob
+
+  from config import test_model_thresholds
+  from lib.parse_logs import (output_org_results, parse_output_logs,
+                              parse_test_log)
+
+
+  test_params = []
+  dirs = glob.glob("../results/imagenet*")
+  thresholds = np.array(test_model_thresholds[type][norm])
+  thresholds = np.round(thresholds, 4)
+  topk = None
+#+END_SRC
+
+#+NAME: output_results
+#+BEGIN_SRC python :noweb yes
+  df = parse_output_logs(dirs, norm, type, export_test_params=test_params)
+  df_org = output_org_results(df,
+                              norm,
+                              allowed_thresholds=thresholds,
+                              topk=topk)
+#+END_SRC
+
+#+NAME: output_dir_results
+#+BEGIN_SRC python :noweb yes
+  df_sublist = []
+  for p in dirs:
+      path = Path(p) / f"test_{type}" / "*"
+      df = parse_test_log(path,
+                          exclude=["nll_loss", "conf"],
+                          export_test_params=test_params)
+      df_sublist.append(df)
+  df = pd.concat(df_sublist, ignore_index=True)
+  df = df.sort_values(norm, ascending=True)
+  df_org = output_org_results(df, norm, allowed_thresholds=thresholds)
+#+END_SRC
+
+* Init
+#+NAME: init_block_random
+#+BEGIN_SRC python :noweb yes
+  <<init_block>>
+  def parse_output_logs(paths, norm, type):
+      if not isinstance(paths, (list, tuple)):
+          paths = list(paths)
+      df_sublist = []
+      for p in paths:
+          p = Path(p)
+          df = parse_test_optimizer_log(p / f"test_random_{type}_{norm}" / "imagenet")
+          df_sublist.append(df)
+      df = pd.concat(df_sublist, ignore_index=True)
+      df = df.sort_values('entropy_hat', ascending=False)
+      return df
+#+END_SRC
+
+#+NAME: output_results_init
+#+BEGIN_SRC python :noweb yes
+  dirs = glob.glob("./results/imagenet*")
+  df = parse_output_logs(dirs, norm, type)
+  df_org = output_org_results([df], norm, summarize=False, topk=100)
+#+END_SRC
+
+** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="plain" :results value :return df_org
+  <<init_block_random>>
+  <<output_results_init>>
+#+END_SRC
+
+** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="linf" :results value :return df_org
+  <<init_block_random>>
+  <<output_results_init>>
+#+END_SRC
+
+** L2
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="l2" :results value :return df_org
+  <<init_block_random>>
+  <<output_results_init>>
+#+END_SRC
+
+* Our attack
+** L0
+*** Plain                                                           :plain:
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="plain" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="linf" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="l2" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+** L1
+*** Plain                                                           :plain:
+#+BEGIN_SRC python :noweb yes :var norm="l1" :var type="plain" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l1" :var type="linf" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="l1" :var type="l2" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+** L2
+*** Plain                                                           :plain:
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="plain" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="linf" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="l2" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+** Linf
+*** Plain                                                           :plain:
+#+BEGIN_SRC python :noweb yes :var norm="li" :var type="plain" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="li" :var type="linf" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="li" :var type="l2" :results value :return df_org
+  <<init_block>>
+  <<output_results>>
+#+END_SRC
+
+* Bethge attack
+#+NAME: init_bethge_block
+#+BEGIN_SRC python :noweb yes
+  <<init_block>>
+
+  test_params = []
+  dirs = glob.glob("../results/imagenet*_bethge")
+  topk = None
+#+END_SRC
+
+** L0
+*** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="plain" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="linf" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="l2" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+** L1
+*** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l1" :var type="plain" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l1" :var type="linf" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="l1" :var type="l2" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+** L2
+*** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="plain" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="linf" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="l2" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+** Linf
+*** Plain
+#+BEGIN_SRC python :noweb yes :var norm="li" :var type="plain" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="li" :var type="linf" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="li" :var type="l2" :results value :return df_org
+  <<init_bethge_block>>
+  <<output_results>>
+#+END_SRC
+
+* JSMA attack
+#+NAME: init_jsma_block
+#+BEGIN_SRC python :noweb yes
+  <<init_block>>
+
+  test_params = []
+  dirs = glob.glob("../results/imagenet*_jsma")
+#+END_SRC
+
+** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="plain" :results value :return df_org
+  <<init_jsma_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="linf" :results value :return df_org
+  <<init_jsma_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+** L2
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="l2" :results value :return df_org
+  <<init_jsma_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+* Pixel attack
+#+NAME: init_one_pixel_block
+#+BEGIN_SRC python :noweb yes
+  <<init_block>>
+
+  test_params = []
+  dirs = glob.glob("../results/imagenet*_one_pixel")
+#+END_SRC
+
+** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="plain" :results value :return df_org
+  <<init_one_pixel_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="linf" :results value :return df_org
+  <<init_one_pixel_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+** L2
+#+BEGIN_SRC python :noweb yes :var norm="l0" :var type="l2" :results value :return df_org
+  <<init_one_pixel_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+* COMMENT Local Variables
+# Local Variables:
+# org-confirm-babel-evaluate: nil
+# End:

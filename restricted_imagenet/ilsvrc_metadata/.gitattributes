@@ -1,0 +1,11 @@
+imagenet.bet.pickle filter=lfs diff=lfs merge=lfs -text
+orig_train.txt filter=lfs diff=lfs merge=lfs -text
+synset_words.txt filter=lfs diff=lfs merge=lfs -text
+synsets.txt filter=lfs diff=lfs merge=lfs -text
+val.txt filter=lfs diff=lfs merge=lfs -text
+train.txt filter=lfs diff=lfs merge=lfs -text
+det_synset_words.txt filter=lfs diff=lfs merge=lfs -text
+imagenet_mean.binaryproto filter=lfs diff=lfs merge=lfs -text
+orig_test.txt filter=lfs diff=lfs merge=lfs -text
+orig_val.txt filter=lfs diff=lfs merge=lfs -text
+test.txt filter=lfs diff=lfs merge=lfs -text
