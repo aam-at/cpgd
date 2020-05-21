@@ -339,7 +339,7 @@ def one_pixel_attack_config(runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, iters, es in itertools.product(models, [100], [0]):
+    for model, iters, es in itertools.product(models, [100], [1]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_one_pixel/test_{type}"
         attack_args.update({

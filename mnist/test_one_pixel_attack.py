@@ -95,7 +95,8 @@ def main(unused_args):
         image_adv = np.cast[np.float32](
             a0.generate(x=image_int, y=label, maxiter=FLAGS.attack_iters) /
             255.0)
-        image_adv = tf.where(is_corr, image_adv, image)
+        image_adv = tf.where(tf.reshape(is_corr, (-1, 1, 1, 1)), image_adv,
+                             image)
         outs_l0 = test_classifier(image_adv)
 
         # metrics
