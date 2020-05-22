@@ -95,14 +95,19 @@ def main(unused_args):
         outs = test_classifier(image)
         is_corr = outs['pred'] == label
 
-        image_int = np.cast[np.int32](image * 255)
-        image_adv = np.cast[np.float32](
-            a0.generate(x=image_int, y=label, maxiter=FLAGS.attack_iters) /
-            255.0)
-        image_adv = tf.where(tf.reshape(is_corr, (-1, 1, 1, 1)), image_adv,
-                             image)
-        outs_l0 = test_classifier(image_adv)
+        # attack only correctly classified images
+        batch_indices = tf.range(image.shape[0])
+        is_corr_indx = tf.expand_dims(batch_indices[is_corr], 1)
+        image_subset = tf.gather_nd(image, is_corr_indx)
+        label_subset = tf.gather_nd(label, is_corr_indx)
+        image_subset_int = np.cast[np.int32](image_subset * 255)
+        image_adv_subset_int = a0.generate(x=image_subset_int,
+                                           y=label_subset,
+                                           maxiter=FLAGS.attack_iters)
+        r_adv_subset = (image_adv_subset_int - image_subset_int) / float(255.0)
+        image_adv = tf.tensor_scatter_nd_add(image, is_corr_indx, r_adv_subset)
 
+        outs_l0 = test_classifier(image_adv)
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])

@@ -337,7 +337,7 @@ def one_pixel_attack_config(runs=1, master_seed=1):
         })
         for threshold in test_model_thresholds[type]["l0"]:
             attack_args['attack_threshold'] = threshold
-            name = f"imagenet_one_pixel_{type}_{iters}_{threshold}_"
+            name = f"imagenet_one_pixel_{type}_es{es}_i{iters}_t{threshold}_"
             attack_args['name'] = name
             p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
             if name in p or name in existing_names:
