@@ -51,46 +51,6 @@ class GradientL1Attack(BaseL1Attack):
             else:
                 self.rx.assign(self.project_box(X, self.rx))
 
-    def _primal_dual_optim_step(self, X, y_onehot):
-        # gradient descent on primal variables
-        with tf.GradientTape() as find_r_tape:
-            X_hat = X + self.rx
-            # Part 1: lp loss
-            lp_loss = self.lp_metric(self.rx)
-            # Part 2: classification loss
-            cls_constraint, cls_loss = self.cls_constraint_and_loss(
-                X_hat, y_onehot)
-            loss = cls_loss + self.lambd * lp_loss
-
-        # compute gradient for primal variables
-        fg = find_r_tape.gradient(loss, self.rx)
-        if self.gradient_preprocessing:
-            fg = self.gradient_preprocess(fg)
-        with tf.control_dependencies(
-                [self.primal_opt.apply_gradients([(fg, self.rx)])]):
-            if self.hard_threshold:
-                lr = self.primal_lr
-                th = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
-                self.rx.assign(
-                    self.project_box(X, hard_threshold(self.rx, th)))
-            else:
-                self.rx.assign(self.project_box(X, self.rx))
-
-        # gradient ascent on dual variables (simultaneous)
-        if self.use_proxy_constraint:
-            constraint_gradients = cls_constraint
-        else:
-            constraint_gradients = tf.sign(cls_constraint)
-        multipliers_gradients = -tf.stack(
-            (tf.zeros_like(constraint_gradients), constraint_gradients),
-            axis=1)
-        self.dual_opt.apply_gradients([(multipliers_gradients, self.state)])
-
-        if self.dual_ema:
-            lambd_new = compute_lambda(self.state)
-            with tf.control_dependencies([self.lambd_ema.assign(lambd_new)]):
-                self.ema.apply([self.lambd_ema])
-
 
 class ProximalL1Attack(BaseL1Attack, ProximalGradientOptimizerAttack):
     def proximity_operator(self, u, l):
