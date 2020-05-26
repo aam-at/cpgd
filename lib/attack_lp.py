@@ -382,7 +382,11 @@ class GradientOptimizerAttack(ABC):
             self.optim_step(X, y_onehot)
 
     def run(self, X, y_onehot):
-        tf.py_function(self._run, [X, y_onehot], [])
+        if tf.executing_eagerly():
+            self._run(X, y_onehot)
+        else:
+            # graph mode
+            tf.py_function(self._run, [X, y_onehot], [])
 
     def call(self, X, y_onehot):
         self.run(X, y_onehot)
