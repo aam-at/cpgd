@@ -42,7 +42,7 @@ class GradientOptimizerAttack(ABC):
         dual_optimizer: str = "sgd",
         dual_lr: float = 1e-1,
         dual_ema: bool = True,
-        simulteneous_updates: bool = False,
+        simultaneous_updates: bool = False,
         # attack parameters
         targeted: bool = False,
         confidence: float = 0.0,
@@ -83,7 +83,7 @@ class GradientOptimizerAttack(ABC):
         self.dual_opt = create_optimizer(dual_optimizer, dual_lr)
         self.dual_ema = dual_ema
         self.ema = tf.train.ExponentialMovingAverage(decay=0.9)
-        self.simulteneous_updates = simulteneous_updates
+        self.simultaneous_updates = simultaneous_updates
         self.targeted = targeted
         self.confidence = confidence
         self.use_proxy_constraint = use_proxy_constraint
@@ -267,40 +267,6 @@ class GradientOptimizerAttack(ABC):
             with tf.control_dependencies([self.lambd_ema.assign(lambd_new)]):
                 self.ema.apply([self.lambd_ema])
 
-    def _primal_dual_optim_step(self, X, y_onehot):
-        # gradient descent on primal variables
-        with tf.GradientTape() as find_r_tape:
-            X_hat = X + self.rx
-            # Part 1: lp loss
-            lp_loss = self.lp_metric(self.rx)
-            # Part 2: classification loss
-            cls_constraint, cls_loss = self.cls_constraint_and_loss(
-                X_hat, y_onehot)
-            loss = cls_loss + self.lambd * lp_loss
-
-        # compute gradient for primal variables
-        fg = find_r_tape.gradient(loss, self.rx)
-        if self.gradient_preprocessing:
-            fg = self.gradient_preprocess(fg)
-        with tf.control_dependencies(
-            [self.primal_opt.apply_gradients([(fg, self.rx)])]):
-            self.rx.assign(self.project_box(X, self.rx))
-
-        # gradient ascent on dual variables (simultaneous)
-        if self.use_proxy_constraint:
-            constraint_gradients = cls_constraint
-        else:
-            constraint_gradients = tf.sign(cls_constraint)
-        multipliers_gradients = -tf.stack(
-            (tf.zeros_like(constraint_gradients), constraint_gradients),
-            axis=1)
-        self.dual_opt.apply_gradients([(multipliers_gradients, self.state)])
-
-        if self.dual_ema:
-            lambd_new = compute_lambda(self.state)
-            with tf.control_dependencies([self.lambd_ema.assign(lambd_new)]):
-                self.ema.apply([self.lambd_ema])
-
     def _update_attack_state(self, X, y_onehot):
         # correct prediction
         batch_indices = tf.range(X.shape[0])
@@ -365,11 +331,14 @@ class GradientOptimizerAttack(ABC):
     @tf.function
     def optim_step(self, X, y_onehot):
         # TODO: compare with simultaneous optimization
-        if self.simulteneous_updates:
-            self._primal_dual_optim_step(X, y_onehot)
+        rx_v_0 = self.rx.read_value()
+        self._primal_optim_step(X, y_onehot)
+        rx_v_1 = self.rx.read_value()
+        if self.simultaneous_updates:
+            self.rx.assign(rx_v_0)
+            self._dual_optim_step(X, y_onehot)
+            self.rx.assign(rx_v_1)
         else:
-            # alternating optimization
-            self._primal_optim_step(X, y_onehot)
             self._dual_optim_step(X, y_onehot)
         self._update_attack_state(X, y_onehot)
 
@@ -417,7 +386,7 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
         super(ProximalGradientOptimizerAttack, self).build(inputs_shape)
         X_shape, _ = inputs_shape
         batch_size = X_shape[0]
-        # mirror variable to track momentum for accelerated gradient
+        # variable to update so we track momentum for accelerated gradient
         self.ry = tf.Variable(tf.zeros_like(self.rx),
                               trainable=True,
                               name="ry")
@@ -430,9 +399,9 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
         batch_indices = tf.range(X.shape[0])
         # proximal gradient descent on primal variables
         with tf.GradientTape() as find_r_tape:
-            X_hat = X + ry
+            X_hat = X + rx
             # Part 1: lp loss
-            lp_loss = self.lp_metric(ry)
+            lp_loss = self.lp_metric(rx)
             # Part 2: classification loss
             cls_constraint, cls_loss = self.cls_constraint_and_loss(
                 X_hat, y_onehot)
@@ -440,94 +409,34 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
         # select only active indices among all examples in the batch
         update_indxs = batch_indices[cls_constraint > 0]
         # compute gradient for primal variables
-        fg = find_r_tape.gradient(cls_loss, ry)
+        fg = find_r_tape.gradient(cls_loss, rx)
         fg = tf.gather_nd(fg, tf.expand_dims(update_indxs, axis=1))
         if self.gradient_preprocessing:
             fg = self.gradient_preprocess(fg)
 
         # proximal or accelerated proximal gradient
         lr = self.primal_lr
-        rx_v = rx.read_value()
+        ry_v = ry.read_value()
         sparse_fg = tf.IndexedSlices(fg, update_indxs)
         # sparse updates does not work correctly and stil update all the statistics for some optimizer
         # FIXME: consider using LazyAdam from tf.addons
         with tf.control_dependencies(
-            [self.primal_opt.apply_gradients([(sparse_fg, ry)])]):
+            [self.primal_opt.apply_gradients([(sparse_fg, rx)])]):
             mu = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
-            rx.assign(self.project_box(X, self.proximity_operator(ry, mu)))
+            ry.assign(self.project_box(X, self.proximity_operator(rx, mu)))
         if self.accelerated:
             rv = self.project_box(
-                X, rx + tf.reshape(self.beta, (-1, 1, 1, 1)) * (rx - rx_v))
-            F_x = self.total_loss(X, y_onehot, rx, self.lambd)
+                X, ry + tf.reshape(self.beta, (-1, 1, 1, 1)) * (ry - ry_v))
+            F_y = self.total_loss(X, y_onehot, ry, self.lambd)
             F_v = self.total_loss(X, y_onehot, rv, self.lambd)
-            ry.assign(tf.where(tf.reshape(F_x <= F_v, (-1, 1, 1, 1)), rx, rv))
+            rx.assign(tf.where(tf.reshape(F_y <= F_v, (-1, 1, 1, 1)), ry, rv))
             if self.adaptive_momentum:
                 self.beta.scatter_mul(
-                    tf.IndexedSlices(tf.where(F_x <= F_v, 0.9, 1.0 / 0.9),
+                    tf.IndexedSlices(tf.where(F_y <= F_v, 0.9, 1.0 / 0.9),
                                      batch_indices))
                 self.beta.assign(tf.minimum(self.beta, 1.0))
         else:
-            ry.assign(rx)
-
-    def _primal_dual_optim_step(self, X, y_onehot):
-        # proximal gradient descent on primal variables
-        rx, ry = self.rx, self.ry
-        batch_indices = tf.range(X.shape[0])
-        # proximal gradient descent on primal variables
-        with tf.GradientTape() as find_r_tape:
-            X_hat = X + ry
-            # Part 1: lp loss
-            lp_loss = self.lp_metric(ry)
-            # Part 2: classification loss
-            cls_constraint, cls_loss = self.cls_constraint_and_loss(
-                X_hat, y_onehot)
-
-        # select only active indices among all examples in the batch
-        update_indxs = batch_indices[cls_constraint > 0]
-        # compute gradient for primal variables
-        fg = find_r_tape.gradient(cls_loss, ry)
-        fg = tf.gather_nd(fg, tf.expand_dims(update_indxs, axis=1))
-        if self.gradient_preprocessing:
-            fg = self.gradient_preprocess(fg)
-
-        # proximal or accelerated proximal gradient
-        lr = self.primal_lr
-        rx_v = rx.read_value()
-        sparse_fg = tf.IndexedSlices(fg, update_indxs)
-        # sparse updates does not work correctly and stil update all the statistics for some optimizer
-        # FIXME: consider using LazyAdam from tf.addons
-        with tf.control_dependencies(
-            [self.primal_opt.apply_gradients([(sparse_fg, ry)])]):
-            mu = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
-            rx.assign(self.project_box(X, self.proximity_operator(ry, mu)))
-        if self.accelerated:
-            rv = self.project_box(
-                X, rx + tf.reshape(self.beta, (-1, 1, 1, 1)) * (rx - rx_v))
-            F_x = self.total_loss(X, y_onehot, rx, self.lambd)
-            F_v = self.total_loss(X, y_onehot, rv, self.lambd)
-            ry.assign(tf.where(tf.reshape(F_x <= F_v, (-1, 1, 1, 1)), rx, rv))
-            if self.adaptive_momentum:
-                self.beta.scatter_mul(
-                    tf.IndexedSlices(tf.where(F_x <= F_v, 0.9, 1.0 / 0.9),
-                                     batch_indices))
-                self.beta.assign(tf.minimum(self.beta, 1.0))
-        else:
-            ry.assign(rx)
-
-        # gradient ascent on dual variables (simultaneous)
-        if self.use_proxy_constraint:
-            constraint_gradients = cls_constraint
-        else:
-            constraint_gradients = tf.sign(cls_constraint)
-        multipliers_gradients = -tf.stack(
-            (tf.zeros_like(constraint_gradients), constraint_gradients),
-            axis=1)
-        self.dual_opt.apply_gradients([(multipliers_gradients, self.state)])
-
-        if self.dual_ema:
-            lambd_new = compute_lambda(self.state)
-            with tf.control_dependencies([self.lambd_ema.assign(lambd_new)]):
-                self.ema.apply([self.lambd_ema])
+            rx.assign(ry)
 
     @tf.function
     def reset_attack(self, r0, C0):
