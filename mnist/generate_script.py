@@ -71,6 +71,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
         'attack': [attack],
         'attack_loss': ["cw"],
         'attack_iterations': [500],
+        'attack_simultaneous_updates': [True, False],
         'attack_primal_lr': [1e-1],
         'attack_dual_optimizer': ["sgd"],
         'attack_dual_lr': [1e-1],
@@ -189,7 +190,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
     defined_flags = flags.FLAGS._flags().keys()
     test_params = [
         flag for flag in defined_flags if flag.startswith("attack_")
-        if flag not in ['attack_simulteneous_updates']
+        if flag not in ['attack_simultaneous_updates']
     ]
 
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
@@ -221,6 +222,8 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
             if attack_args['attack_accelerated']:
                 continue
             if attack_args['attack_loop_c0_initial_const'] != 0.01:
+                continue
+            if attack_args['attack_loop_r0_sampling_epsilon'] != 0.5:
                 continue
 
             lr_config = ast.literal_eval(attack_args['attack_loop_lr_config'])
