@@ -38,6 +38,7 @@ _N{attack_args["attack_loop_number_restarts"]}
             )
     else:
         name = f"{name}_nofinetune"
+    name = f"{name}_{'sim' if attack_args['attack_simultaneous_updates'] else 'alt'}"
     name = f"{name}_{attack_args['attack_primal_optimizer']}"
     if (
         "attack_gradient_preprocessing" in attack_args
