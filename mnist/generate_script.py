@@ -189,7 +189,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
     # import args
     defined_flags = flags.FLAGS._flags().keys()
     test_params = [
-        flag for flag in defined_flags if flag.startswith("attack_")
+        flag for flag in defined_flags if flag.startswith("attack")
         if flag not in ['attack_simultaneous_updates']
     ]
 
@@ -211,6 +211,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
         # parse test log
         df = parse_test_log(Path(working_dir) / f"mnist_{type}_{attack}_*",
                             export_test_params=test_params)
+        df = df[df.attack == attack]
         df = df.sort_values(norm)
         df = df[df.name.str.contains("N100")]
         j = 0
@@ -219,8 +220,9 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                 {col: df[col]
                  for col in df.keys() if col in test_params})
             # check args
-            if attack_args['attack_accelerated']:
-                continue
+            if issubclass(attack_klass, ProximalGradientOptimizerAttack):
+                if attack_args['attack_accelerated']:
+                    continue
             if attack_args['attack_loop_c0_initial_const'] != 0.01:
                 continue
             if attack_args['attack_loop_r0_sampling_epsilon'] != 0.5:
@@ -238,9 +240,12 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
             if round(flr_config['config']['initial_learning_rate'] /
                      flr_config['config']['minimal_learning_rate']) != 10:
                 continue
+            attack_args['working_dir'] = f"../results/mnist_final/test_{type}_{norm}"
 
             # change args
-            for R in [1, 10, 100]:
+            j += 1
+            for upd, R in itertools.product([True, False], [1, 10, 100]):
+                attack_args['attack_simultaneous_updates'] = upd
                 attack_args['attack_loop_number_restarts'] = R
                 # generate unique name
                 base_name = f"mnist_{type}"
@@ -248,8 +253,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                 attack_args["name"] = name
                 if name in existing_names:
                     continue
-                j += 1
-                p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+                p = [s.name[:-1] for s in list(Path(attack_args['working_dir']).glob("*"))]
                 if name in p or j > topk:
                     continue
                 existing_names.append(name)
@@ -365,4 +369,5 @@ def one_pixel_attack_config(runs=1, master_seed=1):
 
 
 if __name__ == '__main__':
+    test_lp_custom_config('l1')
     pass

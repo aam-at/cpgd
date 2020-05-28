@@ -75,6 +75,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
         'attack': [attack],
         'attack_loss': ["cw"],
         'attack_iterations': [500],
+        'attack_simultaneous_updates': [True, False],
         'attack_primal_lr': [1e-1],
         'attack_dual_optimizer': ["sgd"],
         'attack_dual_lr': [1e-1],
@@ -193,7 +194,7 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
     defined_flags = flags.FLAGS._flags().keys()
     test_params = [
         flag for flag in defined_flags if flag.startswith("attack_")
-        if flag not in ['attack_simulteneous_updates']
+        if flag not in ['attack_simultaneous_updates']
     ]
 
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
@@ -212,9 +213,9 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
         attack_args.update({'load_from': model, 'working_dir': working_dir})
 
         # parse test log
-        df = parse_test_log(
-            Path(working_dir) / f"cifar10_{type}_{attack}_*",
-            export_test_params=test_params)
+        df = parse_test_log(Path(working_dir) / f"cifar10_{type}_{attack}_*",
+                            export_test_params=test_params)
+        df = df[df.attack == attack]
         df = df.sort_values(norm)
         df = df[df.name.str.contains("N100")]
         j = 0
@@ -222,14 +223,14 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
             attack_args.update(
                 {col: df[col]
                  for col in df.keys() if col in test_params})
-
             # check args
-            if attack_args['attack_accelerated']:
-                continue
+            if issubclass(attack_klass, ProximalGradientOptimizerAttack):
+                if attack_args['attack_accelerated']:
+                    continue
             if attack_args['attack_loop_c0_initial_const'] != 0.01:
                 continue
-            # if attack_args['attack_loop_r0_sampling_epsilon'] != 0.5:
-            #     continue
+            if attack_args['attack_loop_r0_sampling_epsilon'] != 0.5:
+                continue
             lr_config = ast.literal_eval(attack_args['attack_loop_lr_config'])
             flr_config = ast.literal_eval(attack_args['attack_loop_finetune_lr_config'])
             if lr_config['schedule'] != 'linear':
@@ -242,21 +243,21 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
             if round(flr_config['config']['initial_learning_rate'] /
                      flr_config['config']['minimal_learning_rate']) != 10:
                 continue
+            attack_args['working_dir'] = f"../results/cifar10_final/test_{type}_{norm}"
 
             # change args
             j += 1
-            attack_args['attack_loop_number_restarts'] = 100
-            for r, R in itertools.product([0.1, 0.25, 0.4, 0.5], [1, 10, 100]):
-                attack_args['attack_loop_r0_sampling_epsilon'] = r
+            for upd, r, R in itertools.product([True, False], [0.25], [1, 10, 100]):
+                attack_args['attack_simultaneous_updates'] = upd
                 attack_args['attack_loop_number_restarts'] = R
+                attack_args['attack_loop_r0_sampling_epsilon'] = r
                 # generate unique name
                 base_name = f"cifar10_{type}"
                 name = format_name(base_name, attack_args) + '_'
                 attack_args["name"] = name
                 if name in existing_names:
                     continue
-                p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-                p = []
+                p = [s.name[:-1] for s in list(Path(attack_args['working_dir']).glob("*"))]
                 if name in p or j > topk:
                     continue
                 existing_names.append(name)
@@ -372,4 +373,5 @@ def one_pixel_attack_config(runs=1, master_seed=1):
 
 
 if __name__ == '__main__':
+    test_lp_custom_config('li')
     pass
