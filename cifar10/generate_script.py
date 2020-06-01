@@ -181,7 +181,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
                     print(generate_test_optimizer_lp(**attack_args))
 
 
-def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
+def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
     import test_optimizer_lp_madry
     from test_optimizer_lp_madry import lp_attacks
 
@@ -193,12 +193,12 @@ def test_lp_custom_config(attack, topk=3, runs=1, master_seed=1):
     # import args
     defined_flags = flags.FLAGS._flags().keys()
     test_params = [
-        flag for flag in defined_flags if flag.startswith("attack_")
+        flag for flag in defined_flags if flag.startswith("attack")
         if flag not in ['attack_simultaneous_updates']
     ]
 
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
-    batch_size = 500
+    batch_size = 250
     attack_args = {
         'attack': attack,
         'num_batches': num_images // batch_size,

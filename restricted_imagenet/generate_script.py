@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
+import ast
 import importlib
 import itertools
 import os
@@ -74,6 +75,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
         'attack': [attack],
         'attack_loss': ["cw"],
         'attack_iterations': [500],
+        'attack_simultaneous_updates': [True, False],
         'attack_primal_lr': [1e-1],
         'attack_dual_optimizer': ["sgd"],
         'attack_dual_lr': [1e-1],
@@ -175,75 +177,90 @@ def test_lp_config(attack, runs=1, master_seed=1):
 
 
 def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
-    norm, _ = lp_attacks[attack]
+    import test_optimizer_lp_madry
+    from test_optimizer_lp_madry import lp_attacks
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_optimizer_lp_madry)
+    assert attack in lp_attacks
+    norm, attack_klass = lp_attacks[attack]
+    import_klass_kwargs_as_flags(attack_klass, 'attack_')
+    # import args
+    defined_flags = flags.FLAGS._flags().keys()
+    test_params = [
+        flag for flag in defined_flags if flag.startswith("attack")
+        if flag not in ['attack_simultaneous_updates']
+    ]
+
     num_images = {'l0': 500, 'li': 500, 'l1': 500, 'l2': 500}[norm]
     batch_size = 50
+    attack_args = {
+        'attack': attack,
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
+
     existing_names = []
     for type in models.keys():
         working_dir = f"../results/imagenet_10/test_{type}_{norm}"
-        script_module = importlib.import_module("test_optimizer_lp_madry")
-        defined_flags = script_module.FLAGS._flags().keys()
-        export_test_params = [
-            flag for flag in defined_flags if flag.startswith("attack_")
-        ]
-        df = parse_test_optimizer_log(Path(working_dir) /
-                                      f"imagenet_{type}_{attack}_",
-                                      export_test_params=export_test_params)
-        if len(df) == 0:
-            continue
-        df = df[df.name.str.contains("N1")]
+        attack_args.update({'load_from': models[type], 'working_dir': working_dir})
+
+        # parse test log
+        df = parse_test_log(Path(working_dir) / f"imagenet_{type}_{attack}_*",
+                            export_test_params=test_params)
+        df = df[df.attack == attack]
         df = df.sort_values(norm)
         j = 0
         for id, df in df.iterrows():
-            attack_args = {
-                col: df[col]
-                for col in df.keys() if col in export_test_params
-            }
-            attack_args.update({
-                'attack': attack,
-                'num_batches': num_images // batch_size,
-                'batch_size': batch_size,
-                'load_from': models[type],
-                'working_dir': working_dir
-            })
-            if attack != 'l2g' and not attack_args[
-                    'attack_accelerated'] and not attack_args[
-                        'attack_adaptive_momentum']:
+            attack_args.update(
+                {col: df[col]
+                 for col in df.keys() if col in test_params})
+            # check args
+            if issubclass(attack_klass, ProximalGradientOptimizerAttack):
+                if attack_args['attack_accelerated']:
+                    continue
+            if attack_args['attack_loop_c0_initial_const'] != 0.01:
                 continue
-            import ast
+            if attack_args['attack_loop_r0_sampling_epsilon'] != 0.1:
+                continue
             lr_config = ast.literal_eval(attack_args['attack_loop_lr_config'])
             flr_config = ast.literal_eval(attack_args['attack_loop_finetune_lr_config'])
             if lr_config['schedule'] != 'linear':
                 continue
             if flr_config['schedule'] != 'linear':
                 continue
-            if lr_config['config']['initial_learning_rate'] / lr_config['config']['minimal_learning_rate'] < 11:
+            if round(lr_config['config']['initial_learning_rate'] /
+                     lr_config['config']['minimal_learning_rate']) != 100:
                 continue
-            if flr_config['config']['initial_learning_rate'] / lr_config['config']['minimal_learning_rate'] > 11:
+            if round(flr_config['config']['initial_learning_rate'] /
+                     flr_config['config']['minimal_learning_rate']) != 10:
                 continue
-            if attack_args['attack_loop_c0_initial_const'] != 0.01:
-                continue
-            # change args
-            attack_args['attack_loop_number_restarts'] = 10
-            attack_args['attack_loop_r0_sampling_epsilon'] = 0.5
+            attack_args['working_dir'] = f"../results/imagenet_final/test_{type}_{norm}"
 
-            # generate unique name
-            base_name = f"imagenet_{type}"
-            name = format_name(base_name, attack_args) + '_'
-            attack_args["name"] = name
-            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-            if name in existing_names:
-                continue
+            # change args
             j += 1
-            if name in p or j > topk:
-                continue
-            existing_names.append(name)
-            np.random.seed(master_seed)
-            for i in range(runs):
-                seed = np.random.randint(1000)
-                attack_args["seed"] = seed
-                if True:
-                    print(generate_test_optimizer_lp(**attack_args))
+            for upd, r, R in itertools.product([True, False], [0.1], [1, 10]):
+                attack_args['attack_simultaneous_updates'] = upd
+                attack_args['attack_loop_number_restarts'] = R
+                attack_args['attack_loop_r0_sampling_epsilon'] = r
+                # generate unique name
+                base_name = f"imagenet_{type}"
+                name = format_name(base_name, attack_args) + '_'
+                attack_args["name"] = name
+                if name in existing_names:
+                    continue
+                p = [s.name[:-1] for s in list(Path(attack_args['working_dir']).glob("*"))]
+                if name in p or j > topk:
+                    continue
+                existing_names.append(name)
+                np.random.seed(master_seed)
+                for i in range(runs):
+                    seed = np.random.randint(1000)
+                    attack_args["seed"] = seed
+                    print(
+                        generate_test_optimizer('test_optimizer_lp_madry',
+                                                **attack_args))
 
 
 def bethge_config(norm, runs=1, master_seed=1):
