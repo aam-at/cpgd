@@ -16,8 +16,8 @@ from config import test_thresholds
 from data import load_mnist
 from lib.fab import FABAttack, FABModelAdapter
 from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
-                       l1_metric, l2_metric, li_metric, log_metrics,
-                       make_input_pipeline, random_targets,
+                       l1_metric, l2_metric, li_metric, limit_gpu_growth,
+                       log_metrics, make_input_pipeline, random_targets,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
 from models import MadryCNN
@@ -78,6 +78,7 @@ def main(unused_args):
     }
     fab = FABAttack(
         model=FABModelAdapter(lambda x: test_classifier(x)['logits']),
+        seed=FLAGS.seed,
         **attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
@@ -166,4 +167,5 @@ def main(unused_args):
 
 
 if __name__ == "__main__":
+    limit_gpu_growth()
     absl.app.run(main)
