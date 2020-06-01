@@ -275,8 +275,8 @@ def fab_config(norm, runs=1, master_seed=1):
     flags.FLAGS._flags().clear()
     import_klass_kwargs_as_flags(FABAttack, 'attack_')
 
-    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
-    batch_size = 100
+    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    batch_size = 250
     attack_args = {
         'attack_norm': norm,
         'num_batches': num_images // batch_size,
@@ -293,9 +293,9 @@ def fab_config(norm, runs=1, master_seed=1):
         eta = 1.05
         beta = 0.9
         eps = {
-            'plain': {'li': 0.0, 'l2': 0.5, 'l1': 10.0},
-            'linf': {'li': 0.02, 'l2': 4.0, 'l1': 10.0},
-            'l2': {'li': 0.02, 'l2': 4.0, 'l1': 10.0}
+            'plain': {'li': 0.0, 'l2':  0.5, 'l1': 10.0},
+            'linf':  {'li': 0.02, 'l2': 4.0, 'l1': 10.0},
+            'l2':    {'li': 0.02, 'l2': 4.0, 'l1': 10.0}
         }
 
         # params

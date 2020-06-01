@@ -77,6 +77,7 @@ def main(unused_args):
     val_ds = get_imagenet_dataflow(
         FLAGS.data_dir, FLAGS.batch_size,
         augmentors, mode='val')
+    val_ds.reset_state()
 
     # models
     num_classes = len(TsiprasCNN.LABEL_RANGES)
@@ -132,7 +133,7 @@ def main(unused_args):
         test_metrics["conf"](outs["conf"])
         test_metrics[f"acc_{norm}"](acc_lp)
         test_metrics[f"conf_{norm}"](outs_lp["conf"])
-        
+
         # measure norm
         lp = alp.lp_metric(image - image_lp)
         for threshold in test_thresholds[norm]:
@@ -159,7 +160,6 @@ def main(unused_args):
     start_time = time.time()
     try:
         is_completed = False
-        val_ds.reset_state()
         for batch_index, (image, label) in enumerate(val_ds, 1):
             X_lp = test_step(image, label)
             log_metrics(
