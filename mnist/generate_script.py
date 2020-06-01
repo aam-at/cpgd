@@ -426,5 +426,4 @@ def one_pixel_attack_config(runs=1, master_seed=1):
 
 
 if __name__ == '__main__':
-    test_lp_custom_config('l1')
     pass
