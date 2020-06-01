@@ -12,6 +12,7 @@ from absl import flags
 
 from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
+from lib.fab import FABAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_test_log
 from lib.utils import ConstantDecay, LinearDecay, import_klass_kwargs_as_flags
@@ -261,6 +262,64 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                     print(
                         generate_test_optimizer('test_optimizer_lp_madry',
                                                 **attack_args))
+
+
+def fab_config(norm, runs=1, master_seed=1):
+    import test_fab
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_fab)
+    import_klass_kwargs_as_flags(FABAttack, 'attack_')
+
+    num_images = {'li': 500, 'l1': 500, 'l2': 500}[norm]
+    batch_size = 25
+    attack_args = {
+        'attack_norm': norm,
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
+
+    existing_names = []
+    for type, n_restarts in itertools.product(models.keys(), [1, 10, 100]):
+        # default params for cifar10
+        # see page 12: https://openreview.net/pdf?id=HJlzxgBtwH
+        n_iter = 100
+        alpha_max = 0.05
+        eta = 1.3
+        beta = 0.9
+        eps = {
+            'plain' : {'li' : 0.02, 'l2' : 5.0, 'l1' : 100.0},
+            'linf'  : {'li' : 0.08, 'l2' : 5.0, 'l1' : 250.0},
+            'l2'    : {'li' : 0.08, 'l2' : 5.0, 'l1' : 250.0}
+        }
+
+        # params
+        working_dir = f"../results/imagenet_fab/test_{type}_{norm}"
+        attack_args.update(
+        {
+            'attack_n_iter': n_iter,
+            'attack_n_restarts': n_restarts,
+            'attack_alpha_max': alpha_max,
+            'attack_eta': eta,
+            'attack_beta': beta,
+            'attack_eps': eps[type][norm],
+            'working_dir': working_dir,
+            'load_from': models[type]
+        })
+        name = f"imagenet_fab_{type}_{norm}_n{n_iter}_N{n_restarts}_"
+        attack_args["name"] = name
+        p = [
+            s.name[:-1] for s in list(Path(working_dir).glob("*"))
+        ]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        np.random.seed(master_seed)
+        for i in range(runs):
+            seed = np.random.randint(1000)
+            attack_args["seed"] = seed
+            print(generate_test_optimizer('test_fab', **attack_args))
 
 
 def bethge_config(norm, runs=1, master_seed=1):
