@@ -11,6 +11,7 @@ from absl import flags
 
 from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
+from lib.fab import FABAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_test_log
 from lib.utils import ConstantDecay, LinearDecay, import_klass_kwargs_as_flags
@@ -264,6 +265,62 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                     print(
                         generate_test_optimizer('test_optimizer_lp_madry',
                                                 **attack_args))
+
+
+def fab_config(norm, runs=1, master_seed=1):
+    flags.FLAGS._flags().clear()
+    import_klass_kwargs_as_flags(FABAttack, 'attack_')
+
+    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    batch_size = 500
+    attack_args = {
+        'attack_norm': norm,
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
+
+    existing_names = []
+    for model, n_restarts in itertools.product(models, [1, 10, 100]):
+        # default params for mnist
+        # see: https://openreview.net/pdf?id=HJlzxgBtwH
+        n_iter = 100
+        alpha_max = 0.1
+        eta = 1.05
+        beta = 0.9
+        eps = {
+            'plain': {'li': 0.15, 'l2': 2.0, 'l1': 40.0},
+            'linf': {'li': 0.3, 'l2': 2.0, 'l1': 40.0},
+            'l2': {'li': 0.3, 'l2': 2.0, 'l1': 40.0}
+        }
+
+        # params
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/mnist_fab/test_{type}_{norm}"
+        attack_args.update(
+        {
+            'attack_n_iter': n_iter,
+            'attack_n_restarts': n_restarts,
+            'attack_alpha_max': alpha_max,
+            'attack_eta': eta,
+            'attack_beta': beta,
+            'attack_eps': eps[type][norm],
+            'working_dir': working_dir,
+            'load_from': model
+        })
+        name = f"mnist_fab_{type}_{norm}_n{n_iter}_N{n_restarts}_"
+        attack_args["name"] = name
+        p = [
+            s.name[:-1] for s in list(Path(working_dir).glob("*"))
+        ]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        np.random.seed(master_seed)
+        for i in range(runs):
+            seed = np.random.randint(1000)
+            attack_args["seed"] = seed
+            print(generate_test_optimizer('test_fab', **attack_args))
 
 
 def bethge_config(norm, runs=1, master_seed=1):
