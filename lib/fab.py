@@ -8,9 +8,53 @@ from __future__ import absolute_import, division, print_function
 
 import time
 
+import numpy as np
+import tensorflow as tf
 import torch
 
 DEFAULT_EPS_DICT_BY_NORM = {"li": 0.3, "l2": 1.0, "l1": 5.0}
+
+
+class FABModelAdapter:
+    def __init__(self, model):
+        self.model = model
+
+    @tf.function
+    def tf_grad_logits(self, x):
+        with tf.GradientTape(persistent=True) as tape:
+            tape.watch(x)
+            logits = self.model(x)
+            logits_list = tf.unstack(logits, axis=1)
+
+        grads = tf.stack([tape.gradient(l, x) for l in logits_list], axis=1)
+        return grads
+
+    def grad_logits(self, x):
+        cuda = x.is_cuda
+        if cuda:
+            x = x.cpu()
+        x_np = x.numpy()
+        tf_grad = self.tf_grad_logits(x_np)
+        pt_grad = torch.from_numpy(tf_grad.numpy())
+        if cuda:
+            pt_grad = pt_grad.cuda()
+        return pt_grad
+
+    @tf.function
+    def tf_predict(self, x):
+        logits = self.model(x)
+        return logits
+
+    def predict(self, x):
+        cuda = x.is_cuda
+        if cuda:
+            x = x.cpu()
+        x_np = x.numpy()
+        tf_pred = self.tf_predict(x_np)
+        pt_pred = torch.from_numpy(tf_pred.numpy())
+        if cuda:
+            pt_pred = pt_pred.cuda()
+        return pt_pred
 
 
 class FABAttack:
@@ -283,7 +327,7 @@ class FABAttack:
 
         return d * (w.abs() > 1e-8).float()
 
-    def attack_single_run(self, x, y=None, use_rand_start=False):
+    def perturb(self, x, y=None):
         """
         :param x:    clean images
         :param y:    clean labels, if None we use the predicted labels
@@ -326,33 +370,33 @@ class FABAttack:
         x0 = im2.clone().reshape([bs, -1])
         counter_restarts = 0
 
-        while counter_restarts < 1:
-            if use_rand_start:
+        while counter_restarts < self.n_restarts:
+            if counter_restarts > 0:
                 if self.norm == "li":
                     t = 2 * torch.rand(x1.shape).to(self.device) - 1
                     x1 = (im2 + (torch.min(
                         res2,
                         self.eps * torch.ones(res2.shape).to(self.device)).
-                                 reshape([-1, *[1] * self.ndims])) * t /
+                                 reshape([-1, *([1] * self.ndims)])) * t /
                           (t.reshape([t.shape[0], -1]).abs().max(
                               dim=1, keepdim=True)[0].reshape(
-                                  [-1, *[1] * self.ndims])) * 0.5)
+                                  [-1, *([1] * self.ndims)])) * 0.5)
                 elif self.norm == "l2":
                     t = torch.randn(x1.shape).to(self.device)
                     x1 = (im2 + (torch.min(
                         res2,
                         self.eps * torch.ones(res2.shape).to(self.device)).
-                                 reshape([-1, *[1] * self.ndims])) * t /
+                                 reshape([-1, *([1] * self.ndims)])) * t /
                           ((t**2).view(t.shape[0], -1).sum(dim=-1).sqrt().view(
-                              t.shape[0], *[1] * self.ndims)) * 0.5)
+                              t.shape[0], *([1] * self.ndims))) * 0.5)
                 elif self.norm == "l1":
                     t = torch.randn(x1.shape).to(self.device)
                     x1 = (im2 + (torch.min(
                         res2,
                         self.eps * torch.ones(res2.shape).to(self.device)).
-                                 reshape([-1, *[1] * self.ndims])) * t /
+                                 reshape([-1, *([1] * self.ndims)])) * t /
                           (t.abs().view(t.shape[0], -1).sum(dim=-1).view(
-                              t.shape[0], *[1] * self.ndims)) / 2)
+                              t.shape[0], *([1] * self.ndims))) / 2)
 
                 x1 = x1.clamp(0.0, 1.0)
 
@@ -399,13 +443,13 @@ class FABAttack:
                     d2 = torch.reshape(d3[-bs:], x1.shape)
                     if self.norm == "li":
                         a0 = (d3.abs().max(dim=1, keepdim=True)[0].view(
-                            -1, *[1] * self.ndims))
+                            -1, *([1] * self.ndims)))
                     elif self.norm == "l2":
                         a0 = ((d3**2).sum(dim=1, keepdim=True).sqrt().view(
-                            -1, *[1] * self.ndims))
+                            -1, *([1] * self.ndims)))
                     elif self.norm == "l1":
                         a0 = (d3.abs().sum(dim=1, keepdim=True).view(
-                            -1, *[1] * self.ndims))
+                            -1, *([1] * self.ndims)))
                     a0 = torch.max(a0,
                                    1e-8 * torch.ones(a0.shape).to(self.device))
                     a1 = a0[:bs]
@@ -433,9 +477,9 @@ class FABAttack:
                             t = ((x1[ind_adv] - im2[ind_adv]).abs().view(
                                 ind_adv.shape[0], -1).sum(dim=-1))
                         adv[ind_adv] = x1[ind_adv] * (t < res2[ind_adv]).float(
-                        ).reshape([-1, *[1] * self.ndims]) + adv[ind_adv] * (
+                        ).reshape([-1, *([1] * self.ndims)]) + adv[ind_adv] * (
                             t >= res2[ind_adv]).float().reshape(
-                                [-1, *[1] * self.ndims])
+                                [-1, *([1] * self.ndims)])
                         res2[ind_adv] = (t * (t < res2[ind_adv]).float() +
                                          res2[ind_adv] *
                                          (t >= res2[ind_adv]).float())
@@ -459,58 +503,3 @@ class FABAttack:
         adv_c[pred[ind_succ]] = adv[ind_succ].clone()
 
         return adv_c
-
-    def perturb(self, x, y):
-        if self.device is None:
-            self.device = x.device
-        adv = x.clone()
-        with torch.no_grad():
-            acc = self.model.predict(x).max(1)[1] == y
-
-            startt = time.time()
-
-            torch.random.manual_seed(self.seed)
-            torch.cuda.random.manual_seed(self.seed)
-            res2 = np.inf * np.ones(x.shape)
-            res2[~acc] = 0.0
-
-            for counter in range(self.n_restarts):
-                ind_to_fool = acc.nonzero().squeeze()
-                if len(ind_to_fool.shape) == 0:
-                    ind_to_fool = ind_to_fool.unsqueeze(0)
-                if ind_to_fool.numel() != 0:
-                    x_to_fool, y_to_fool = (
-                        x[ind_to_fool].clone(),
-                        y[ind_to_fool].clone(),
-                    )
-                    adv_curr = self.attack_single_run(
-                        x_to_fool, y_to_fool, use_rand_start=(counter > 0))
-
-                    is_adv = self.model.predict(adv_curr).max(
-                        1)[1] == y_to_fool
-                    if self.norm == "li":
-                        res = ((x_to_fool - adv_curr).abs().view(
-                            x_to_fool.shape[0], -1).max(1)[0])
-                    elif self.norm == "l2":
-                        res = (((x_to_fool - adv_curr)**2).view(
-                            x_to_fool.shape[0], -1).sum(dim=-1).sqrt())
-                    elif self.norm == "l1":
-                        res = ((x_to_fool - adv_curr).abs().view(
-                            x_to_fool.shape[0], -1).sum(dim=-1))
-                    is_best = res < res2
-
-                    ind_curr = (is_adv and is_best).nonzero().squeeze()
-                    acc[ind_to_fool[ind_curr]] = 0
-                    adv[ind_to_fool[ind_curr]] = adv_curr[ind_curr].clone()
-
-                    if self.verbose:
-                        print(
-                            "restart {} - robust accuracy: {:.2%} with mean = {:.5f} - cum. time: {:.1f} s"
-                            .format(
-                                counter,
-                                acc.float().mean(),
-                                res2.mean(),
-                                time.time() - startt,
-                            ))
-
-        return adv
