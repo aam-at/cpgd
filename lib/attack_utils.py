@@ -248,6 +248,12 @@ class AttackOptimizationLoop(object):
             self.attack.run(X, y_onehot)
 
     def run_loop(self, X, y_onehot):
-        with tf.control_dependencies(
-            [tf.py_function(self._run_loop, [X, y_onehot], [])]):
+        if tf.executing_eagerly():
+            # eager mode
+            self._run_loop(X, y_onehot)
             return self.attack.attack.read_value()
+        else:
+            # graph mode
+            with tf.control_dependencies(
+                [tf.py_function(self._run_loop, [X, y_onehot], [])]):
+                return self.attack.attack.read_value()
