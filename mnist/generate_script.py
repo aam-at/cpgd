@@ -324,83 +324,91 @@ def fab_config(norm, runs=1, master_seed=1):
             print(generate_test_optimizer('test_fab', **attack_args))
 
 
-def ddn_config(runs=1, master_seed=1):
-    import test_ddn
+def foolbox_config(norm, attack, runs=1, master_seed=1):
+    import test_foolbox
+    from test_foolbox import lp_attacks
 
     flags.FLAGS._flags().clear()
-    importlib.reload(test_ddn)
-    import_klass_kwargs_as_flags(DDNAttack, 'attack_')
+    importlib.reload(test_foolbox)
+    import_klass_kwargs_as_flags(lp_attacks[norm][attack], 'attack_')
+    if attack == 'df':
+        flags.DEFINE_integer("attack_candidates", None, "")
+    elif attack == 'ead':
+        flags.DEFINE_string("attack_decision_rule", "L1", "")
 
-    num_images = 500
-    batch_size = 100
-    attack_args = {
-        'num_batches': num_images // batch_size,
-        'batch_size': batch_size,
-        'seed': 1
+    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    batch_size = 500
+    attack_grid_args = {
+        'num_batches':
+        [num_images // batch_size],
+        'batch_size':
+        [batch_size],
+        'load_from':
+        models,
+        'attack': [attack],
+        'norm': [norm]
     }
-
-    existing_names = []
-    for model, steps in itertools.product(models, [1000, 10000]):
+    if attack == 'df':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [100],
+            'attack_candidates': [10],
+            'attack_overshoot': [0.02],
+        })
+        name_fn = lambda : f"mnist_{type}_{attack}_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
+    elif attack == 'cw':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [10000],
+            'attack_stepsize': [0.01],
+            'attack_initial_const': [1.0, 0.001],
+            'attack_binary_search_steps': [9],
+        })
+        name_fn = lambda : f"mnist_{type}_{attack}_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
+    elif attack == 'ead':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [1000],
+            'attack_initial_const': [1.0, 0.001],
+            'attack_binary_search_steps': [9],
+            'attack_decision_rule': ['L1'],
+            'attack_regularization': [0.05],
+        })
+        name_fn = lambda : f"mnist_{type}_{attack}_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
+    elif attack == 'ddn':
         # default params for mnist
         # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
-        type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_ddn/test_{type}"
-        attack_args.update({
-            'load_from': model,
-            'working_dir': working_dir,
-            'attack_init_epsilon': 1.0,
-            'attack_gamma': 0.05,
-            'attack_steps': steps,
+        attack_grid_args.update({
+            'attack_steps': [1000],
+            'attack_init_epsilon': [1.0],
+            'attack_gamma': [0.05],
         })
-        name = f"mnist_ddn_{type}_n{steps}_"
-        attack_args['name'] = name
-        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-        if name in p or name in existing_names:
-            continue
-        existing_names.append(name)
-        print(generate_test_optimizer('test_ddn', **attack_args))
+        name_fn = lambda : f"mnist_{type}_{attack}_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_"
 
-
-def cw_l2_config(runs=1, master_seed=1):
-    import test_cw_l2
-
-    flags.FLAGS._flags().clear()
-    importlib.reload(test_cw_l2)
-    import_klass_kwargs_as_flags(L2CarliniWagnerAttack, 'attack_')
-
-    num_images = 500
-    batch_size = 500
-    attack_args = {
-        'num_batches': num_images // batch_size,
-        'batch_size': batch_size,
-        'seed': 1
-    }
-
+    attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
-    for model in models:
-        # default params
-        steps = 10000
-        stepsize = 0.01
-        binary_steps = 9
-        initial_const = 0.01
 
+    for attack_arg_value in itertools.product(*attack_grid_args.values()):
+        model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_cw_l2/test_{type}"
+        working_dir = f"../results/mnist_{attack}/test_{type}_{norm}"
+        attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
-            'load_from': model,
             'working_dir': working_dir,
-            'attack_steps': steps,
-            'attack_stepsize': stepsize,
-            'attack_initial_const': initial_const,
-            'attack_binary_search_steps': binary_steps,
         })
-        name = f"mnist_cw_l2_{type}_"
-        attack_args['name'] = name
-        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        name = name_fn()
+        attack_args["name"] = name
+        p = [
+            s.name[:-1] for s in list(Path(working_dir).glob("*"))
+        ]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_cw_l2', **attack_args))
+        np.random.seed(master_seed)
+        for i in range(runs):
+            seed = np.random.randint(1000)
+            attack_args["seed"] = seed
+            print(generate_test_optimizer('test_foolbox', **attack_args))
 
 
 def bethge_config(norm, runs=1, master_seed=1):
