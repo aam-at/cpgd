@@ -11,13 +11,12 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from art.attacks import CarliniL2Method, DeepFool, ElasticNet
-from art.classifiers import TensorFlowV2Classifier
 from foolbox.attacks import (DDNAttack, EADAttack, L2CarliniWagnerAttack,
                              L2DeepFoolAttack, LinfDeepFoolAttack)
+from foolbox.models import TensorFlowModel
 
 from config import test_thresholds
-from data import load_mnist
+from data import load_cifar10
 from lib.utils import (MetricsDictionary, import_klass_kwargs_as_flags,
                        l1_metric, l2_metric, li_metric, log_metrics,
                        make_input_pipeline, register_experiment_flags,
@@ -26,7 +25,7 @@ from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_art")
+register_experiment_flags(working_dir="../results/cifar10/test_foolbox")
 flags.DEFINE_string("attack", None, "attack class")
 flags.DEFINE_string("norm", "l2", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
@@ -40,11 +39,15 @@ FLAGS = flags.FLAGS
 
 lp_attacks = {
     "l2": {
-        'df': DeepFool,
-        'cw': CarliniL2Method
+        'df': L2DeepFoolAttack,
+        'ddn': DDNAttack,
+        'cw': L2CarliniWagnerAttack
+    },
+    "li": {
+        'df': LinfDeepFoolAttack,
     },
     "l1": {
-        'ead': ElasticNet
+        'ead': EADAttack
     }
 }
 
@@ -52,12 +55,12 @@ lp_attacks = {
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_{FLAGS.attack}_{FLAGS.norm}_art_test", [__file__])
+    setup_experiment(f"madry_{FLAGS.attack}_{FLAGS.norm}_test", [__file__])
 
     # data
-    _, _, test_ds = load_mnist(FLAGS.validation_size,
-                               data_format="NHWC",
-                               seed=FLAGS.data_seed)
+    _, _, test_ds = load_cifar10(FLAGS.validation_size,
+                                 data_format="NHWC",
+                                 seed=FLAGS.data_seed)
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
     test_ds = make_input_pipeline(test_ds,
                                   shuffle=False,
@@ -65,11 +68,15 @@ def main(unused_args):
 
     # models
     num_classes = 10
-    classifier = MadryCNN()
+    model_type = Path(FLAGS.load_from).stem.split("_")[-1]
+    classifier = MadryCNN(model_type=model_type)
 
-    @tf.function
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
+
+    fclassifier = TensorFlowModel(lambda x: test_classifier(x)["logits"],
+                                  bounds=np.array((0.0, 1.0),
+                                                  dtype=np.float32))
 
     lp_metrics = {
         "l2": l2_metric,
@@ -77,28 +84,19 @@ def main(unused_args):
         "li": li_metric,
     }
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
-
-    # art model wrapper
-    def art_classifier(x):
-        return test_classifier(x)['logits']
-
-    art_model = TensorFlowV2Classifier(
-        model=art_classifier,
-        input_shape=X_shape[1:],
-        nb_classes=num_classes,
-        channel_index=3,
-        clip_values=(0, 1))
+    load_madry(FLAGS.load_from,
+               classifier.trainable_variables,
+               model_type=model_type)
 
     # attacks
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    attack = lp_attacks[FLAGS.norm][FLAGS.attack](art_model, **attack_kwargs)
+    attack = lp_attacks[FLAGS.norm][FLAGS.attack](**attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
@@ -107,7 +105,7 @@ def main(unused_args):
 
     def test_step(image, label):
         # get attack starting points
-        image_adv = attack.generate(image, label)
+        image_adv = attack.run(fclassifier, image, label)
         assert tf.reduce_all(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
@@ -192,6 +190,10 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
     assert args.norm in lp_attacks
     assert args.attack in lp_attacks[args.norm]
-    import_klass_kwargs_as_flags(lp_attacks[args.norm][args.attack], True,
-                                 "attack_")
+    import_klass_kwargs_as_flags(lp_attacks[args.norm][args.attack],
+                                 prefix="attack_")
+    if args.attack == 'df':
+        flags.DEFINE_integer("attack_candidates", None, "")
+    elif args.attack == 'ead':
+        flags.DEFINE_string("attack_decision_rule", "L1", "")
     absl.app.run(main)
