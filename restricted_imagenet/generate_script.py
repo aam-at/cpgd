@@ -281,7 +281,8 @@ def fab_config(norm, runs=1, master_seed=1):
     }
 
     existing_names = []
-    for type, n_restarts in itertools.product(models.keys(), [1, 10]):
+    for type, n_restarts in itertools.product(
+            models.keys(), [1, 5] if norm == 'l1' else [1, 10]):
         # default params for cifar10
         # see page 12: https://openreview.net/pdf?id=HJlzxgBtwH
         n_iter = 300 if norm == 'l1' else 100
