@@ -8,7 +8,7 @@ from pathlib import Path
 
 import numpy as np
 from absl import flags
-from foolbox.attacks import DDNAttack
+from foolbox.attacks import DDNAttack, L2CarliniWagnerAttack
 
 from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
@@ -359,6 +359,46 @@ def ddn_config(runs=1, master_seed=1):
             continue
         existing_names.append(name)
         print(generate_test_optimizer('test_ddn', **attack_args))
+
+
+def cw_l2_config(runs=1, master_seed=1):
+    import test_cw_l2
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_cw_l2)
+    import_klass_kwargs_as_flags(L2CarliniWagnerAttack, 'attack_')
+
+    num_images = 500
+    batch_size = 100
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
+
+    existing_names = []
+    for model in models:
+        # default params
+        steps = 10000
+        stepsize = 0.01
+        binary_steps = 9
+
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/mnist_cw_l2/test_{type}"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_steps': steps,
+            'attack_stepsize': stepsize,
+            'attack_binary_search_steps': binary_steps,
+        })
+        name = f"mnist_cw_l2_{type}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_cw_l2', **attack_args))
 
 
 def bethge_config(norm, runs=1, master_seed=1):

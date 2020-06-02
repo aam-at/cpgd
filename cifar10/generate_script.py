@@ -271,6 +271,83 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                                                 **attack_args))
 
 
+def ddn_config(runs=1, master_seed=1):
+    import test_ddn
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_ddn)
+    import_klass_kwargs_as_flags(DDNAttack, 'attack_')
+
+    num_images = 500
+    batch_size = 100
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
+
+    existing_names = []
+    for model, steps in itertools.product(models, [1000, 10000]):
+        # default params for cifar10
+        # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/cifar10_ddn/test_{type}"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_init_epsilon': 1.0,
+            'attack_gamma': 0.05,
+            'attack_steps': steps,
+        })
+        name = f"cifar10_ddn_{type}_n{steps}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_ddn', **attack_args))
+
+
+def cw_l2_config(runs=1, master_seed=1):
+    import test_cw_l2
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_cw_l2)
+    import_klass_kwargs_as_flags(L2CarliniWagnerAttack, 'attack_')
+
+    num_images = 500
+    batch_size = 100
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': 1
+    }
+
+    existing_names = []
+    for model in models:
+        # default params
+        steps = 10000
+        stepsize = 0.01
+        binary_steps = 9
+
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/cifar10_cw_l2/test_{type}"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_steps': steps,
+            'attack_stepsize': stepsize,
+            'attack_binary_search_steps': binary_steps,
+        })
+        name = f"cifar10_cw_l2_{type}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_cw_l2', **attack_args))
+
+
 def fab_config(norm, runs=1, master_seed=1):
     flags.FLAGS._flags().clear()
     import_klass_kwargs_as_flags(FABAttack, 'attack_')
