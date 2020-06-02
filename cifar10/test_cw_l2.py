@@ -2,7 +2,6 @@ from __future__ import absolute_import, division, print_function
 
 import logging
 import os
-import sys
 import time
 from pathlib import Path
 
@@ -10,20 +9,20 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from foolbox.attacks import DDNAttack
+from foolbox.attacks import L2CarliniWagnerAttack
 from foolbox.models import TensorFlowModel
 
 from config import test_thresholds
-from data import load_mnist
-from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l2_metric,
-                       log_metrics, make_input_pipeline,
+from data import load_cifar10
+from lib.utils import (MetricsDictionary, import_klass_kwargs_as_flags,
+                       l2_metric, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_ddn")
+register_experiment_flags(working_dir="../results/mnist/test_cwl2")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -31,7 +30,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_kwargs_as_flags(DDNAttack.__init__, "attack_")
+import_klass_kwargs_as_flags(L2CarliniWagnerAttack, "attack_")
 
 FLAGS = flags.FLAGS
 
@@ -39,12 +38,12 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_ddn_test", [__file__])
+    setup_experiment(f"madry_cw_l2_test", [__file__])
 
     # data
-    _, _, test_ds = load_mnist(FLAGS.validation_size,
-                               data_format="NHWC",
-                               seed=FLAGS.data_seed)
+    _, _, test_ds = load_cifar10(FLAGS.validation_size,
+                                 data_format="NHWC",
+                                 seed=FLAGS.data_seed)
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
     test_ds = make_input_pipeline(test_ds,
                                   shuffle=False,
@@ -52,7 +51,8 @@ def main(unused_args):
 
     # models
     num_classes = 10
-    classifier = MadryCNN()
+    model_type = Path(FLAGS.load_from).stem.split("_")[-1]
+    classifier = MadryCNN(model_type=model_type)
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
@@ -62,17 +62,19 @@ def main(unused_args):
                                                   dtype=np.float32))
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
+    load_madry(FLAGS.load_from,
+               classifier.trainable_variables,
+               model_type=model_type)
 
     # attacks
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    ddn = DDNAttack(**attack_kwargs)
+    cw_l2 = L2CarliniWagnerAttack(**attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
@@ -81,7 +83,7 @@ def main(unused_args):
 
     def test_step(image, label):
         # get attack starting points
-        image_adv = ddn.run(fclassifier, image, label)
+        image_adv = cw_l2.run(fclassifier, image, label)
 
         outs = test_classifier(image)
         outs_adv = test_classifier(image_adv)
@@ -103,7 +105,7 @@ def main(unused_args):
         is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds["l2"]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_l2_%.2f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_l2_%.3f" % threshold](~is_adv_at_th)
         test_metrics[f"l2"](lp)
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
