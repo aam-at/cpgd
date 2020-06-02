@@ -330,11 +330,9 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_foolbox)
-    import_klass_kwargs_as_flags(lp_attacks[norm][attack], 'attack_')
-    if attack == 'df':
-        flags.DEFINE_integer("attack_candidates", None, "")
-    elif attack == 'ead':
+    if attack == 'ead':
         flags.DEFINE_string("attack_decision_rule", "L1", "")
+    import_klass_kwargs_as_flags(lp_attacks[norm][attack], prefix="attack_")
 
     num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 500
@@ -352,10 +350,9 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
         # default params
         attack_grid_args.update({
             'attack_steps': [100],
-            'attack_candidates': [10],
             'attack_overshoot': [0.02],
         })
-        name_fn = lambda : f"mnist_{type}_{attack}_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
+        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
     elif attack == 'cw':
         # default params
         attack_grid_args.update({
@@ -364,7 +361,7 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
             'attack_initial_const': [1.0, 0.001],
             'attack_binary_search_steps': [9],
         })
-        name_fn = lambda : f"mnist_{type}_{attack}_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
+        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
     elif attack == 'ead':
         # default params
         attack_grid_args.update({
@@ -374,7 +371,7 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
             'attack_decision_rule': ['L1'],
             'attack_regularization': [0.05],
         })
-        name_fn = lambda : f"mnist_{type}_{attack}_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
+        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
     elif attack == 'ddn':
         # default params for mnist
         # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
@@ -383,7 +380,7 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
             'attack_init_epsilon': [1.0],
             'attack_gamma': [0.05],
         })
-        name_fn = lambda : f"mnist_{type}_{attack}_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_"
+        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_"
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
@@ -448,6 +445,82 @@ def bethge_config(norm, runs=1, master_seed=1):
             continue
         existing_names.append(name)
         print(generate_test_optimizer('test_bethge_attack', **attack_args))
+
+
+def art_config(norm, attack, runs=1, master_seed=1):
+    import test_art
+    from test_art import lp_attacks
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_art)
+    import_klass_kwargs_as_flags(lp_attacks[norm][attack],
+                                 prefix="attack_",
+                                 import_kwargs=True)
+
+    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    batch_size = 500
+    attack_grid_args = {
+        'num_batches':
+        [num_images // batch_size],
+        'batch_size':
+        [batch_size],
+        'attack_batch_size': [batch_size],
+        'load_from':
+        models,
+        'attack': [attack],
+        'norm': [norm]
+    }
+    if attack == 'df':
+        # default params
+        attack_grid_args.update({
+            'attack_max_iter': [100],
+            'attack_nb_grads': [10],
+            'attack_epsilon': [0.02],
+        })
+        name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_os{attack_args['attack_epsilon']}_"
+    elif attack == 'cw':
+        # default params
+        attack_grid_args.update({
+            'attack_max_iter': [10000],
+            'attack_initial_const': [1.0, 0.001],
+            'attack_binary_search_steps': [9],
+        })
+        name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
+    elif attack == 'ead':
+        # default params
+        attack_grid_args.update({
+            'attack_max_iter': [1000],
+            'attack_initial_const': [1.0, 0.001],
+            'attack_binary_search_steps': [9],
+            'attack_decision_rule': ['L1'],
+            'attack_beta': [0.05],
+        })
+        name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
+
+    attack_arg_names = list(attack_grid_args.keys())
+    existing_names = []
+
+    for attack_arg_value in itertools.product(*attack_grid_args.values()):
+        model = attack_arg_value[attack_arg_names.index('load_from')]
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/mnist_{attack}/test_{type}_{norm}"
+        attack_args = dict(zip(attack_arg_names, attack_arg_value))
+        attack_args.update({
+            'working_dir': working_dir,
+        })
+        name = name_fn()
+        attack_args["name"] = name
+        p = [
+            s.name[:-1] for s in list(Path(working_dir).glob("*"))
+        ]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        np.random.seed(master_seed)
+        for i in range(runs):
+            seed = np.random.randint(1000)
+            attack_args["seed"] = seed
+            print(generate_test_optimizer('test_art', **attack_args))
 
 
 def jsma_config(runs=1, master_seed=1):
