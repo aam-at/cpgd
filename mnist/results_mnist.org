@@ -42,7 +42,7 @@
       df_sublist.append(df)
   df = pd.concat(df_sublist, ignore_index=True)
   df = df.sort_values(norm, ascending=True)
-  df_org = output_org_results(df, norm, allowed_thresholds=thresholds)
+  df_org = output_org_results(df, norm, allowed_thresholds=thresholds, topk=None)
 #+END_SRC
 
 * Init
@@ -315,6 +315,33 @@
 #+BEGIN_SRC python :noweb yes :var norm="li" :var type="l2" :results value :return df_org
   <<init_bethge_block>>
   <<output_results>>
+#+END_SRC
+
+* DDN attack
+#+NAME: init_ddn_block
+#+BEGIN_SRC python :noweb yes
+  <<init_block>>
+
+  test_params = []
+  dirs = glob.glob("../results/mnist*_ddn")
+#+END_SRC
+
+** Plain
+#+BEGIN_SRC python :noweb yes :var type="plain" :var norm="l2" :results value :return df_org
+  <<init_ddn_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+** Linf
+#+BEGIN_SRC python :noweb yes :var type="linf" :var norm="l2" :results value :return df_org
+  <<init_ddn_block>>
+  <<output_dir_results>>
+#+END_SRC
+
+** L2
+#+BEGIN_SRC python :noweb yes :var type="l2" :var norm="l2" :results value :return df_org
+  <<init_ddn_block>>
+  <<output_dir_results>>
 #+END_SRC
 
 * JSMA attack
