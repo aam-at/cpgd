@@ -82,6 +82,30 @@ def import_kwargs_as_flags(f, prefix=''):
                 logging.debug(e)
 
 
+def import_all_kwargs_as_flags(f, prefix=''):
+    spec = inspect.getfullargspec(f)
+    flag_defines = {
+        str: flags.DEFINE_string,
+        bool: flags.DEFINE_bool,
+        int: flags.DEFINE_integer,
+        float: flags.DEFINE_float
+    }
+    total_kwargs = len(spec.defaults)
+    for index, default in enumerate(spec.args[-total_kwargs:]):
+        kwarg = spec.args[-total_kwargs + index]
+        kwarg_default = spec.defaults[index]
+        kwarg_type = type(kwarg_default)
+        if kwarg_type not in flag_defines:
+            logging.debug(f"Uknown {kwarg} type {kwarg_type}")
+        else:
+            arg_name = f"{prefix}{kwarg}"
+            try:
+                flag_defines[kwarg_type](arg_name, kwarg_default,
+                                        f"{kwarg}")
+            except DuplicateFlagError as e:
+                logging.debug(e)
+
+
 def prepare_dir(dir_path, subdir_name):
     base = os.path.join(dir_path, subdir_name)
     i = 0
