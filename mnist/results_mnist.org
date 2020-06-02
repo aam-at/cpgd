@@ -164,6 +164,73 @@
   <<output_results>>
 #+END_SRC
 
+* FAB attack
+#+NAME: init_fab_block
+#+BEGIN_SRC python :noweb yes
+  <<init_block>>
+
+  test_params = []
+  dirs = glob.glob("../results/mnist*_fab")
+  topk = None
+#+END_SRC
+
+** L1
+*** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l1" :var type="plain" :results value :return df_org
+  <<init_fab_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l1" :var type="linf" :results value :return df_org
+  <<init_fab_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="l1" :var type="l2" :results value :return df_org
+  <<init_fab_block>>
+  <<output_results>>
+#+END_SRC
+
+** L2
+*** Plain
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="plain" :results value :return df_org
+  <<init_fab_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="linf" :results value :return df_org
+  <<init_fab_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="l2" :var type="l2" :results value :return df_org
+  <<init_fab_block>>
+  <<output_results>>
+#+END_SRC
+
+** Linf
+*** Plain
+#+BEGIN_SRC python :noweb yes :var norm="li" :var type="plain" :results value :return df_org
+  <<init_fab_block>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var norm="li" :var type="linf" :results value :return df_org
+  <<init_fab_block>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var norm="li" :var type="l2" :results value :return df_org
+  <<init_fab_block>>
+  <<output_results>>
+#+END_SRC
+
 * Bethge attack
 #+NAME: init_bethge_block
 #+BEGIN_SRC python :noweb yes
