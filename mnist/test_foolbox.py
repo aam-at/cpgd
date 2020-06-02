@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
+import argparse
 import logging
 import os
 import sys
@@ -10,20 +11,23 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from foolbox.attacks import DDNAttack
+from foolbox.attacks import (DDNAttack, EADAttack, L2CarliniWagnerAttack,
+                             L2DeepFoolAttack, LinfDeepFoolAttack)
 from foolbox.models import TensorFlowModel
 
 from config import test_thresholds
 from data import load_mnist
-from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l2_metric,
-                       log_metrics, make_input_pipeline,
-                       register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
+from lib.utils import (MetricsDictionary, import_klass_kwargs_as_flags,
+                       l1_metric, l2_metric, li_metric, log_metrics,
+                       make_input_pipeline, register_experiment_flags,
+                       reset_metrics, save_images, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_ddn")
+register_experiment_flags(working_dir="../results/mnist/test_foolbox")
+flags.DEFINE_string("attack", None, "attack class")
+flags.DEFINE_string("norm", "l2", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -31,15 +35,27 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_kwargs_as_flags(DDNAttack.__init__, "attack_")
-
 FLAGS = flags.FLAGS
+
+lp_attacks = {
+    "l2": {
+        'df': L2DeepFoolAttack,
+        'ddn': DDNAttack,
+        'cw': L2CarliniWagnerAttack
+    },
+    "li": {
+        'df': LinfDeepFoolAttack,
+    },
+    "l1": {
+        'ead': EADAttack
+    }
+}
 
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_ddn_test", [__file__])
+    setup_experiment(f"madry_{FLAGS.attack}_{FLAGS.norm}_test", [__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
@@ -61,6 +77,11 @@ def main(unused_args):
                                   bounds=np.array((0.0, 1.0),
                                                   dtype=np.float32))
 
+    lp_metrics = {
+        "l2": l2_metric,
+        "l1": l1_metric,
+        "li": li_metric,
+    }
     # load classifier
     X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
@@ -72,7 +93,7 @@ def main(unused_args):
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    ddn = DDNAttack(**attack_kwargs)
+    attack = lp_attacks[FLAGS.norm][FLAGS.attack](**attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
@@ -81,7 +102,7 @@ def main(unused_args):
 
     def test_step(image, label):
         # get attack starting points
-        image_adv = ddn.run(fclassifier, image, label)
+        image_adv = attack.run(fclassifier, image, label)
 
         outs = test_classifier(image)
         outs_adv = test_classifier(image_adv)
@@ -95,19 +116,19 @@ def main(unused_args):
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_l2"](acc_adv)
-        test_metrics[f"conf_l2"](outs_adv["conf"])
+        test_metrics[f"acc_{FLAGS.norm}"](acc_adv)
+        test_metrics[f"conf_{FLAGS.norm}"](outs_adv["conf"])
 
         # measure norm
-        lp = l2_metric(image - image_adv)
+        lp = lp_metrics[FLAGS.norm](image - image_adv)
         is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds["l2"]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_l2_%.2f" % threshold](~is_adv_at_th)
-        test_metrics[f"l2"](lp)
+            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
+        test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
-        test_metrics[f"l2_corr"](lp[is_corr])
+        test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
 
         return image_adv
 
@@ -156,4 +177,15 @@ def main(unused_args):
 
 
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--attack", default=None, type=str)
+    parser.add_argument("--norm", default=None, type=str)
+    args, _ = parser.parse_known_args()
+    assert args.norm in lp_attacks
+    assert args.attack in lp_attacks[args.norm]
+    import_klass_kwargs_as_flags(lp_attacks[args.norm][args.attack], "attack_")
+    if args.attack == 'df':
+        flags.DEFINE_integer("attack_candidates", None, "")
+    elif args.attack == 'ead':
+        flags.DEFINE_string("attack_decision_rule", "L1", "")
     absl.app.run(main)
