@@ -369,7 +369,7 @@ def cw_l2_config(runs=1, master_seed=1):
     import_klass_kwargs_as_flags(L2CarliniWagnerAttack, 'attack_')
 
     num_images = 500
-    batch_size = 100
+    batch_size = 500
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
@@ -382,6 +382,7 @@ def cw_l2_config(runs=1, master_seed=1):
         steps = 10000
         stepsize = 0.01
         binary_steps = 9
+        initial_const = 0.01
 
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_cw_l2/test_{type}"
@@ -390,6 +391,7 @@ def cw_l2_config(runs=1, master_seed=1):
             'working_dir': working_dir,
             'attack_steps': steps,
             'attack_stepsize': stepsize,
+            'attack_initial_const': initial_const,
             'attack_binary_search_steps': binary_steps,
         })
         name = f"mnist_cw_l2_{type}_"
