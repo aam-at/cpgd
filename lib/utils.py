@@ -53,12 +53,14 @@ def flags_to_params(fls):
     return Namespace(**{k: f.value for k, f in fls.__flags.items()})
 
 
-def import_klass_kwargs_as_flags(klass, prefix=''):
+def import_klass_kwargs_as_flags(klass, prefix='', import_kwargs=False):
     for base_klass in klass.mro():
-        import_kwargs_as_flags(base_klass.__init__, prefix)
+        import_kwargs_as_flags(base_klass.__init__,
+                               import_kwargs=import_kwargs,
+                               prefix=prefix)
 
 
-def import_kwargs_as_flags(f, prefix=''):
+def import_kwargs_as_flags(f, prefix='', import_kwargs=False):
     spec = inspect.getfullargspec(f)
     flag_defines = {
         str: flags.DEFINE_string,
@@ -66,6 +68,7 @@ def import_kwargs_as_flags(f, prefix=''):
         int: flags.DEFINE_integer,
         float: flags.DEFINE_float
     }
+    imported = []
     for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
         try:
             kwarg_default = spec.defaults[index]
@@ -78,32 +81,25 @@ def import_kwargs_as_flags(f, prefix=''):
             try:
                 flag_defines[kwarg_type](arg_name, kwarg_default,
                                         f"{kwarg}")
+                imported.append(kwarg)
             except DuplicateFlagError as e:
                 logging.debug(e)
-
-
-def import_all_kwargs_as_flags(f, prefix=''):
-    spec = inspect.getfullargspec(f)
-    flag_defines = {
-        str: flags.DEFINE_string,
-        bool: flags.DEFINE_bool,
-        int: flags.DEFINE_integer,
-        float: flags.DEFINE_float
-    }
-    total_kwargs = len(spec.defaults)
-    for index, default in enumerate(spec.args[-total_kwargs:]):
-        kwarg = spec.args[-total_kwargs + index]
-        kwarg_default = spec.defaults[index]
-        kwarg_type = type(kwarg_default)
-        if kwarg_type not in flag_defines:
-            logging.debug(f"Uknown {kwarg} type {kwarg_type}")
-        else:
-            arg_name = f"{prefix}{kwarg}"
-            try:
-                flag_defines[kwarg_type](arg_name, kwarg_default,
-                                        f"{kwarg}")
-            except DuplicateFlagError as e:
-                logging.debug(e)
+    if import_kwargs and spec.defaults is not None:
+        total_kwargs = len(spec.defaults)
+        for index, kwarg in enumerate(spec.args[-total_kwargs:]):
+            if kwarg in imported:
+                continue
+            kwarg_default = spec.defaults[index]
+            kwarg_type = type(kwarg_default)
+            if kwarg_type not in flag_defines:
+                logging.debug(f"Uknown {kwarg} type {kwarg_type}")
+            else:
+                arg_name = f"{prefix}{kwarg}"
+                try:
+                    flag_defines[kwarg_type](arg_name, kwarg_default,
+                                             f"{kwarg}")
+                except DuplicateFlagError as e:
+                    logging.debug(e)
 
 
 def prepare_dir(dir_path, subdir_name):
