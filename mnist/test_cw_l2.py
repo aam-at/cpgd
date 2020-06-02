@@ -2,7 +2,6 @@ from __future__ import absolute_import, division, print_function
 
 import logging
 import os
-import sys
 import time
 from pathlib import Path
 
@@ -10,20 +9,20 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from foolbox.attacks import DDNAttack
+from foolbox.attacks import L2CarliniWagnerAttack
 from foolbox.models import TensorFlowModel
 
 from config import test_thresholds
 from data import load_mnist
-from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l2_metric,
-                       log_metrics, make_input_pipeline,
+from lib.utils import (MetricsDictionary, import_klass_kwargs_as_flags,
+                       l2_metric, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_ddn")
+register_experiment_flags(working_dir="../results/mnist/test_cwl2")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -31,7 +30,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_kwargs_as_flags(DDNAttack.__init__, "attack_")
+import_klass_kwargs_as_flags(L2CarliniWagnerAttack, "attack_")
 
 FLAGS = flags.FLAGS
 
@@ -39,7 +38,7 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_ddn_test", [__file__])
+    setup_experiment(f"madry_cw_l2_test", [__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
@@ -72,7 +71,7 @@ def main(unused_args):
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    ddn = DDNAttack(**attack_kwargs)
+    cw_l2 = L2CarliniWagnerAttack(**attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
@@ -81,7 +80,7 @@ def main(unused_args):
 
     def test_step(image, label):
         # get attack starting points
-        image_adv = ddn.run(fclassifier, image, label)
+        image_adv = cw_l2.run(fclassifier, image, label)
 
         outs = test_classifier(image)
         outs_adv = test_classifier(image_adv)
