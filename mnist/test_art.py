@@ -11,7 +11,7 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from art.attacks import (CarliniL2Method, DeepFool,
+from art.attacks import (CarliniL2Method, CarliniLInfMethod, DeepFool,
                          ElasticNet)
 from art.classifiers import TensorFlowV2Classifier
 
@@ -42,7 +42,7 @@ lp_attacks = {
         'df': DeepFool,
         'cw': CarliniL2Method
     },
-    "li": {'cw': CarliniLinfMethod},
+    "li": {'cw': CarliniLInfMethod},
     "l1": {
         'ead': ElasticNet
     }
@@ -192,6 +192,7 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
     assert args.norm in lp_attacks
     assert args.attack in lp_attacks[args.norm]
-    import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack], True,
-                                 "attack_")
+    import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack],
+                                      "attack_",
+                                      include_kwargs_with_defaults=True)
     absl.app.run(main)
