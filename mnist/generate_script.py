@@ -19,7 +19,7 @@ from lib.utils import ConstantDecay, LinearDecay, import_klass_annotations_as_fl
 
 models = [
     './models/mnist_weights_plain.mat', './models/mnist_weights_linf.mat',
-    './models/mnist_weights_linf_madry.mat', './models/mnist_weights_l2.mat'
+    './models/mnist_weights_l2.mat'
 ]
 hostname = subprocess.getoutput('hostname')
 
