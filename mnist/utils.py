@@ -2,6 +2,8 @@ import pickle
 
 import numpy as np
 import scipy.io
+import tensorflow as tf
+from tensorflow.python.training import py_checkpoint_reader
 
 
 def load_madry(load_from, model_vars):
@@ -26,6 +28,32 @@ def load_madry(load_from, model_vars):
         model_var = [v for v in model_vars if v.name == model_var_name]
         assert len(model_var) == 1
         model_var[0].assign(var)
+
+
+def load_madry_official(load_from, model_vars):
+    ckpt_manager = tf.train.CheckpointManager(tf.train.Checkpoint(),
+                                              load_from,
+                                              max_to_keep=3)
+    ckpt_reader = py_checkpoint_reader.NewCheckpointReader(
+        ckpt_manager.latest_checkpoint)
+    mapping = {
+        "conv2d/kernel:0": "Variable",
+        "conv2d/bias:0": "Variable_1",
+        "conv2d_1/kernel:0": "Variable_2",
+        "conv2d_1/bias:0": "Variable_3",
+        "dense/kernel:0": "Variable_4",
+        "dense/bias:0": "Variable_5",
+        "dense_1/kernel:0": "Variable_6",
+        "dense_1/bias:0": "Variable_7"
+    }
+    initialized_vars = {var.name: False for var in model_vars}
+    for model_var in model_vars:
+        model_var_name = model_var.name
+        try:
+            var_loaded_value = ckpt_reader.get_tensor(mapping[model_var_name])
+            model_var.assign(var_loaded_value)
+        except:
+            print("Failed to find: {}".format(model_var_name))
 
 
 def load_trades(load_from, model_vars):
