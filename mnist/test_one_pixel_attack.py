@@ -124,6 +124,7 @@ def main(unused_args):
         test_metrics["l0"](l0)
         # exclude incorrectly classified
         test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 
