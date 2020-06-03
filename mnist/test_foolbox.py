@@ -17,7 +17,7 @@ from foolbox.models import TensorFlowModel
 
 from config import test_thresholds
 from data import load_mnist
-from lib.utils import (MetricsDictionary, import_klass_kwargs_as_flags,
+from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
                        l1_metric, l2_metric, li_metric, log_metrics,
                        make_input_pipeline, register_experiment_flags,
                        reset_metrics, save_images, setup_experiment)
@@ -187,8 +187,8 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
     assert args.norm in lp_attacks
     assert args.attack in lp_attacks[args.norm]
-    import_klass_kwargs_as_flags(lp_attacks[args.norm][args.attack],
-                                 prefix="attack_")
+    import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack],
+                                      prefix="attack_")
     if args.attack == 'df':
         flags.DEFINE_integer("attack_candidates", None, "")
     elif args.attack == 'ead':
