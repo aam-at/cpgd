@@ -19,7 +19,7 @@ from lib.utils import ConstantDecay, LinearDecay, import_klass_annotations_as_fl
 
 models = [
     './models/mnist_weights_plain.mat', './models/mnist_weights_linf.mat',
-    './models/mnist_weights_l2.mat'
+    './models/mnist_weights_linf_madry.mat', './models/mnist_weights_l2.mat'
 ]
 hostname = subprocess.getoutput('hostname')
 
@@ -268,8 +268,11 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                                                 **attack_args))
 
 
-def fab_config(norm, runs=1, master_seed=1):
+def fab_config(norm, seed=123):
+    import test_fab
+
     flags.FLAGS._flags().clear()
+    importlib.reload(test_fab)
     import_klass_annotations_as_flags(FABAttack, 'attack_')
 
     num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
@@ -278,7 +281,7 @@ def fab_config(norm, runs=1, master_seed=1):
         'attack_norm': norm,
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []
@@ -294,6 +297,7 @@ def fab_config(norm, runs=1, master_seed=1):
             'linf':  {'li': 0.3, 'l2':  2.0, 'l1': 40.0},
             'l2':    {'li': 0.3, 'l2':  2.0, 'l1': 40.0}
         }
+        eps['madry'] = eps['linf']
 
         # params
         type = Path(model).stem.split("_")[-1]
@@ -317,14 +321,11 @@ def fab_config(norm, runs=1, master_seed=1):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        np.random.seed(master_seed)
-        for i in range(runs):
-            seed = np.random.randint(1000)
-            attack_args["seed"] = seed
-            print(generate_test_optimizer('test_fab', **attack_args))
+        print(generate_test_optimizer('test_fab', **attack_args))
 
 
-def foolbox_config(norm, attack, runs=1, master_seed=1):
+# foolbox attacks
+def foolbox_config(norm, attack, seed=123):
     import test_foolbox
     from test_foolbox import lp_attacks
 
@@ -344,12 +345,13 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
         'load_from':
         models,
         'attack': [attack],
-        'norm': [norm]
+        'norm': [norm],
+        'seed': [seed]
     }
     if attack == 'df':
         # default params
         attack_grid_args.update({
-            'attack_steps': [1000],
+            'attack_steps': [10000],
             'attack_overshoot': [0.02],
         })
         name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
@@ -358,7 +360,7 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
         attack_grid_args.update({
             'attack_steps': [10000],
             'attack_stepsize': [0.01],
-            'attack_initial_const': [1.0, 0.001],
+            'attack_initial_const': [0.001],
             'attack_binary_search_steps': [9],
         })
         name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
@@ -366,7 +368,7 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
         # default params
         attack_grid_args.update({
             'attack_steps': [1000],
-            'attack_initial_const': [1.0, 0.001],
+            'attack_initial_const': [0.001],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
             'attack_regularization': [0.05],
@@ -401,14 +403,10 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        np.random.seed(master_seed)
-        for i in range(runs):
-            seed = np.random.randint(1000)
-            attack_args["seed"] = seed
-            print(generate_test_optimizer('test_foolbox', **attack_args))
+        print(generate_test_optimizer('test_foolbox', **attack_args))
 
 
-def bethge_config(norm, runs=1, master_seed=1):
+def bethge_config(norm, seed=123):
     import test_bethge_attack
     from test_bethge_attack import lp_attacks
 
@@ -424,21 +422,23 @@ def bethge_config(norm, runs=1, master_seed=1):
         'norm': norm,
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []
-    for model, lr, num_decay in itertools.product(models, [1.0, 0.1, 0.01, 0.001], [20, 100]):
+    for model, steps, lr, num_decay in itertools.product(
+            models, [1000], [1.0], [20, 100]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_bethge/test_{type}_{norm}"
         attack_args.update({
             'norm': norm,
             'load_from': model,
             'working_dir': working_dir,
+            'attack_steps': steps,
             'attack_lr': lr,
             'attack_lr_num_decay': num_decay
         })
-        name = f"mnist_bethge_{type}_{norm}_lr{lr}_nd{num_decay}_"
+        name = f"mnist_bethge_{type}_{norm}_n{steps}_lr{lr}_nd{num_decay}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
@@ -447,6 +447,7 @@ def bethge_config(norm, runs=1, master_seed=1):
         print(generate_test_optimizer('test_bethge_attack', **attack_args))
 
 
+# ibm art attacks
 def art_config(norm, attack, runs=1, master_seed=1):
     import test_art
     from test_art import lp_attacks
@@ -490,7 +491,7 @@ def art_config(norm, attack, runs=1, master_seed=1):
         # default params
         attack_grid_args.update({
             'attack_max_iter': [1000],
-            'attack_initial_const': [1.0, 0.001],
+            'attack_initial_const': [0.001],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
             'attack_beta': [0.05],
