@@ -448,7 +448,7 @@ def bethge_config(norm, seed=123):
 
 
 # ibm art attacks
-def art_config(norm, attack, runs=1, master_seed=1):
+def art_config(norm, attack, seed=123):
     import test_art
     from test_art import lp_attacks
 
@@ -469,24 +469,32 @@ def art_config(norm, attack, runs=1, master_seed=1):
         'load_from':
         models,
         'attack': [attack],
-        'norm': [norm]
+        'norm': [norm],
+        'seed': [seed]
     }
     if attack == 'df':
         # default params
         attack_grid_args.update({
-            'attack_max_iter': [1000],
+            'attack_max_iter': [100, 1000],
             'attack_nb_grads': [10],
             'attack_epsilon': [0.02],
         })
         name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_os{attack_args['attack_epsilon']}_"
     elif attack == 'cw':
         # default params
-        attack_grid_args.update({
-            'attack_max_iter': [10000],
-            'attack_initial_const': [1.0, 0.001],
-            'attack_binary_search_steps': [9],
-        })
-        name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
+        if norm == "l2":
+            attack_grid_args.update({
+                'attack_max_iter': [10000],
+                'attack_initial_const': [0.001],
+                'attack_binary_search_steps': [9],
+            })
+            name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
+        else:
+            attack_grid_args.update({
+                'attack_max_iter': [10000],
+                'attack_eps': [0.3],
+            })
+            name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_eps{attack_args['attack_eps']}_"
     elif attack == 'ead':
         # default params
         attack_grid_args.update({
@@ -517,20 +525,16 @@ def art_config(norm, attack, runs=1, master_seed=1):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        np.random.seed(master_seed)
-        for i in range(runs):
-            seed = np.random.randint(1000)
-            attack_args["seed"] = seed
-            print(generate_test_optimizer('test_art', **attack_args))
+        print(generate_test_optimizer('test_art', **attack_args))
 
 
-def jsma_config(runs=1, master_seed=1):
+def jsma_config(seed=123):
     num_images = 1000
     batch_size = 100
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
     existing_names = []
     for model, targets, theta, lib in itertools.product(
@@ -555,13 +559,13 @@ def jsma_config(runs=1, master_seed=1):
         print(generate_test_optimizer('test_jsma', **attack_args))
 
 
-def one_pixel_attack_config(runs=1, master_seed=1):
+def one_pixel_attack_config(seed=123):
     num_images = 1000
     batch_size = 100
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []

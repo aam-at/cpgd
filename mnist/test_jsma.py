@@ -217,6 +217,7 @@ def main(unused_args):
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
         test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 
