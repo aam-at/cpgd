@@ -100,27 +100,38 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
+        outs = test_classifier(image)
+
+        # run attack on correctly classified points
+        batch_indices = tf.range(image.shape[0])
+        is_corr = outs['pred'] == label
+        image_s = image[is_corr]
+        label_s = label[is_corr]
+
         # get attack starting points
-        x0 = a0.run(fclassifier, image, label)
-        is_adv = tf.argmax(fclassifier(x0), axis=-1) != label
+        x0 = a0.run(fclassifier, image_s, label_s)
+        is_adv = tf.argmax(fclassifier(x0), axis=-1) != label_s
         # run dataset attack if LinearSearchBlendedUniformNoiseAttack fails
         if not tf.reduce_all(is_adv):
             x0 = tf.where(
                 tf.reshape(
                     tf.argmax(fclassifier(x0), axis=-1) != label,
-                    (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image, label))
-        image_adv, _, _ = b_and_b(fclassifier,
-                                      image,
-                                      label,
-                                      starting_points=x0,
-                                      epsilons=None)
+                    (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image_s,
+                                                 label_s))
+        image_adv = tf.identity(image)
+        image_adv = tf.tensor_scatter_nd_update(
+            image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
+            b_and_b(fclassifier,
+                    image_s,
+                    label_s,
+                    starting_points=x0,
+                    epsilons=None)[0])
         # safety check
         assert tf.reduce_all(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
-        outs = test_classifier(image)
         outs_adv = test_classifier(image_adv)
 
         # metrics
@@ -144,7 +155,7 @@ def main(unused_args):
         test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
+        test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
