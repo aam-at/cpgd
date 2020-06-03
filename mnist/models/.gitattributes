@@ -11,3 +11,4 @@ natural_madry/checkpoint-24900.data-00000-of-00001 filter=lfs diff=lfs merge=lfs
 natural_madry/checkpoint-24900.index filter=lfs diff=lfs merge=lfs -text
 natural_madry/checkpoint-24900.meta filter=lfs diff=lfs merge=lfs -text
 natural_madry/config.json filter=lfs diff=lfs merge=lfs -text
+mnist_weights_linf_madry.mat filter=lfs diff=lfs merge=lfs -text

@@ -56,6 +56,29 @@ def load_madry_official(load_from, model_vars):
             print("Failed to find: {}".format(model_var_name))
 
 
+def convert_madry_official_to_mat(load_from, save_to):
+    mapping = {
+        "Variable": "A0",
+        "Variable_1": "A1",
+        "Variable_2": "A2",
+        "Variable_3": "A3",
+        "Variable_4": "A4",
+        "Variable_5": "A5",
+        "Variable_6": "A6",
+        "Variable_7": "A7"
+    }
+    ckpt_manager = tf.train.CheckpointManager(tf.train.Checkpoint(),
+                                              load_from,
+                                              max_to_keep=3)
+    ckpt_reader = py_checkpoint_reader.NewCheckpointReader(
+        ckpt_manager.latest_checkpoint)
+    mdict = {}
+    for var_name in mapping.keys():
+        var_loaded_value = ckpt_reader.get_tensor(var_name)
+        mdict[mapping[var_name]] = var_loaded_value
+    scipy.io.savemat(save_to, mdict)
+
+
 def load_trades(load_from, model_vars):
     with open(load_from, 'rb') as handle:
         state = pickle.load(handle)
