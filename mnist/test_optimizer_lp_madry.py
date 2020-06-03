@@ -21,7 +21,7 @@ from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
 from lib.attack_li import ProximalLiAttack
 from lib.attack_utils import AttackOptimizationLoop
 from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
-                       import_klass_kwargs_as_flags, log_metrics,
+                       import_klass_annotations_as_flags, log_metrics,
                        make_input_pipeline, register_experiment_flags,
                        reset_metrics, save_images, setup_experiment)
 from models import MadryCNN
@@ -39,7 +39,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_klass_kwargs_as_flags(AttackOptimizationLoop, "attack_loop_")
+import_klass_annotations_as_flags(AttackOptimizationLoop, "attack_loop_")
 
 FLAGS = flags.FLAGS
 
@@ -224,5 +224,5 @@ if __name__ == "__main__":
     args, _ = parser.parse_known_args()
     assert args.attack in lp_attacks
     attack_klass = lp_attacks[args.attack][1]
-    import_klass_kwargs_as_flags(attack_klass, "attack_")
+    import_klass_annotations_as_flags(attack_klass, "attack_")
     absl.app.run(main)

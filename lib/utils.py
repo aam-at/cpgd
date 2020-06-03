@@ -53,14 +53,19 @@ def flags_to_params(fls):
     return Namespace(**{k: f.value for k, f in fls.__flags.items()})
 
 
-def import_klass_kwargs_as_flags(klass, prefix='', import_kwargs=False):
+def import_klass_annotations_as_flags(klass,
+                                      prefix='',
+                                      include_kwargs_with_defaults=False):
     for base_klass in klass.mro():
-        import_kwargs_as_flags(base_klass.__init__,
-                               prefix=prefix,
-                               import_kwargs=import_kwargs)
+        import_func_annotations_as_flags(
+            base_klass.__init__,
+            prefix=prefix,
+            include_kwargs_with_defaults=include_kwargs_with_defaults)
 
 
-def import_kwargs_as_flags(f, prefix='', import_kwargs=False):
+def import_func_annotations_as_flags(f,
+                                     prefix='',
+                                     include_kwargs_with_defaults=False):
     spec = inspect.getfullargspec(f)
     flag_defines = {
         str: flags.DEFINE_string,
@@ -79,14 +84,13 @@ def import_kwargs_as_flags(f, prefix='', import_kwargs=False):
         else:
             arg_name = f"{prefix}{kwarg}"
             try:
-                flag_defines[kwarg_type](arg_name, kwarg_default,
-                                        f"{kwarg}")
+                flag_defines[kwarg_type](arg_name, kwarg_default, f"{kwarg}")
                 imported.append(kwarg)
             except DuplicateFlagError as e:
                 logging.debug(e)
-    if import_kwargs and spec.defaults is not None:
-        total_kwargs = len(spec.defaults)
-        for index, kwarg in enumerate(spec.args[-total_kwargs:]):
+    if include_kwargs_with_defaults and spec.defaults is not None:
+        total_kwargs_with_defaults = len(spec.defaults)
+        for index, kwarg in enumerate(spec.args[-total_kwargs_with_defaults:]):
             if kwarg in imported:
                 continue
             kwarg_default = spec.defaults[index]

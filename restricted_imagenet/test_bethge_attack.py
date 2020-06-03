@@ -11,17 +11,17 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-
-from config import test_thresholds
-from data import fbresnet_augmentor, get_imagenet_dataflow
 from foolbox.attacks import (DatasetAttack, L0BrendelBethgeAttack,
                              L1BrendelBethgeAttack, L2BrendelBethgeAttack,
                              LinearSearchBlendedUniformNoiseAttack,
                              LinfinityBrendelBethgeAttack)
 from foolbox.models import TensorFlowModel
-from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
-                       l0_pixel_metric, l1_metric, l2_metric, li_metric,
-                       log_metrics, make_input_pipeline,
+
+from config import test_thresholds
+from data import fbresnet_augmentor, get_imagenet_dataflow
+from lib.utils import (MetricsDictionary, import_func_annotations_as_flags,
+                       l0_metric, l0_pixel_metric, l1_metric, l2_metric,
+                       li_metric, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
 from models import TsiprasCNN
@@ -198,5 +198,5 @@ if __name__ == "__main__":
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
     assert args.norm in lp_attacks
-    import_kwargs_as_flags(lp_attacks[args.norm].__init__, "attack_")
+    import_func_annotations_as_flags(lp_attacks[args.norm].__init__, "attack_")
     absl.app.run(main)

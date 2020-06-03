@@ -15,7 +15,7 @@ from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.fab import FABAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_test_log
-from lib.utils import ConstantDecay, LinearDecay, import_klass_kwargs_as_flags
+from lib.utils import ConstantDecay, LinearDecay, import_klass_annotations_as_flags
 
 models = {
     'plain': './models/train_224_nat_slim',
@@ -185,7 +185,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
     importlib.reload(test_optimizer_lp_madry)
     assert attack in lp_attacks
     norm, attack_klass = lp_attacks[attack]
-    import_klass_kwargs_as_flags(attack_klass, 'attack_')
+    import_klass_annotations_as_flags(attack_klass, 'attack_')
     # import args
     defined_flags = flags.FLAGS._flags().keys()
     test_params = [
@@ -269,7 +269,7 @@ def fab_config(norm, runs=1, master_seed=1):
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_fab)
-    import_klass_kwargs_as_flags(FABAttack, 'attack_')
+    import_klass_annotations_as_flags(FABAttack, 'attack_')
 
     num_images = {'li': 500, 'l1': 500, 'l2': 500}[norm]
     batch_size = 25
@@ -330,7 +330,7 @@ def bethge_config(norm, runs=1, master_seed=1):
     flags.FLAGS._flags().clear()
     importlib.reload(test_bethge_attack)
     attack_klass = lp_attacks[norm]
-    import_klass_kwargs_as_flags(attack_klass, 'attack_')
+    import_klass_annotations_as_flags(attack_klass, 'attack_')
 
     assert norm in lp_attacks
     num_images = {'l0': 500, 'li': 500, 'l1': 500, 'l2': 500}[norm]

@@ -16,7 +16,7 @@ import lib
 from config import test_thresholds
 from data import load_cifar10
 from lib.fab import FABAttack, FABModelAdapter
-from lib.utils import (MetricsDictionary, import_kwargs_as_flags, l0_metric,
+from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags, l0_metric,
                        l1_metric, l2_metric, li_metric, limit_gpu_growth,
                        log_metrics, make_input_pipeline, random_targets,
                        register_experiment_flags, reset_metrics, save_images,
@@ -33,7 +33,7 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_kwargs_as_flags(FABAttack.__init__, "attack_")
+import_klass_annotations_as_flags(FABAttack, "attack_")
 
 FLAGS = flags.FLAGS
 

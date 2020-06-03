@@ -19,12 +19,14 @@
   thresholds = np.array(test_model_thresholds[type][norm])
   thresholds = np.ceil(thresholds * 100) / 100
   topk = 100
+  hide_result_if_not_all_adv = True
 #+END_SRC
 
 #+NAME: output_results
 #+BEGIN_SRC python :noweb yes
   df = parse_output_logs(dirs, norm, type, export_test_params=test_params)
-  df = df[getattr(df, f"acc_{norm}") == 0]
+  if hide_result_if_not_all_adv:
+      df = df[getattr(df, f"acc_{norm}") == 0]
   df_org = output_org_results(df,
                               norm,
                               allowed_thresholds=thresholds,
@@ -326,6 +328,7 @@
   test_params = []
   dirs = glob.glob("../results/mnist*_df")
   topk = None
+  hide_result_if_not_all_adv = False
 #+END_SRC
 
 *** Plain
