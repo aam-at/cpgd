@@ -106,14 +106,19 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
-        # get attack starting points
-        image_adv = attack.generate(image, label)
+        outs = test_classifier(image)
+
+        batch_indices = tf.range(image.shape[0])
+        is_corr = outs['pred'] == label
+        image_adv = tf.identity(image)
+        image_adv = tf.tensor_scatter_nd_update(
+            image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
+            attack.generate(image[is_corr], label[is_corr]))
         assert tf.reduce_all(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
-        outs = test_classifier(image)
         outs_adv = test_classifier(image_adv)
 
         # metrics
@@ -137,7 +142,7 @@ def main(unused_args):
         test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
+        test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
 
         return image_adv
 
