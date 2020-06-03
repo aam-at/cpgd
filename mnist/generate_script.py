@@ -444,7 +444,7 @@ def bethge_config(norm, seed=123):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_bethge_attack', **attack_args))
+        print(generate_test_optimizer('test_bethge', **attack_args))
 
 
 # ibm art attacks
