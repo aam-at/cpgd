@@ -109,6 +109,7 @@ def main(unused_args):
         image_adv = tf.tensor_scatter_nd_update(
             image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
             attack.run(fclassifier, image[is_corr], label[is_corr]))
+        # safety check
         assert tf.reduce_all(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
@@ -138,6 +139,7 @@ def main(unused_args):
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+        test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 

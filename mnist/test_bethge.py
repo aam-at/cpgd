@@ -87,7 +87,7 @@ def main(unused_args):
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    olp = lp_attacks[FLAGS.norm](**attack_kwargs)
+    b_and_b = lp_attacks[FLAGS.norm](**attack_kwargs)
     # init attacks
     a0 = LinearSearchBlendedUniformNoiseAttack()
     a0_2 = DatasetAttack()
@@ -109,30 +109,35 @@ def main(unused_args):
                 tf.reshape(
                     tf.argmax(fclassifier(x0), axis=-1) != label,
                     (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image, label))
-        image_lp, _, _ = olp(fclassifier,
-                             image,
-                             label,
-                             starting_points=x0,
-                             epsilons=None)
+        image_adv, _, _ = b_and_b(fclassifier,
+                                      image,
+                                      label,
+                                      starting_points=x0,
+                                      epsilons=None)
+        # safety check
+        assert tf.reduce_all(
+            tf.logical_and(
+                tf.reduce_min(image_adv) >= 0,
+                tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
         outs = test_classifier(image)
-        outs_lp = test_classifier(image_lp)
+        outs_adv = test_classifier(image_adv)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
-        acc_lp = acc_fn(label, outs_lp["logits"])
+        acc_adv = acc_fn(label, outs_adv["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_{FLAGS.norm}"](acc_lp)
-        test_metrics[f"conf_{FLAGS.norm}"](outs_lp["conf"])
+        test_metrics[f"acc_{FLAGS.norm}"](acc_adv)
+        test_metrics[f"conf_{FLAGS.norm}"](outs_adv["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_lp)
-        is_adv = outs_lp["pred"] != label
+        lp = lp_metrics[FLAGS.norm](image - image_adv)
+        is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
@@ -140,8 +145,9 @@ def main(unused_args):
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
+        test_metrics["success_rate"](is_adv[is_corr])
 
-        return image_lp
+        return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
