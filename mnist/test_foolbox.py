@@ -17,6 +17,7 @@ from foolbox.models import TensorFlowModel
 
 from config import test_thresholds
 from data import load_mnist
+from lib.sparsefool import SparseFool
 from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
                        l1_metric, l2_metric, li_metric, log_metrics,
                        make_input_pipeline, register_experiment_flags,
@@ -47,6 +48,7 @@ lp_attacks = {
         'df': LinfDeepFoolAttack,
     },
     "l1": {
+        'df': SparseFool,
         'ead': EADAttack
     }
 }
@@ -196,7 +198,7 @@ if __name__ == "__main__":
     assert args.attack in lp_attacks[args.norm]
     import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack],
                                       prefix="attack_")
-    if args.attack == 'df':
+    if args.attack == 'df' and args.norm == 'l2':
         flags.DEFINE_integer("attack_candidates", None, "")
     elif args.attack == 'ead':
         flags.DEFINE_string("attack_decision_rule", "L1", "")
