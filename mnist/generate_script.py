@@ -349,7 +349,7 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
     if attack == 'df':
         # default params
         attack_grid_args.update({
-            'attack_steps': [100],
+            'attack_steps': [1000],
             'attack_overshoot': [0.02],
         })
         name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
@@ -473,7 +473,7 @@ def art_config(norm, attack, runs=1, master_seed=1):
     if attack == 'df':
         # default params
         attack_grid_args.update({
-            'attack_max_iter': [100],
+            'attack_max_iter': [1000],
             'attack_nb_grads': [10],
             'attack_epsilon': [0.02],
         })
