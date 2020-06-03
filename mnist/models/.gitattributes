@@ -1,14 +1,5 @@
 mnist_weights_linf.mat filter=lfs diff=lfs merge=lfs -text
 mnist_weights_plain.mat filter=lfs diff=lfs merge=lfs -text
 mnist_weights_l2.mat filter=lfs diff=lfs merge=lfs -text
-adv_trained_madry/checkpoint filter=lfs diff=lfs merge=lfs -text
-adv_trained_madry/checkpoint-99900.data-00000-of-00001 filter=lfs diff=lfs merge=lfs -text
-adv_trained_madry/checkpoint-99900.index filter=lfs diff=lfs merge=lfs -text
-adv_trained_madry/checkpoint-99900.meta filter=lfs diff=lfs merge=lfs -text
-adv_trained_madry/config.json filter=lfs diff=lfs merge=lfs -text
-natural_madry/checkpoint filter=lfs diff=lfs merge=lfs -text
-natural_madry/checkpoint-24900.data-00000-of-00001 filter=lfs diff=lfs merge=lfs -text
-natural_madry/checkpoint-24900.index filter=lfs diff=lfs merge=lfs -text
-natural_madry/checkpoint-24900.meta filter=lfs diff=lfs merge=lfs -text
-natural_madry/config.json filter=lfs diff=lfs merge=lfs -text
 mnist_weights_linf_madry.mat filter=lfs diff=lfs merge=lfs -text
+mnist_weights_linf_secret.mat filter=lfs diff=lfs merge=lfs -text
