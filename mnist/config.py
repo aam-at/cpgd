@@ -20,8 +20,6 @@ test_model_thresholds = {
         "li": np.round(np.linspace(0.05, 0.25, 5), 2),
     }
 }
-# Madry mnist model is different from Croce linf-at model
-test_model_thresholds["madry"] = test_model_thresholds["linf"]
 
 test_thresholds = {
     "l0": list(np.linspace(1, 25, 25)),
