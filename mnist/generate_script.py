@@ -351,7 +351,7 @@ def foolbox_config(norm, attack, seed=123):
     if attack == 'df':
         # default params
         attack_grid_args.update({
-            'attack_steps': [10000],
+            'attack_steps': [50],
             'attack_overshoot': [0.02],
         })
         name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
@@ -362,6 +362,7 @@ def foolbox_config(norm, attack, seed=123):
             'attack_stepsize': [0.01],
             'attack_initial_const': [0.001],
             'attack_binary_search_steps': [9],
+            'attack_abort_early': [False],
         })
         name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
     elif attack == 'ead':
@@ -372,6 +373,7 @@ def foolbox_config(norm, attack, seed=123):
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
             'attack_regularization': [0.05],
+            'attack_abort_early': [False],
         })
         name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
     elif attack == 'ddn':
