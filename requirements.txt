@@ -1,8 +1,8 @@
 absl-py>=0.9.0
 cma>=3.0.3
-foolbox>=3.0.0
 git+git://github.com/aam-at/adversarial-robustness-toolbox@master#egg=adversarial-robustness-toolbox
 git+git://github.com/aam-at/cleverhans_tf2@master#egg=cleverhans
+git+git://github.com/aam-at/foolbox@master#egg=foolbox
 numba==0.47
 tensorboard>=2.2.0
 tensorflow-gpu>=2.2.0
