@@ -53,6 +53,7 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     setup_experiment(f"madry_{FLAGS.attack}_{FLAGS.norm}_art_test", [__file__])
+    logging.getLogger().setLevel(logging.INFO)
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
@@ -67,7 +68,6 @@ def main(unused_args):
     num_classes = 10
     classifier = MadryCNN()
 
-    @tf.function
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
 
