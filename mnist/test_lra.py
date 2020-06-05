@@ -1,32 +1,30 @@
 from __future__ import absolute_import, division, print_function
 
-import argparse
 import logging
 import os
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
-from functools import partial
-
-import scipy
 import sys
 import time
+from functools import partial
 from pathlib import Path
 
 import absl
+import jax
 import numpy as np
+import scipy
 import tensorflow as tf
 from absl import flags
-from lib.lra import run, find_starting_point
-from lib.lra.staxmod import *
-import jax
 
 from config import test_thresholds
 from data import load_mnist
-from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
-                       l1_metric, l2_metric, li_metric, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment, AttributeDict,
-                       add_default_end_points)
-from utils import load_madry
+from lib.lra import find_starting_point, run
+from lib.lra.staxmod import *
+from lib.utils import (AttributeDict, MetricsDictionary,
+                       add_default_end_points, l1_metric, l2_metric, li_metric,
+                       log_metrics, make_input_pipeline,
+                       register_experiment_flags, reset_metrics, save_images,
+                       setup_experiment)
+
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/mnist/test_lra")
@@ -42,23 +40,17 @@ flags.DEFINE_integer("attack_iterations", 500, "attack iterations")
 flags.DEFINE_integer("attack_gamma", 6, "attack region selection")
 flags.DEFINE_float("attack_misc_factor", 75, "misc factor")
 flags.DEFINE_integer('attack_nth_likely_class_starting_point', None, "")
-flags.DEFINE_bool('attack_no_linesearch', False, "")
 flags.DEFINE_integer('attack_max_other_classes', None, "")
-flags.DEFINE_bool('attack_no_normalization', False, "")
-
 
 FLAGS = flags.FLAGS
 
 
 def MadryCNN():
-    return serial(
-        Conv(32, (5, 5), padding='SAME'), Relu,
-        MaxPool((2, 2), strides=(2, 2), padding='VALID'),
-        Conv(64, (5, 5), padding='SAME'), Relu,
-        MaxPool((2, 2), strides=(2, 2), padding='VALID'),
-        Flatten,
-        Dense(1024), Relu,
-        Dense(10))
+    return serial(Conv(32, (5, 5), padding='SAME'), Relu,
+                  MaxPool((2, 2), strides=(2, 2), padding='VALID'),
+                  Conv(64, (5, 5), padding='SAME'), Relu,
+                  MaxPool((2, 2), strides=(2, 2), padding='VALID'), Flatten,
+                  Dense(1024), Relu, Dense(10))
 
 
 def load_params(load_from):
@@ -88,11 +80,12 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     setup_experiment(f"madry_lra_test", [__file__])
+    logging.getLogger().setLevel(logging.ERROR)
 
     # data
     train_ds, _, test_ds = load_mnist(0,
-                               data_format="NHWC",
-                               seed=FLAGS.data_seed)
+                                      data_format="NHWC",
+                                      seed=FLAGS.data_seed)
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
     test_ds = make_input_pipeline(test_ds,
                                   shuffle=False,
@@ -113,9 +106,12 @@ def main(unused_args):
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     })
     attack_args.accuracy = False
+    attack_args.no_linesarch = False
+    attack_args.no_normalization = False
     attack_args.image = 0
 
-    find_starting_point_2 = partial(find_starting_point, train_ds[0], train_ds[1])
+    find_starting_point_2 = partial(find_starting_point, train_ds[0],
+                                    train_ds[1])
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
@@ -133,12 +129,11 @@ def main(unused_args):
         for indx in batch_indices[is_corr]:
             image_i = tf.expand_dims(image[indx], 0).numpy()
             label_i = tf.expand_dims(label[indx], 0).numpy()
-            image_adv_jax = run(num_classes, apply_model, params,
-                                image_i, label_i,
-                                find_starting_point_2, attack_args)
+            image_adv_jax = run(num_classes, apply_model, params, image_i,
+                                label_i, find_starting_point_2, attack_args)
             image_adv = tf.tensor_scatter_nd_update(
                 image_adv, tf.expand_dims([indx], axis=1),
-                jax.device_get(image_adv_jax))
+                jax.device_get(image_adv_jax['adv']))
 
         # safety check
         assert tf.reduce_all(
@@ -147,7 +142,8 @@ def main(unused_args):
                 tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
         logits_adv = predict(image_adv.numpy())[0]
-        outs_adv = add_default_end_points({'logits': (jax.device_get(logits_adv))})
+        outs_adv = add_default_end_points(
+            {'logits': (jax.device_get(logits_adv))})
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -192,8 +188,8 @@ def main(unused_args):
             save_path = os.path.join(FLAGS.samples_dir,
                                      "epoch_orig-%d.png" % batch_index)
             save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_l2-%d.png" % batch_index)
+            save_path = os.path.join(FLAGS.samples_dir,
+                                     f"epoch_l2-%d.png" % batch_index)
             save_images(X_lp, save_path, data_format="NHWC")
             # save adversarial data
             X_lp_list.append(X_lp)
