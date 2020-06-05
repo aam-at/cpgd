@@ -1,136 +1,162 @@
-from abc import ABC, abstractmethod
-from typing import Any, Callable, Optional, Tuple, Union
+# code: https://github.com/LTS4/SparseFool
+import copy
 
-import eagerpy as ep
-import foolbox
-from foolbox.attacks import L2DeepFoolAttack
-from foolbox.attacks.base import MinimizationAttack, T, get_criterion
-from foolbox.criteria import Criterion
-from foolbox.distances import l1
-from foolbox.models import Model
+import numpy as np
+import torch as torch
+from torch.autograd import Variable
+from torch.autograd.gradcheck import zero_gradients
 
 
-class SparseFool(MinimizationAttack, ABC):
-    distance = l1
+def deepfool(im,
+             net,
+             lambda_fac=3.0,
+             num_classes=None,
+             overshoot=0.02,
+             max_iter=50,
+             device="cuda"):
+    assert im.shape[0] == 1
 
-    def __init__(
-        self,
-        *,
-        boundary_attack=None,
-        steps: int = 20,
-        overshoot: float = 0.02,
-        lambda_fac: float = 3.0,
-    ):
-        if boundary_attack is None:
-            boundary_attack = L2DeepFoolAttack(candidates=None)
-        self.boundary_attack = boundary_attack
-        self.steps = steps
-        self.overshoot = overshoot
-        self.lambda_fac = lambda_fac
+    image = copy.deepcopy(im)
+    input_shape = image.size()
 
-    def run(
-        self,
-        model: Model,
-        inputs: T,
-        criterion: Union[Criterion, T],
-        **kwargs: Any,
-    ) -> T:
-        x_0, restore_type = ep.astensor_(inputs)
-        del inputs, kwargs
+    f_image = (net.forward(Variable(
+        image, requires_grad=True)).data.cpu().numpy().flatten())
+    I = (np.array(f_image)).flatten().argsort()[::-1]
+    if num_classes is None:
+        num_classes = I.shape[-1]
+    I = I[0:num_classes]
+    label = I[0]
 
-        criterion = get_criterion(criterion)
-        y = criterion.labels
+    pert_image = copy.deepcopy(image)
+    r_tot = torch.zeros(input_shape).to(device)
 
-        min_, max_ = model.bounds
+    k_i = label
+    loop_i = 0
 
-        x_i = x_0
-        for _ in range(self.steps):
-            # Approximate the decision boundary using some attack.
-            boundary_point = self.boundary_attack.run(model, x_0, criterion)
-            boundary_dir = boundary_point - x_0
+    while k_i == label and loop_i < max_iter:
 
-            def loss_fn(x):
-                logits = model(x)
-                l = logits.argmax(axis=-1)
-                rows = range(x.shape[0])
-                return logits[rows, l] - logits[rows, y]
+        x = Variable(pert_image, requires_grad=True)
+        fs = net.forward(x)
 
-            # normal to the decision boundary
-            boundary_normal = ep.value_and_grad(loss_fn, boundary_point)[1]
-            boundary_normal /= ep.norms.l2(boundary_normal,
-                                           axis=(1, 2, 3),
-                                           keepdims=True)
+        pert = torch.Tensor([np.inf])[0].to(device)
+        w = torch.zeros(input_shape).to(device)
 
-            # linear solver
-            x_adv = x + self.lambda_fac * boundary_dir
-            x_i = self.l1_linear_solver(x_i, boundary_normal, x_adv, min_, max_)
+        fs[0, I[0]].backward(retain_graph=True)
+        grad_orig = copy.deepcopy(x.grad.data)
 
-            x_fool = x_0 + (1.0 + self.overshoot) * (x_i - x_0)
-            x_fool = ep.clip(x_fool, min_, max_)
-            is_adv = criterion(x_fool, model(x_fool))
-            if is_adv.all():
-                break
+        for k in range(1, num_classes):
+            zero_gradients(x)
 
-        return restore_type(x_fool)
+            fs[0, I[k]].backward(retain_graph=True)
+            cur_grad = copy.deepcopy(x.grad.data)
 
-    @classmethod
-    def l1_linear_solver(cls, initial_point, boundary_point, normal, min_,
-                         max_):
-        """Computes the L1 solution (perturbation) to the linearized problem.
-        It corresponds to algorithm 1 in [1]_.
-        Parameters
-        ----------
-        initial_point : `numpy.ndarray`
-            The initial point for which we seek the L1 solution.
-        boundary_point : `numpy.ndarray`
-            The point that lies on the decision boundary
-            (or an overshooted version).
-        normal : `numpy.ndarray`
-            The normal of the decision boundary at the boundary point.
-        min_ : `numpy.ndarray`
-            The minimum allowed image values.
-        max_ : int
-            The maximum allowed image values.
-        """
+            w_k = cur_grad - grad_orig
+            f_k = (fs[0, I[k]] - fs[0, I[0]]).data
 
-        coordinates = normal
-        normal_vec = normal.flatten()
-        boundary_point_vec = boundary_point.flatten()
-        initial_point_vec = initial_point.flatten()
+            pert_k = torch.abs(f_k) / w_k.norm()
 
-        # Fit the initial point to the affine hyperplane and get the sign
-        f_k = np.dot(normal_vec, initial_point_vec - boundary_point_vec)
-        sign_true = np.sign(f_k)
-        current_sign = sign_true
+            if pert_k < pert:
+                pert = pert_k + 0.0
+                w = w_k + 0.0
 
-        perturbed = initial_point
-        while current_sign == sign_true and np.count_nonzero(coordinates) > 0:
-            # Fit the current point to the hyperplane.
-            f_k = np.dot(normal_vec, perturbed.flatten() - boundary_point_vec)
-            f_k = f_k + (1e-3 * sign_true)  # Avoid numerical instabilities
+        r_i = torch.clamp(pert, min=1e-4) * w / w.norm()
+        r_tot = r_tot + r_i
 
-            # Compute the L1 projection (perturbation) of the current point
-            # towards the direction of the maximum
-            # absolute value
-            mask = np.zeros_like(coordinates)
-            mask[np.unravel_index(np.argmax(np.absolute(coordinates)),
-                                  coordinates.shape)] = 1
+        pert_image = pert_image + r_i
 
-            perturbation = max(
-                abs(f_k) / np.amax(np.absolute(coordinates)),
-                1e-4) * mask * np.sign(coordinates)
+        check_fool = image + (1 + overshoot) * r_tot
+        k_i = torch.argmax(
+            net.forward(Variable(check_fool, requires_grad=True)).data).item()
 
-            # Apply the perturbation
-            perturbed = perturbed + perturbation
-            perturbed = np.clip(perturbed, min_, max_)
+        loop_i += 1
 
-            # Fit the point to the (unbiased) hyperplane and get the sign
-            f_k = np.dot(normal_vec, perturbed.flatten() - boundary_point_vec)
-            current_sign = np.sign(f_k)
+    x = Variable(pert_image, requires_grad=True)
+    fs = net.forward(x)
+    (fs[0, k_i] - fs[0, label]).backward(retain_graph=True)
+    grad = copy.deepcopy(x.grad.data)
+    grad = grad / grad.norm()
 
-            # Remove the used coordinate from the space of the available
-            # coordinates
-            coordinates[perturbation != 0] = 0
+    r_tot = lambda_fac * r_tot
+    pert_image = image + r_tot
 
-        # Return the l1 solution
-        return perturbed - initial_point
+    return grad, pert_image
+
+
+def linear_solver(x_0, normal, boundary_point, lb, ub):
+    assert x_0.shape[0] == 1
+    device = x_0.device
+
+    # copy to cpu
+    x_0 = x_0.cpu()
+    normal = normal.cpu()
+    boundary_point = boundary_point.cpu()
+
+    input_shape = x_0.size()
+
+    coord_vec = copy.deepcopy(normal)
+    plane_normal = copy.deepcopy(coord_vec).view(-1)
+    plane_point = copy.deepcopy(boundary_point).view(-1)
+
+    x_i = copy.deepcopy(x_0)
+
+    f_k = torch.dot(plane_normal, x_0.view(-1) - plane_point)
+    sign_true = f_k.sign().item()
+
+    beta = 0.001 * sign_true
+    current_sign = sign_true
+
+    while current_sign == sign_true and coord_vec.nonzero().size()[0] > 0:
+        f_k = torch.dot(plane_normal, x_i.view(-1) - plane_point) + beta
+
+        pert = f_k.abs() / coord_vec.abs().max()
+
+        mask = torch.zeros_like(coord_vec)
+        mask[np.unravel_index(torch.argmax(coord_vec.abs()),
+                              input_shape)] = 1.0
+
+        r_i = torch.clamp(pert, min=1e-4) * mask * coord_vec.sign()
+
+        x_i = x_i + r_i
+        x_i.clamp_(lb, ub)
+
+        f_k = torch.dot(plane_normal, x_i.view(-1) - plane_point)
+        current_sign = f_k.sign().item()
+
+        coord_vec[r_i != 0] = 0
+
+    return x_i.to(device)
+
+
+def sparsefool(x_0,
+               net,
+               lb,
+               ub,
+               lambda_: float = 3.0,
+               max_iter: int = 20,
+               epsilon: float = 0.02,
+               device="cuda"):
+    assert x_0.shape[0] == 1
+
+    pred_label = torch.argmax(
+        net.forward(Variable(x_0, requires_grad=True)).data).item()
+
+    x_i = copy.deepcopy(x_0)
+    fool_im = copy.deepcopy(x_i)
+
+    fool_label = pred_label
+    loops = 0
+
+    while fool_label == pred_label and loops < max_iter:
+        normal, x_adv = deepfool(x_i, net, lambda_, device=device)
+
+        x_i = linear_solver(x_i, normal, x_adv, lb, ub)
+
+        fool_im = x_0 + (1 + epsilon) * (x_i - x_0)
+        fool_im.clamp_(lb, ub)
+        fool_label = torch.argmax(
+            net.forward(Variable(fool_im, requires_grad=True)).data).item()
+
+        loops += 1
+
+    r = fool_im - x_0
+    return fool_im, r, pred_label, fool_label, loops
