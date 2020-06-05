@@ -78,7 +78,6 @@ def main(unused_args):
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    pgd_l1.parse_params(**attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
@@ -95,7 +94,10 @@ def main(unused_args):
         image_adv = tf.identity(image)
         image_adv = tf.tensor_scatter_nd_update(
             image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
-            pgd_l1.generate(image[is_corr]))
+            pgd_l1.generate(image[is_corr],
+                            clip_min=0.0,
+                            clip_max=1.0,
+                            **attack_kwargs))
         assert_op = tf.Assert(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
@@ -116,10 +118,12 @@ def main(unused_args):
         test_metrics["conf_l1"](outs_l1["conf"])
 
         # measure norm
+        # NOTE: cleverhans l1 projection may result in numerical error
+        # add small constant eps = 1e-6
         l1 = l1_metric(image - image_adv)
         is_adv = outs_l1["pred"] != label
         for threshold in test_thresholds["l1"]:
-            is_adv_at_th = tf.logical_and(l1 <= threshold, is_adv)
+            is_adv_at_th = tf.logical_and(l1 <= threshold + 5e-6, is_adv)
             test_metrics["acc_l1_%.2f" % threshold](~is_adv_at_th)
         test_metrics["l1"](l1)
         # exclude incorrectly classified
