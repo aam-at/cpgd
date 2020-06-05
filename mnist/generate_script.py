@@ -294,6 +294,7 @@ def pgd_config(norm, seed=123):
                 [100], [1, 10, 100], test_model_thresholds[type][norm], [1, 2, 4, 10, 25, 50]):
             working_dir = f"../results/mnist_pgd/test_{type}_{norm}"
             attack_args.update({
+                'load_from': model,
                 'working_dir': working_dir,
                 'attack_nb_restarts': nb_restarts,
                 'attack_nb_iter': nb_iter,
