@@ -118,7 +118,7 @@ def main(unused_args):
         # measure norm
         lp = l1_metric(image - image_adv)
         is_adv = outs_adv["pred"] != label
-        for threshold in test_thresholds[FLAGS.norm]:
+        for threshold in test_thresholds["l1"]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_l1_%.2f" % threshold](~is_adv_at_th)
         test_metrics[f"l1"](lp)

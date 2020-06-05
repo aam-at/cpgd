@@ -463,7 +463,6 @@ def sparsefool_config(seed=123):
     num_images = 1000
     batch_size = 100
     attack_args = {
-        'norm': norm,
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
         'seed': seed
@@ -474,7 +473,6 @@ def sparsefool_config(seed=123):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_sparsefool/test_{type}_{norm}"
         attack_args.update({
-            'norm': norm,
             'load_from': model,
             'working_dir': working_dir,
             'attack_epsilon': 0.02,
