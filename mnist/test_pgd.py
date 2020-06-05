@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
+import argparse
 import logging
 import os
 import sys
@@ -10,16 +11,15 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from cleverhans.attacks import SparseL1Descent, ProjectedGradientDescent
+from cleverhans.attacks import ProjectedGradientDescent, SparseL1Descent
 from cleverhans.model import Model
 
 from config import test_thresholds
 from data import load_mnist
 from lib.utils import (MetricsDictionary, import_func_annotations_as_flags,
-                       l2_metric, li_metric,
-                       l1_metric, log_metrics, make_input_pipeline,
-                       register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
+                       l1_metric, l2_metric, li_metric, log_metrics,
+                       make_input_pipeline, register_experiment_flags,
+                       reset_metrics, save_images, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
