@@ -8,7 +8,6 @@ from pathlib import Path
 
 import numpy as np
 from absl import flags
-from foolbox.attacks import DDNAttack, L2CarliniWagnerAttack
 
 from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
