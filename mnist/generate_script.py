@@ -516,14 +516,15 @@ def sparsefool_config(seed=123):
     for model in models:
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_sparsefool/test_{type}_{norm}"
+        lambda_ = 3.0
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
             'attack_epsilon': 0.02,
             'attack_max_iter': 20,
-            'attack_lambda_': 3.0,
+            'attack_lambda_': lambda_,
         })
-        name = f"mnist_sparsefool_{type}_{norm}_"
+        name = f"mnist_sparsefool_{type}_{norm}_l{lambda_}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
@@ -616,6 +617,7 @@ def art_config(norm, attack, seed=123):
 def jsma_config(seed=123):
     num_images = 1000
     batch_size = 100
+    norm = "l0"
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
@@ -626,7 +628,7 @@ def jsma_config(seed=123):
             models, ["all", "random", "second"],
             [1.0, 0.1], ["cleverhans", "art"]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_jsma/test_{type}"
+        working_dir = f"../results/mnist_jsma/test_{type}_{norm}"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
@@ -652,11 +654,12 @@ def one_pixel_attack_config(seed=123):
         'batch_size': batch_size,
         'seed': seed
     }
+    norm = "l0"
 
     existing_names = []
     for model, iters, es in itertools.product(models, [100], [1]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_one_pixel/test_{type}"
+        working_dir = f"../results/mnist_one_pixel/test_{type}_{norm}"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
