@@ -495,6 +495,38 @@ def bethge_config(norm, seed=123):
         print(generate_test_optimizer('test_bethge', **attack_args))
 
 
+def lra_config(seed=123):
+    import test_lra
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_lra)
+
+    num_images = 500
+    batch_size = 50
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': seed
+    }
+    norm = "l2"
+
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/mnist_lra/test_{type}_{norm}"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+        })
+        name = f"mnist_lra_{type}_{norm}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_lra', **attack_args))
+
+
 def sparsefool_config(seed=123):
     import test_sparsefool
     from lib.sparsefool import sparsefool
