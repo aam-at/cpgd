@@ -3,8 +3,8 @@ cma>=3.0.3
 git+git://github.com/aam-at/adversarial-robustness-toolbox@master#egg=adversarial-robustness-toolbox
 git+git://github.com/aam-at/cleverhans_tf2@master#egg=cleverhans
 git+git://github.com/aam-at/foolbox@master#egg=foolbox
-jax>=0.1.21
-jaxlib>=0.1.11
+jax>=0.1.69
+jaxlib>=0.1.47
 numba==0.47
 tensorboard>=2.2.0
 tensorflow-gpu>=2.2.0
