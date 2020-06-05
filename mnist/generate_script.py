@@ -270,6 +270,50 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                                                 **attack_args))
 
 
+def pgd_config(norm, seed=123):
+    import test_pgd
+    from test_pgd import import_flags
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_pgd)
+    import_flags(norm)
+
+    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    batch_size = 500
+    attack_args = {
+        'norm': norm,
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': seed
+    }
+
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        for nb_iter, nb_restarts, eps, eps_scale in itertools.product(
+                [100], [1, 10, 100], test_model_thresholds[type][norm], [1, 2, 4, 10, 25, 50]):
+            working_dir = f"../results/mnist_pgd/test_{type}_{norm}"
+            attack_args.update({
+                'working_dir': working_dir,
+                'attack_nb_restarts': nb_restarts,
+                'attack_nb_iter': nb_iter,
+                'attack_eps': eps,
+                'attack_eps_iter': eps / eps_scale
+            })
+            name = f"mnist_pgd_{type}_{norm}_n{nb_iter}_N{nb_restarts}_eps{eps}_epss{eps_scale}_"
+            if norm == 'l1':
+                grad_sparsity = 99
+                attack_args['attack_grad_sparsity'] = grad_sparsity
+                name = f"{name}sp{grad_sparsity}_"
+            attack_args['name'] = name
+            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+            if name in p or name in existing_names:
+                continue
+            existing_names.append(name)
+            print(generate_test_optimizer('test_pgd', **attack_args))
+
+
+# fab attack
 def fab_config(norm, seed=123):
     import test_fab
 
