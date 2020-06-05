@@ -94,7 +94,7 @@ def main(unused_args):
     pgd = lp_attacks[FLAGS.norm](MadryModel())
 
     lp_metrics = {
-        "lp": l1_metric,
+        "l1": l1_metric,
         "l2": l2_metric,
         "li": li_metric
     }
@@ -104,12 +104,9 @@ def main(unused_args):
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    if FLAGS.norm == 'l1':
-        pgd.parse_params(**attack_kwargs)
-    elif FLAGS.norm == 'l2':
-        pgd.parse_params(ord=2, **attack_kwargs)
-    elif FLAGS.norm == 'li':
-        pgd.parse_params(ord=np.inf, **attack_kwargs)
+    if FLAGS.norm != 'l1':
+        attack_kwargs['ord'] = 2 if FLAGS.norm == 'l2' else np.inf
+    pgd.parse_params(**attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
