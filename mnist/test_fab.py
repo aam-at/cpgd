@@ -12,6 +12,7 @@ import tensorflow as tf
 import torch
 from absl import flags
 
+import lib
 from config import test_thresholds
 from data import load_mnist
 from lib.fab import FABAttack, FABModelAdapter
@@ -40,7 +41,7 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_fab_test", [__file__])
+    setup_experiment(f"madry_fab_test", [__file__, lib.fab.__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
