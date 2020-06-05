@@ -82,7 +82,7 @@ def main(unused_args):
         "l2": l2_metric,
         "li": li_metric
     }
-    # attacks
+    # attack arguments
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
