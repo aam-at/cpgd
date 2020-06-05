@@ -3,6 +3,7 @@ import pickle
 import numpy as np
 import scipy.io
 import tensorflow as tf
+import torch
 from tensorflow.python.training import py_checkpoint_reader
 
 
@@ -54,6 +55,30 @@ def load_madry_official(load_from, model_vars):
             model_var.assign(var_loaded_value)
         except:
             print("Failed to find: {}".format(model_var_name))
+
+
+def load_madry_pt(load_from, model_params):
+    w = scipy.io.loadmat(load_from)
+    names = [
+        "A0",
+        "A1",
+        "A2",
+        "A3",
+        "A4",
+        "A5",
+        "A6",
+        "A7",
+    ]
+    for load_var, model_param in zip([w[n] for n in names], model_params):
+        if load_var.ndim == 2:
+            load_var = load_var.transpose()
+            load_var = load_var.squeeze()
+        elif load_var.ndim == 4:
+            load_var = load_var.transpose(3, 2, 0, 1)
+        model_param_shape = model_param.detach().numpy().shape
+        load_var_shape = load_var.shape
+        assert model_param_shape == load_var_shape
+        model_param.data.copy_(torch.from_numpy(load_var))
 
 
 def convert_madry_official_to_mat(load_from, save_to):
