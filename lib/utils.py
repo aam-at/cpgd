@@ -96,7 +96,7 @@ def import_func_annotations_as_flags(f,
     if include_kwargs_with_defaults and spec.defaults is not None:
         total_kwargs_with_defaults = len(spec.defaults)
         for index, kwarg in enumerate(spec.args[-total_kwargs_with_defaults:]):
-            if kwarg in imported and kwarg not in exclude_args:
+            if kwarg in imported or kwarg in exclude_args:
                 continue
             kwarg_default = spec.defaults[index]
             kwarg_type = type(kwarg_default)

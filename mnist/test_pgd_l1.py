@@ -31,9 +31,12 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_func_annotations_as_flags(SparseL1Descent.parse_params, prefix="attack_",
-                                 exclude_args=['clip_min', 'clip_max'],
-                                 include_kwargs_with_defaults=True)
+flags.DEFINE_integer("attack_nb_restarts", "1", "number of attack restarts")
+import_func_annotations_as_flags(
+    SparseL1Descent.parse_params,
+    prefix="attack_",
+    exclude_args=['clip_min', 'clip_max', 'rand_init'],
+    include_kwargs_with_defaults=True)
 
 FLAGS = flags.FLAGS
 
@@ -87,17 +90,20 @@ def main(unused_args):
     @tf.function
     def test_step(image, label):
         outs = test_classifier(image)
+        is_corr = test_classifier(image)['pred'] == label
 
         # run attack on correctly classified points
         batch_indices = tf.range(image.shape[0])
-        is_corr = outs['pred'] == label
         image_adv = tf.identity(image)
-        image_adv = tf.tensor_scatter_nd_update(
-            image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
-            pgd_l1.generate(image[is_corr],
-                            clip_min=0.0,
-                            clip_max=1.0,
-                            **attack_kwargs))
+        for _ in tf.range(FLAGS.attack_nb_restarts):
+            is_adv = test_classifier(image_adv)['pred'] != label
+            image_adv = tf.tensor_scatter_nd_update(
+                image_adv, tf.expand_dims(batch_indices[~is_adv], axis=1),
+                pgd_l1.generate(image[~is_adv],
+                               clip_min=0.0,
+                               clip_max=1.0,
+                               rand_init=True,
+                               **attack_kwargs))
         assert_op = tf.Assert(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
