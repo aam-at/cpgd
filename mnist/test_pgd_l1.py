@@ -31,7 +31,9 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_func_annotations_as_flags(SparseL1Descent.parse_params, prefix="attack_")
+import_func_annotations_as_flags(SparseL1Descent.parse_params, prefix="attack_",
+                                 exclude_args=['clip_min', 'clip_max'],
+                                 include_kwargs_with_defaults=True)
 
 FLAGS = flags.FLAGS
 
@@ -94,12 +96,12 @@ def main(unused_args):
         image_adv = tf.tensor_scatter_nd_update(
             image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
             pgd_l1.generate(image[is_corr]))
-        assert tf.reduce_all(
+        assert_op = tf.Assert(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
-                tf.reduce_max(image_adv) <= 1.0)), "Outside range"
-
-        outs_l1 = test_classifier(image_adv)
+                tf.reduce_max(image_adv) <= 1.0), [image_adv])
+        with tf.control_dependencies([assert_op]):
+            outs_l1 = test_classifier(image_adv)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
