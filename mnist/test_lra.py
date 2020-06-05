@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import logging
 import os
+os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
 from functools import partial
 
 import scipy
