@@ -65,7 +65,10 @@ def import_klass_annotations_as_flags(klass,
 
 def import_func_annotations_as_flags(f,
                                      prefix='',
+                                     exclude_args=None,
                                      include_kwargs_with_defaults=False):
+    if exclude_args is None:
+        exclude_args = []
     spec = inspect.getfullargspec(f)
     flag_defines = {
         str: flags.DEFINE_string,
@@ -82,6 +85,8 @@ def import_func_annotations_as_flags(f,
         if kwarg_type not in flag_defines:
             logging.debug(f"Uknown {kwarg} type {kwarg_type}")
         else:
+            if kwarg in exclude_args:
+                continue
             arg_name = f"{prefix}{kwarg}"
             try:
                 flag_defines[kwarg_type](arg_name, kwarg_default, f"{kwarg}")
@@ -91,7 +96,7 @@ def import_func_annotations_as_flags(f,
     if include_kwargs_with_defaults and spec.defaults is not None:
         total_kwargs_with_defaults = len(spec.defaults)
         for index, kwarg in enumerate(spec.args[-total_kwargs_with_defaults:]):
-            if kwarg in imported:
+            if kwarg in imported and kwarg not in exclude_args:
                 continue
             kwarg_default = spec.defaults[index]
             kwarg_type = type(kwarg_default)
