@@ -15,7 +15,9 @@ from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.fab import FABAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_test_log
-from lib.utils import ConstantDecay, LinearDecay, import_klass_annotations_as_flags
+from lib.utils import (ConstantDecay, LinearDecay,
+                       import_func_annotations_as_flags,
+                       import_klass_annotations_as_flags)
 
 models = [
     './models/mnist_weights_plain.mat', './models/mnist_weights_linf.mat',
@@ -447,6 +449,45 @@ def bethge_config(norm, seed=123):
             continue
         existing_names.append(name)
         print(generate_test_optimizer('test_bethge', **attack_args))
+
+
+def sparsefool_config(seed=123):
+    import test_sparsefool
+    from lib.sparsefool import sparsefool
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_sparsefool)
+    import_func_annotations_as_flags(sparsefool, 'attack_')
+
+    norm = 'l1'
+    num_images = 1000
+    batch_size = 100
+    attack_args = {
+        'norm': norm,
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': seed
+    }
+
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/mnist_sparsefool/test_{type}_{norm}"
+        attack_args.update({
+            'norm': norm,
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_epsilon': 0.02,
+            'attack_max_iter': 20,
+            'attack_lambda_': 3.0,
+        })
+        name = f"mnist_sparsefool_{type}_{norm}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_sparsefool', **attack_args))
 
 
 # ibm art attacks
