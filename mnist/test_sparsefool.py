@@ -87,11 +87,11 @@ def main(unused_args):
         batch_indices = tf.range(image.shape[0])
         is_corr = outs['pred'] == label
         image_adv = tf.identity(image)
-        image_pt = torch.from_numpy(image[is_corr].numpy())
         for indx in batch_indices[is_corr]:
             image_i = tf.expand_dims(image[indx], 0)
             image_pt_i = torch.from_numpy(image_i.numpy()).to("cuda")
-            image_adv_pt_i = sparsefool(image_pt_i, classifier, 0.0, 1.0, **attack_kwargs)[0]
+            image_adv_pt_i = sparsefool(image_pt_i, classifier, 0.0, 1.0,
+                                        **attack_kwargs)[0]
             image_adv = tf.tensor_scatter_nd_update(
                 image_adv, tf.expand_dims([indx], axis=1),
                 image_adv_pt_i.detach().cpu().numpy())
@@ -145,10 +145,10 @@ def main(unused_args):
             )
             save_path = os.path.join(FLAGS.samples_dir,
                                      "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
+            save_images(image.numpy(), save_path, data_format="NCHW")
             save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_{FLAGS.norm}-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
+                FLAGS.samples_dir, f"epoch_l1-%d.png" % batch_index)
+            save_images(X_lp.numpy(), save_path, data_format="NCHW")
             # save adversarial data
             X_lp_list.append(X_lp)
             y_list.append(label)
