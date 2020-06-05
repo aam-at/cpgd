@@ -109,7 +109,7 @@ def return_classes_logits_layer_sizes(f, *args, **kwargs):
     logits, additional_outputs = f(*args, **kwargs)
     additional_outputs = list(flatten(additional_outputs))
     additional_outputs = list(map(flatten_dims, additional_outputs))
-    rows_per_layer = list(map(layer_size, additional_outputs))
+    rows_per_layer = np.array(list(map(layer_size, additional_outputs)))
     return np.argmax(logits, axis=-1), logits, rows_per_layer
 
 
@@ -198,7 +198,8 @@ def init_region(get_A, xr, normalizer, v):
     return Av, u_misc, u_relu
 
 
-@partial(jax.jit, static_argnums=(0, 2, 3))
+# FIX: jax.jit failure
+# @partial(jax.jit, static_argnums=(0, 2, 3))
 def calculate_normalizer(get_A,
                          xr,
                          n_constraints,
