@@ -1,5 +1,8 @@
 import tensorflow as tf
+import torch
 from absl import flags
+from torch import nn
+from torch.nn import functional as F
 
 from lib.utils import add_default_end_points, change_default_args
 
@@ -88,3 +91,26 @@ class MadryCNN(tf.keras.Model):
     def call(self, inputs, training=True):
         h, logits = self.model(inputs, training=training)
         return add_default_end_points({'features': h, 'logits': logits})
+
+
+class MadryCNNPt(torch.nn.Module):
+    # Model trained using adversarial training with projected gradient attack
+    def __init__(self):
+        super(MadryCNNPt, self).__init__()
+        self.c1 = nn.Conv2d(1, 32, 5, padding=2)
+        self.m1 = nn.MaxPool2d(2)
+        self.c2 = nn.Conv2d(32, 64, 5, padding=2)
+        self.m2 = nn.MaxPool2d(2)
+        self.fc1 = nn.Linear(3136, 1024)
+        self.fc2 = nn.Linear(1024, 10)
+
+    def forward(self, x):
+        o = F.relu(self.c1(x))
+        o = self.m1(o)
+        o = F.relu(self.c2(o))
+        o = self.m2(o)
+        # permute to be compatible with tensorflow
+        o = o.permute(0, 2, 3, 1)
+        o = o.reshape(x.shape[0], -1)
+        o = F.relu(self.fc1(o))
+        return self.fc2(o)
