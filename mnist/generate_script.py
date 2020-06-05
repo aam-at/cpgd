@@ -505,7 +505,7 @@ def sparsefool_config(seed=123):
 
     norm = 'l1'
     num_images = 1000
-    batch_size = 100
+    batch_size = 500
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
