@@ -1,5 +1,6 @@
 from __future__ import absolute_import, division, print_function
 
+import gc
 import logging
 import os
 import sys
@@ -11,6 +12,7 @@ import absl
 import jax
 import numpy as np
 import scipy
+import scipy.io
 import tensorflow as tf
 from absl import flags
 
@@ -24,7 +26,7 @@ from lib.utils import (AttributeDict, MetricsDictionary,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
 
-os.environ["XLA_PYTHON_CLIENT_PREALLOCATE"] = "false"
+os.environ["XLA_PYTHON_CLIENT_ALLOCATOR"] = "platform"
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/mnist/test_lra")
@@ -80,7 +82,6 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     setup_experiment(f"madry_lra_test", [__file__])
-    logging.getLogger().setLevel(logging.ERROR)
 
     # data
     train_ds, _, test_ds = load_mnist(0,
@@ -134,12 +135,12 @@ def main(unused_args):
             image_adv = tf.tensor_scatter_nd_update(
                 image_adv, tf.expand_dims([indx], axis=1),
                 jax.device_get(image_adv_jax['adv']))
+            gc.collect()
 
-        # safety check
-        assert tf.reduce_all(
-            tf.logical_and(
-                tf.reduce_min(image_adv) >= 0,
-                tf.reduce_max(image_adv) <= 1.0)), "Outside range"
+        # NOTE: lra attack due to numerical error produces adversarial images
+        # outside [0, 1] range
+        test_metrics["l2_o"](l2_metric(image_adv - image))
+        image_adv = tf.clip_by_value(image_adv, 0.0, 1.0)
 
         logits_adv = predict(image_adv.numpy())[0]
         outs_adv = add_default_end_points(
@@ -177,25 +178,26 @@ def main(unused_args):
     y_list = []
     start_time = time.time()
     try:
-        for batch_index, (image, label) in enumerate(test_ds, 1):
-            X_lp = test_step(image, label)
-            log_metrics(
-                test_metrics,
-                "Batch results [{}, {:.2f}s]:".format(batch_index,
-                                                      time.time() -
-                                                      start_time),
-            )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     f"epoch_l2-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
-            if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
-                break
+        with tf.device("/CPU:0"):
+            for batch_index, (image, label) in enumerate(test_ds, 1):
+                X_lp = test_step(image, label)
+                log_metrics(
+                    test_metrics,
+                    "Batch results [{}, {:.2f}s]:".format(batch_index,
+                                                          time.time() -
+                                                          start_time),
+                )
+                save_path = os.path.join(FLAGS.samples_dir,
+                                         "epoch_orig-%d.png" % batch_index)
+                save_images(image, save_path, data_format="NHWC")
+                save_path = os.path.join(FLAGS.samples_dir,
+                                         f"epoch_l2-%d.png" % batch_index)
+                save_images(X_lp, save_path, data_format="NHWC")
+                # save adversarial data
+                X_lp_list.append(X_lp)
+                y_list.append(label)
+                if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
+                    break
     except KeyboardInterrupt:
         logging.info("Stopping after {}".format(batch_index))
     except Exception as e:

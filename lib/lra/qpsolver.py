@@ -163,6 +163,6 @@ def solve(x0,
                                                      maxiter, feasStop)
     t0 = time.time() - t0
 
-    logging.info(
+    logging.debug(
         f'took {t0:.1f} secs for {counter} it -> {counter / t0:.1f} it/sec')
     return best_x, best_dual_objective, counter
