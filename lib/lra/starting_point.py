@@ -42,10 +42,10 @@ def find_starting_point_simple_strategy(images, labels, x, label, predict_class)
     assert diff.ndim == 1
 
     for j, index in enumerate(diff):
-        logging.info(f'trying {j + 1}. candidate ({index})')
+        logging.debug(f'trying {j + 1}. candidate ({index})')
         candidate = images[index][onp.newaxis]
         class_ = jax.device_get(predict_class(candidate).squeeze(axis=0))
-        logging.info(f'label = {label}, candidate class = {class_}')
+        logging.debug(f'label = {label}, candidate class = {class_}')
         if class_ != label:
             return candidate, class_
 
