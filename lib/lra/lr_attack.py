@@ -105,7 +105,7 @@ def flatten_predict(predict):
 
 
 def return_classes_logits_layer_sizes(f, *args, **kwargs):
-    logging.info(f'compiling return_classes_logits_layer_sizes')
+    logging.debug(f'compiling return_classes_logits_layer_sizes')
     logits, additional_outputs = f(*args, **kwargs)
     additional_outputs = list(flatten(additional_outputs))
     additional_outputs = list(map(flatten_dims, additional_outputs))
@@ -174,7 +174,7 @@ def generic_get_A(predict, label, other_classes, xr, normalizer):
 
 @partial(jax.jit, static_argnums=(0, ))
 def operator_norm_lower_bound(get_A, xr, normalizer):
-    logging.info('compiling operator_norm_lower_bound')
+    logging.debug('compiling operator_norm_lower_bound')
     Adot, ATdot, _, _, _ = get_A(xr, normalizer)
 
     def body_fun(i, state):
@@ -192,7 +192,7 @@ def operator_norm_lower_bound(get_A, xr, normalizer):
 
 @partial(jax.jit, static_argnums=(0, ))
 def init_region(get_A, xr, normalizer, v):
-    logging.info('compiling init_region')
+    logging.debug('compiling init_region')
     Adot, _, _, u_misc, u_relu = get_A(xr, normalizer)
     Av = Adot(v)
     return Av, u_misc, u_relu
@@ -208,7 +208,7 @@ def calculate_normalizer(get_A,
                          k,
                          normalizer=None,
                          misc_factor=1.):
-    logging.info('compiling calculate_normalizer')
+    logging.debug('compiling calculate_normalizer')
     if normalizer is None:
         normalizer = np.ones((n_constraints, ), dtype=np.float32)
     _, ATdot, _, u_misc, u_relu = get_A(xr, normalizer)
@@ -239,7 +239,7 @@ def estimate_layer_norms(ATdot, n_misc, rows_per_layer, *, k):
         indices.extend(random.sample(range(offset, offset + layer_size), k))
         offset += layer_size
 
-    logging.info(f'{len(indices)} randomly selected rows of A: {indices}')
+    logging.debug(f'{len(indices)} randomly selected rows of A: {indices}')
 
     n_constraints = offset
 
@@ -298,7 +298,7 @@ def line_search(predict_class,
         best = indices[0]
     except IndexError:
         raise ValueError
-    logging.info(f'best: {best} -> {s[best]}')
+    logging.debug(f'best: {best} -> {s[best]}')
     return xs[best][onp.newaxis], classes[best], best
 
 
@@ -344,8 +344,8 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
     random.seed(22)
     onp.random.seed(22)
 
-    logging.info(f'number of samples: {len(images)}')
-    logging.info(f'n_classes: {n_classes}')
+    logging.debug(f'number of samples: {len(images)}')
+    logging.debug(f'n_classes: {n_classes}')
 
     predict = partial(predict, params)
 
@@ -356,15 +356,16 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
 
     predict = flatten_predict(predict)
 
+    @jax.jit
     def predict_class(x):
-        return predict_class_logits_layer_sizes(x)[0]
+        return predict(x)[0].argmax(-1)
 
     if args.accuracy:
-        logging.info(f'accuracy: {accuracy(predict_class, images, labels)}')
+        logging.debug(f'accuracy: {accuracy(predict_class, images, labels)}')
 
     x0_host = images[args.image][onp.newaxis]
     label_host = labels[args.image][onp.newaxis]
-    logging.info(f'label: {label_host}')
+    logging.debug(f'label: {label_host}')
 
     x0 = jax.device_put(x0_host)
     x0_flat = x0.reshape((-1, ))
@@ -373,9 +374,9 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
 
     x0_class, x0_logits, rows_per_layer = jax.device_get(
         predict_class_logits_layer_sizes(x0))
-    logging.info(f'predicted class: {x0_class}, logits: {x0_logits}')
+    logging.debug(f'predicted class: {x0_class}, logits: {x0_logits}')
 
-    logging.info(f'rows per layer: {rows_per_layer}')
+    logging.debug(f'rows per layer: {rows_per_layer}')
 
     if x0_class != label_host:
         logging.warning(
@@ -399,14 +400,14 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
     best_adv_l2_hist = [(time.time() - t0, best_adv_l2)]
 
     if not args.no_line_search:
-        logging.info('running line search to determine better starting point')
+        logging.debug('running line search to determine better starting point')
         best_adv, best_adv_class, _ = line_search(predict_class, x0_host,
                                                   label_host, best_adv)
         best_adv_l2 = l2(best_adv)
 
     best_adv_l2_hist.append((time.time() - t0, best_adv_l2))
 
-    logging.info(f'starting point class: {best_adv_class}')
+    logging.debug(f'starting point class: {best_adv_class}')
 
     best_adv_l2_hist_hist = [best_adv_l2_hist]
 
@@ -415,10 +416,10 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
                                       first=best_adv_class)
     if args.max_other_classes:
         other_classes = other_classes[:args.max_other_classes]
-    logging.info(f'other classes: {other_classes}')
+    logging.debug(f'other classes: {other_classes}')
 
     n_constraints = len(other_classes) + sum(rows_per_layer)
-    logging.info(f'n_constraints: {n_constraints}')
+    logging.debug(f'n_constraints: {n_constraints}')
 
     total_solver_iterations = 0
 
@@ -428,9 +429,9 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
     # Loop over region
     # ------------------------------------------------------------------------
     for region in range(args.regions):
-        logging.info('-' * 70)
-        logging.info(f'{region + 1}. REGION')
-        logging.info('-' * 70)
+        logging.debug('-' * 70)
+        logging.debug(f'{region + 1}. REGION')
+        logging.debug('-' * 70)
 
         xr = get_region(region, x0, best_adv, gamma=args.gamma)
 
@@ -442,15 +443,15 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
                 rows_per_layer,
                 k=10,
                 misc_factor=args.misc_factor)
-            logging.info(f'misc norms: {misc_norms}')
-            logging.info(f'layer norms: {layer_norms}')
+            logging.debug(f'misc norms: {misc_norms}')
+            logging.debug(f'layer norms: {layer_norms}')
         else:
             normalizer = None
 
         Ax0, u_misc, u_relu = init_region(get_A, xr, normalizer, x0)
 
         L = operator_norm_lower_bound(get_A, xr, normalizer)
-        logging.info(f'L = {L}')
+        logging.debug(f'L = {L}')
 
         best_adv_l2_hist = [(time.time() - t0, best_adv_l2)]
 
@@ -467,7 +468,7 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
 
             assert best_adv.shape[0] == x0.shape[0] == 1
             bound = 0.5 * best_adv_l2**2
-            logging.info(f'bound: {bound}')
+            logging.debug(f'bound: {bound}')
 
             potential_adv, best_dual, counter = solve(x0_flat,
                                                       Ax0,
@@ -484,7 +485,7 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
             potential_adv = potential_adv.reshape(x0.shape)
             potential_adv_l2 = l2(potential_adv)
             closer = potential_adv_l2 < best_adv_l2
-            logging.info(f'closer = {closer}')
+            logging.debug(f'closer = {closer}')
 
             if closer:
                 try:
@@ -494,23 +495,23 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
                     else:
                         s = onp.linspace(0.9, ratio, num=101, endpoint=False)
 
-                    logging.info(
+                    logging.debug(
                         f'running line search with factors between {s.min()} and {s.max()}'
                     )
                     best_adv, best_adv_class, index = line_search(
                         predict_class, x0_host, label_host, potential_adv, s=s)
                     new_l2 = l2(best_adv)
-                    logging.info(
+                    logging.debug(
                         f'-> new best adv with l2 = {new_l2} (before: {best_adv_l2})'
                     )
                     assert new_l2 < best_adv_l2
                     best_adv_l2 = new_l2
                 except ValueError:
-                    logging.info(
+                    logging.debug(
                         f'-> result not adversarial (tried with line search)')
                 else:  # the first line search succeeded
                     if index == 0:  # the range of our line search can be extended to even smaller values
-                        logging.info(
+                        logging.debug(
                             f'running another line search with factors between 0 and 0.9'
                         )
                         # this line search should not fail because 0.9 works for sure
@@ -523,23 +524,23 @@ def run(n_classes, predict, params, images, labels, find_starting_point, args):
                             maximum=0.90,
                             num=100)
                         new_l2 = l2(best_adv)
-                        logging.info(
+                        logging.debug(
                             f'-> new best adv with l2 = {new_l2} (before: {best_adv_l2})'
                         )
                         assert new_l2 <= best_adv_l2
                         best_adv_l2 = new_l2
 
             best_adv_l2_hist.append((time.time() - t0, best_adv_l2))
-            logging.info('-' * 70)
+            logging.debug('-' * 70)
 
-        logging.info([l for _, l in best_adv_l2_hist])
+        logging.debug([l for _, l in best_adv_l2_hist])
         best_adv_l2_hist_hist.append(best_adv_l2_hist)
 
-    logging.info([[round(l, 2) for _, l in h] for h in best_adv_l2_hist_hist])
+    logging.debug([[round(l, 2) for _, l in h] for h in best_adv_l2_hist_hist])
 
     best_adv_l2 = l2(best_adv)
-    logging.info(f'final adversarial has l2 = {best_adv_l2}')
-    logging.info(
+    logging.debug(f'final adversarial has l2 = {best_adv_l2}')
+    logging.debug(
         f'total number of iterations in QP solver: {total_solver_iterations}')
 
     result = {
