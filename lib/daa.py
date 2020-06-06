@@ -7,15 +7,20 @@ from __future__ import absolute_import, division, print_function
 
 import numpy as np
 import tensorflow as tf
+from cleverhans.utils_tf import clip_eta, random_lp_vector
 from scipy.spatial.distance import pdist, squareform
 
 
 class LinfBaseAttack:
+    ord = np.inf
+
     def __init__(self,
                  model,
                  eps: float = 0.3,
-                 eps_iter=0.05,
+                 eps_iter: float = 0.05,
                  nb_iter: int = 10,
+                 rand_init: bool = True,
+                 rand_init_eps: float = 0.3,
                  loss_fn: str = "xent",
                  early_stopping: bool = True):
         """Attack parameter initialization. The attack performs k steps of
@@ -25,6 +30,8 @@ class LinfBaseAttack:
         self.eps = eps
         self.eps_iter = eps_iter
         self.nb_iter = nb_iter
+        self.rand_init = rand_init
+        self.rand_init_eps = rand_init_eps
         self.loss_fn = loss_fn
         self.early_stopping = early_stopping
         self.c = {'xent': 1.1, 'cw': 10.0}[loss_fn]
@@ -34,8 +41,9 @@ class LinfBaseAttack:
         with tf.GradientTape() as tape:
             tape.watch(x_adv)
             logits_adv = self.model(x_adv)
+            y_onehot = tf.one_hot(y, logits_adv.shape[-1])
             if self.loss_fn == "xent":
-                loss = tf.nn.softmax_cross_entropy_with_logits(y, logits_adv)
+                loss = tf.nn.softmax_cross_entropy_with_logits(y_onehot, logits_adv)
             elif self.loss_fn == "cw":
                 label_mask = tf.one_hot(y,
                                         10,
@@ -50,9 +58,16 @@ class LinfBaseAttack:
 
 
 class LinfDGFAttack(LinfBaseAttack):
-    def perturb(self, x_nat, x_adv, y):
+    def perturb(self, x_nat, y):
         """Given a set of examples (x_nat, y), returns a set of adversarial
         examples within epsilon of x_nat in l_infinity norm."""
+
+        if self.rand_init:
+            eta = random_lp_vector(x_nat.shape, self.ord, self.rand_init_eps)
+        else:
+            eta = tf.zeros_like(x_nat)
+        eta = clip_eta(eta, self.ord, self.eps)
+        x_adv = tf.clip_by_value(x_nat + eta, 0.0, 1.0)
 
         for epoch in range(self.nb_iter):
             logits, grad = self.step_grad(x_adv, y)
@@ -86,12 +101,18 @@ class LinfDGFAttack(LinfBaseAttack):
 
 
 class LinfBLOBAttack(LinfBaseAttack):
-    def perturb(self, x_nat, x_adv, y):
+    def perturb(self, x_nat, y):
         """Given a set of examples (x_nat, y), returns a set of adversarial
         examples within epsilon of x_nat in l_infinity norm."""
 
-        batch_size = x_adv.shape[0]
+        if self.rand_init:
+            eta = random_lp_vector(x_nat.shape, self.ord, self.rand_init_eps)
+        else:
+            eta = tf.zeros_like(x_nat)
+        eta = clip_eta(eta, self.ord, self.eps)
+        x_adv = tf.clip_by_value(x_nat + eta, 0.0, 1.0)
 
+        batch_size = x_adv.shape[0]
         for epoch in range(self.nb_iter):
             logits, grad = self.step_grad(x_adv, y)
             kxy, dxkxy = self.svgd_kernel(x_adv)
