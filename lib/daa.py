@@ -77,8 +77,8 @@ class LinfDGFAttack(LinfBaseAttack):
             grad = self.step_grad(x_adv, y)
             kxy, dxkxy = self.wgf_kernel(x_adv)
             x_adv += self.eps_iter * np.sign(self.c * dxkxy + grad)
-            x_adv = np.clip(x_adv, x_nat - self.eps, x_nat + self.eps)
-            x_adv = np.clip(x_adv, 0, 1)  # ensure valid pixel range
+            x_adv = tf.clip_by_value(x_adv, x_nat - self.eps, x_nat + self.eps)
+            x_adv = tf.clip_by_value(x_adv, 0.0, 1.0)  # ensure valid pixel range
 
         x_adv = tf.reshape(x_adv, x_shape)
         return x_adv
@@ -124,8 +124,7 @@ class LinfBLOBAttack(LinfBaseAttack):
                 self.c *
                 (-(np.matmul(kxy, -grad) + dxkxy) / batch_size) + grad)
             x_adv = tf.clip_by_value(x_adv, x_nat - self.eps, x_nat + self.eps)
-            x_adv = tf.clip_by_value(x_adv, 0.0,
-                                     1.0)  # ensure valid pixel range
+            x_adv = tf.clip_by_value(x_adv, 0.0, 1.0)  # ensure valid pixel range
 
         x_adv = tf.reshape(x_adv, x_shape)
         return x_adv
