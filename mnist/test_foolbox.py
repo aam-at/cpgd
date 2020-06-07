@@ -52,6 +52,18 @@ lp_attacks = {
 }
 
 
+def import_flags(norm, attack):
+    global lp_attacks
+    assert norm in lp_attacks
+    assert attack in lp_attacks[args.norm]
+    import_klass_annotations_as_flags(lp_attacks[norm][attack],
+                                      prefix="attack_")
+    if args.attack == 'df' and args.norm == 'l2':
+        flags.DEFINE_integer("attack_candidates", None, "")
+    elif args.attack == 'ead':
+        flags.DEFINE_string("attack_decision_rule", "L1", "")
+
+
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
@@ -192,12 +204,5 @@ if __name__ == "__main__":
     parser.add_argument("--attack", default=None, type=str)
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
-    assert args.norm in lp_attacks
-    assert args.attack in lp_attacks[args.norm]
-    import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack],
-                                      prefix="attack_")
-    if args.attack == 'df' and args.norm == 'l2':
-        flags.DEFINE_integer("attack_candidates", None, "")
-    elif args.attack == 'ead':
-        flags.DEFINE_string("attack_decision_rule", "L1", "")
+    import_flags(args.norm, args.attack)
     absl.app.run(main)

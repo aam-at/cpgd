@@ -373,13 +373,11 @@ def fab_config(norm, seed=123):
 # foolbox attacks
 def foolbox_config(norm, attack, seed=123):
     import test_foolbox
-    from test_foolbox import lp_attacks
+    from test_foolbox import import_flags
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_foolbox)
-    if attack == 'ead':
-        flags.DEFINE_string("attack_decision_rule", "L1", "")
-    import_klass_annotations_as_flags(lp_attacks[norm][attack], prefix="attack_")
+    import_flags(norm, attack)
 
     num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 500
@@ -455,15 +453,13 @@ def foolbox_config(norm, attack, seed=123):
 
 
 def bethge_config(norm, seed=123):
-    import test_bethge_attack
-    from test_bethge_attack import lp_attacks
+    import test_bethge
+    from test_bethge import import_flags
 
     flags.FLAGS._flags().clear()
-    importlib.reload(test_bethge_attack)
-    attack_klass = lp_attacks[norm]
-    import_klass_annotations_as_flags(attack_klass, 'attack_')
+    importlib.reload(test_bethge)
+    import_flags(norm)
 
-    assert norm in lp_attacks
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 100
     attack_args = {
@@ -529,11 +525,9 @@ def lra_config(seed=123):
 
 def sparsefool_config(seed=123):
     import test_sparsefool
-    from lib.sparsefool import sparsefool
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_sparsefool)
-    import_func_annotations_as_flags(sparsefool, 'attack_')
 
     norm = 'l1'
     num_images = 1000

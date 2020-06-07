@@ -43,6 +43,7 @@ lp_attacks = {
     "li": ProjectedGradientDescent,
 }
 
+
 def import_flags(norm):
     global lp_attacks
     assert norm in lp_attacks
