@@ -36,14 +36,14 @@ class LinfBaseAttack:
         self.early_stopping = early_stopping
         self.c = {'xent': 1.1, 'cw': 10.0}[loss_fn]
 
-    @tf.function
     def step_grad(self, x_adv, y):
         with tf.GradientTape() as tape:
             tape.watch(x_adv)
             logits_adv = self.model(x_adv)
             y_onehot = tf.one_hot(y, logits_adv.shape[-1])
             if self.loss_fn == "xent":
-                loss = tf.nn.softmax_cross_entropy_with_logits(y_onehot, logits_adv)
+                loss = tf.nn.softmax_cross_entropy_with_logits(
+                    y_onehot, logits_adv)
             elif self.loss_fn == "cw":
                 label_mask = tf.one_hot(y,
                                         10,
@@ -54,7 +54,7 @@ class LinfBaseAttack:
                 wrong_logits = (1 - label_mask) * logits_adv - label_mask * 1e4
                 wrong_logit = tf.reduce_max(wrong_logits, axis=1)
                 loss = -tf.nn.relu(correct_logit - wrong_logit + 50)
-        return logits_adv, tape.gradient(loss, x_adv)
+        return tape.gradient(loss, x_adv)
 
 
 class LinfDGFAttack(LinfBaseAttack):
@@ -69,17 +69,18 @@ class LinfDGFAttack(LinfBaseAttack):
         eta = clip_eta(eta, self.ord, self.eps)
         x_adv = tf.clip_by_value(x_nat + eta, 0.0, 1.0)
 
+        x_shape = x_nat.shape
+        batch_size = x_shape[0]
+        x_nat = tf.reshape(x_nat, (batch_size, -1))
+        x_adv = tf.reshape(x_adv, (batch_size, -1))
         for epoch in range(self.nb_iter):
-            logits, grad = self.step_grad(x_adv, y)
+            grad = self.step_grad(x_adv, y)
             kxy, dxkxy = self.wgf_kernel(x_adv)
-            if self.early_stopping:
-                # stop update since we already find adversarial perturbation
-                is_adv = tf.argmax(logits, axis=-1) != y
-                x_adv[is_adv] += self.eps_iter * np.sign(self.c * dxkxy +
-                                                         grad)[is_adv]
+            x_adv += self.eps_iter * np.sign(self.c * dxkxy + grad)
             x_adv = np.clip(x_adv, x_nat - self.eps, x_nat + self.eps)
             x_adv = np.clip(x_adv, 0, 1)  # ensure valid pixel range
 
+        x_adv = tf.reshape(x_adv, x_shape)
         return x_adv
 
     def wgf_kernel(self, theta):
@@ -112,20 +113,21 @@ class LinfBLOBAttack(LinfBaseAttack):
         eta = clip_eta(eta, self.ord, self.eps)
         x_adv = tf.clip_by_value(x_nat + eta, 0.0, 1.0)
 
-        batch_size = x_adv.shape[0]
+        x_shape = x_nat.shape
+        batch_size = x_shape[0]
+        x_nat = tf.reshape(x_nat, (batch_size, -1))
+        x_adv = tf.reshape(x_adv, (batch_size, -1))
         for epoch in range(self.nb_iter):
-            logits, grad = self.step_grad(x_adv, y)
+            grad = self.step_grad(x_adv, y)
             kxy, dxkxy = self.svgd_kernel(x_adv)
-            if self.early_stopping:
-                # stop update since we already find adversarial perturbation
-                is_adv = tf.argmax(logits, axis=-1) != y
-                x_adv[is_adv] += self.eps_iter * np.sign(
-                    self.c * (-(np.matmul(kxy, -grad) + dxkxy) / batch_size) +
-                    grad)[is_adv]
+            x_adv += self.eps_iter * np.sign(
+                self.c *
+                (-(np.matmul(kxy, -grad) + dxkxy) / batch_size) + grad)
+            x_adv = tf.clip_by_value(x_adv, x_nat - self.eps, x_nat + self.eps)
+            x_adv = tf.clip_by_value(x_adv, 0.0,
+                                     1.0)  # ensure valid pixel range
 
-            x_adv = np.clip(x_adv, x_nat - self.epsilon, x_nat + self.epsilon)
-            x_adv = np.clip(x_adv, 0, 1)  # ensure valid pixel range
-
+        x_adv = tf.reshape(x_adv, x_shape)
         return x_adv
 
     def svgd_kernel(self, theta):
