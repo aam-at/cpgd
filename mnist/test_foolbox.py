@@ -57,12 +57,12 @@ lp_attacks = {
 def import_flags(norm, attack):
     global lp_attacks
     assert norm in lp_attacks
-    assert attack in lp_attacks[args.norm]
+    assert attack in lp_attacks[norm]
     import_klass_annotations_as_flags(lp_attacks[norm][attack],
                                       prefix="attack_")
-    if args.attack == 'df' and args.norm == 'l2':
+    if attack == 'df' and norm == 'l2':
         flags.DEFINE_integer("attack_candidates", None, "")
-    elif args.attack == 'ead':
+    elif attack == 'ead':
         flags.DEFINE_string("attack_decision_rule", "L1", "")
 
 
