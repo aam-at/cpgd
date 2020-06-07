@@ -450,6 +450,13 @@ def foolbox_config(norm, attack, seed=123):
             'attack_abort_early': [False],
         })
         name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
+    elif attack == 'newton':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [1000],
+            'attack_stepsize': [0.01],
+        })
+        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_"
     elif attack == 'ead':
         # default params
         attack_grid_args.update({

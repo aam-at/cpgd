@@ -12,7 +12,8 @@ import numpy as np
 import tensorflow as tf
 from absl import flags
 from foolbox.attacks import (DDNAttack, EADAttack, L2CarliniWagnerAttack,
-                             L2DeepFoolAttack, LinfDeepFoolAttack)
+                             L2DeepFoolAttack, LinfDeepFoolAttack,
+                             NewtonFoolAttack)
 from foolbox.models import TensorFlowModel
 
 from config import test_thresholds
@@ -41,7 +42,8 @@ lp_attacks = {
     "l2": {
         'df': L2DeepFoolAttack,
         'ddn': DDNAttack,
-        'cw': L2CarliniWagnerAttack
+        'cw': L2CarliniWagnerAttack,
+        'newton': NewtonFoolAttack
     },
     "li": {
         'df': LinfDeepFoolAttack,
