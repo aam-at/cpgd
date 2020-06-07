@@ -20,9 +20,10 @@ from foolbox.models import TensorFlowModel
 from config import test_thresholds
 from data import load_mnist
 from lib.utils import (MetricsDictionary, import_func_annotations_as_flags,
-                       l0_metric, l1_metric, l2_metric, li_metric, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
+                       import_klass_annotations_as_flags, l0_metric, l1_metric,
+                       l2_metric, li_metric, log_metrics, make_input_pipeline,
+                       register_experiment_flags, reset_metrics, save_images,
+                       setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
@@ -43,6 +44,12 @@ lp_attacks = {
     "l2": L2BrendelBethgeAttack,
     "li": LinfinityBrendelBethgeAttack,
 }
+
+
+def import_flags(norm):
+    global lp_attacks
+    assert norm in lp_attacks
+    import_klass_annotations_as_flags(lp_attacks[norm], "attack_")
 
 
 def main(unused_args):
@@ -206,6 +213,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
-    assert args.norm in lp_attacks
-    import_func_annotations_as_flags(lp_attacks[args.norm].__init__, "attack_")
+    import_flags(args.norm)
     absl.app.run(main)
