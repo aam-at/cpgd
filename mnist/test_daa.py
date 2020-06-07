@@ -11,16 +11,15 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from cleverhans.attacks import ProjectedGradientDescent, SparseL1Descent
-from cleverhans.model import Model
 
+import lib
 from config import test_thresholds
 from data import load_mnist
 from lib.daa import LinfBLOBAttack, LinfDGFAttack
 from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
-                       l1_metric, l2_metric, li_metric, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
+                       li_metric, log_metrics, make_input_pipeline,
+                       register_experiment_flags, reset_metrics, save_images,
+                       setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
@@ -50,7 +49,8 @@ def import_flags(method):
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_daa_{FLAGS.method}_test", [__file__])
+    setup_experiment(f"madry_daa_{FLAGS.method}_test",
+                     [__file__, lib.daa.__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
@@ -69,8 +69,8 @@ def main(unused_args):
         return classifier(x, training=False, **kwargs)
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
-    y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
+    X_shape = [FLAGS.batch_size, 28, 28, 1]
+    y_shape = [FLAGS.batch_size, num_classes]
     classifier(tf.zeros(X_shape))
     load_madry(FLAGS.load_from, classifier.trainable_variables)
 
@@ -80,8 +80,9 @@ def main(unused_args):
         for kwarg in dir(FLAGS)
         if kwarg.startswith("attack_") and kwarg not in ['attack_nb_restarts']
     }
-    daa = daa_attacks[FLAGS.method](lambda x: test_classifier(x)['logits'],
-                                    **attack_kwargs)
+    daa = daa_attacks[FLAGS.method](
+        lambda x: test_classifier(tf.reshape(x, [-1] + X_shape[1:]))['logits'],
+        **attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
     acc_fn = tf.keras.metrics.sparse_categorical_accuracy
@@ -151,8 +152,8 @@ def main(unused_args):
             save_path = os.path.join(FLAGS.samples_dir,
                                      "epoch_orig-%d.png" % batch_index)
             save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_{FLAGS.norm}-%d.png" % batch_index)
+            save_path = os.path.join(FLAGS.samples_dir,
+                                     "epoch_li-%d.png" % batch_index)
             save_images(X_lp, save_path, data_format="NHWC")
             # save adversarial data
             X_lp_list.append(X_lp)
