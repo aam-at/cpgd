@@ -313,13 +313,13 @@ def pgd_config(norm, seed=123):
             print(generate_test_optimizer('test_pgd', **attack_args))
 
 
-def daa_config(seed=123):
+def daa_config(method="blob", seed=123):
     import test_daa
     from test_daa import import_flags
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_daa)
-    import_flags()
+    import_flags(method)
 
     num_images = 1000
     batch_size = 500
