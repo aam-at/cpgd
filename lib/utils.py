@@ -681,6 +681,16 @@ def compute_norms(x, y):
     return l2, l2_norm
 
 
+def dist_matrix(a):
+    """Compute distance matrix (combines scipy pdist and squareform)
+    """
+    with tf.control_dependencies([tf.assert_rank(a, 2)]):
+        r = tf.reduce_sum(a * a, axis=1)
+    r = tf.reshape(r, (-1, 1))
+    D = r - 2 * tf.matmul(a, tf.transpose(a)) + tf.transpose(r)
+    return D
+
+
 def to_indexed_slices(values, indices, mask=None):
     if mask is not None:
         return tf.IndexedSlices(values[mask], indices[mask])
