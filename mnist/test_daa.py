@@ -119,6 +119,13 @@ def main(unused_args):
     @tf.function
     def test_step(image, image_adv, label):
         outs = test_classifier(image)
+        is_adv = outs["pred"] != label
+
+        batch_indices = tf.range(image.shape[0])
+        image_adv = tf.tensor_scatter_nd_update(
+            image_adv, tf.expand_dims(batch_indices[is_adv], axis=1),
+            image[is_adv])
+
         outs_adv = test_classifier(image_adv)
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -155,8 +162,8 @@ def main(unused_args):
         test_ds = tf.data.Dataset.from_tensor_slices(
             (test_images, image_adv_final, test_labels))
         test_ds = make_input_pipeline(test_ds,
-                                    shuffle=False,
-                                    batch_size=FLAGS.batch_size)
+                                      shuffle=False,
+                                      batch_size=FLAGS.batch_size)
         for image, image_adv, label in test_ds:
             test_step(image, image_adv, label)
     except KeyboardInterrupt:
