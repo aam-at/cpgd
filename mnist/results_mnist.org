@@ -94,6 +94,25 @@
   <<output_results>>
 #+END_SRC
 
+** DAA attack
+*** Plain
+#+BEGIN_SRC python :noweb yes :var attack="daa" :var type="plain" :var norm="li" :results value :return df_org
+  <<parse_results>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :noweb yes :var attack="daa" :var type="linf" :var norm="li" :results value :return df_org
+  <<parse_results>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :noweb yes :var attack="daa" :var type="l2" :var norm="li" :results value :return df_org
+  <<parse_results>>
+  <<output_results>>
+#+END_SRC
+
 ** PGD attack
 *** Plain
 #+BEGIN_SRC python :noweb yes :var attack="pgd" :var type="plain" :var norm="li" :results value :return df_org
@@ -318,8 +337,8 @@
   <<output_results>>
 #+END_SRC
 
-*** L1
-#+BEGIN_SRC python :noweb yes :var attack="sparsefool" :var type="l1" :var norm="l1" :results value :return df_org
+*** L2
+#+BEGIN_SRC python :noweb yes :var attack="sparsefool" :var type="l2" :var norm="l1" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
