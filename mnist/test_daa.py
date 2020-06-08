@@ -24,7 +24,7 @@ from models import MadryCNN
 from utils import load_madry
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_pgd")
+register_experiment_flags(working_dir="../results/mnist/test_daa")
 flags.DEFINE_string("method", "blob", "daa method")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test paramrs
@@ -104,6 +104,7 @@ def main(unused_args):
     image_adv_final = tf.Variable(test_images.copy())
     all_indices = tf.range(image_adv_final.shape[0])
 
+    @tf.function
     def attack_step(image, label, indx):
         image_adv = daa.perturb(image, label)
         assert_op = tf.Assert(
@@ -115,6 +116,7 @@ def main(unused_args):
         image_adv_final.scatter_update(
             tf.IndexedSlices(image_adv[is_adv], indx[is_adv]))
 
+    @tf.function
     def test_step(image, image_adv, label):
         outs = test_classifier(image)
         outs_adv = test_classifier(image_adv)
