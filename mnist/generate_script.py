@@ -322,7 +322,7 @@ def daa_config(method="blob", seed=123):
     import_flags(method)
 
     num_images = 1000
-    batch_size = 500
+    batch_size = 200
     norm = 'li'
     attack_args = {
         'num_batches': num_images // batch_size,
@@ -334,7 +334,7 @@ def daa_config(method="blob", seed=123):
     for model in models:
         type = Path(model).stem.split("_")[-1]
         for nb_iter, nb_restarts, method, eps, eps_scale in itertools.product(
-                [100], [1, 10, 100], ['dgf', 'blob'], test_model_thresholds[type][norm], [1, 2, 4, 10, 25, 50]):
+                [200], [1, 50], ['dgf', 'blob'], test_model_thresholds[type][norm], [1, 2, 4, 10, 25, 30, 50]):
             working_dir = f"../results/mnist_daa/test_{type}_{norm}"
             attack_args.update({
                 'load_from': model,
