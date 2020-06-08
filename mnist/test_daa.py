@@ -19,7 +19,7 @@ from lib.daa import LinfBLOBAttack, LinfDGFAttack
 from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
                        li_metric, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
+                       setup_experiment, to_indexed_slices)
 from models import MadryCNN
 from utils import load_madry
 
@@ -56,9 +56,21 @@ def main(unused_args):
     _, _, test_ds = load_mnist(FLAGS.validation_size,
                                data_format="NHWC",
                                seed=FLAGS.data_seed)
-    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
+    test_images, test_labels = test_ds
+
+    # take N first examples for evaluation
+    if FLAGS.num_batches == -1:
+        num_eval_examples = test_images.shape[0]
+    else:
+        num_eval_examples = FLAGS.num_batches * FLAGS.batch_size
+    test_images = test_images[:num_eval_examples]
+    test_labels = test_labels[:num_eval_examples]
+    test_indx = np.arange(num_eval_examples)
+    test_ds = tf.data.Dataset.from_tensor_slices(
+        (test_images, test_labels, test_indx))
+    # shuffle for DAA attack
     test_ds = make_input_pipeline(test_ds,
-                                  shuffle=False,
+                                  shuffle=True,
                                   batch_size=FLAGS.batch_size)
 
     # models
@@ -89,24 +101,23 @@ def main(unused_args):
 
     test_metrics = MetricsDictionary()
 
-    def test_step(image, label):
-        outs = test_classifier(image)
+    image_adv_final = tf.Variable(test_images.copy())
+    all_indices = tf.range(image_adv_final.shape[0])
 
-        # run attack on correctly classified points
-        batch_indices = tf.range(image.shape[0])
-        image_adv = tf.identity(image)
-        for _ in tf.range(FLAGS.attack_nb_restarts):
-            is_adv = test_classifier(image_adv)['pred'] != label
-            image_adv = tf.tensor_scatter_nd_update(
-                image_adv, tf.expand_dims(batch_indices[~is_adv], axis=1),
-                daa.perturb(image[~is_adv], label[~is_adv]))
+    def attack_step(image, label, indx):
+        image_adv = daa.perturb(image, label)
         assert_op = tf.Assert(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0), [image_adv])
         with tf.control_dependencies([assert_op]):
-            outs_adv = test_classifier(image_adv)
+            is_adv = test_classifier(image_adv)['pred'] != label
+        image_adv_final.scatter_update(
+            tf.IndexedSlices(image_adv[is_adv], indx[is_adv]))
 
+    def test_step(image, image_adv, label):
+        outs = test_classifier(image)
+        outs_adv = test_classifier(image_adv)
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
@@ -119,9 +130,6 @@ def main(unused_args):
         test_metrics["acc_adv"](acc_adv)
         test_metrics["conf_adv"](outs_adv["conf"])
 
-        # measure norm
-        # NOTE: cleverhans lp-norm projection may result in numerical error
-        # add small constant eps = 1e-6
         li = li_metric(image - image_adv)
         is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds["li"]:
@@ -133,35 +141,24 @@ def main(unused_args):
         test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
         test_metrics["success_rate"](is_adv[is_corr])
 
-        return image_adv
-
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
-        for batch_index, (image, label) in enumerate(test_ds, 1):
-            X_lp = test_step(image, label)
-            log_metrics(
-                test_metrics,
-                "Batch results [{}, {:.2f}s]:".format(batch_index,
-                                                      time.time() -
-                                                      start_time),
-            )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_li-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
-            if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
-                break
+        for restart_number in range(FLAGS.attack_nb_restarts):
+            for (image, label, indx) in test_ds:
+                attack_step(image, label, indx)
+
+        # compute final accuracy
+        test_ds = tf.data.Dataset.from_tensor_slices(
+            (test_images, image_adv_final, test_labels))
+        test_ds = make_input_pipeline(test_ds,
+                                    shuffle=False,
+                                    batch_size=FLAGS.batch_size)
+        for image, image_adv, label in test_ds:
+            test_step(image, image_adv, label)
     except KeyboardInterrupt:
-        logging.info("Stopping after {}".format(batch_index))
+        logging.info("Stopping after {} restarts".format(restart_number))
     except Exception as e:
         raise
     finally:
@@ -169,14 +166,8 @@ def main(unused_args):
         if e is None or isinstance(e, KeyboardInterrupt):
             log_metrics(
                 test_metrics,
-                "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
-                                                     batch_index),
+                "Test results [{:.2f}s]:".format(time.time() - start_time),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":
