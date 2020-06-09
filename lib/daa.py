@@ -5,21 +5,15 @@ from abc import abstractmethod
 import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
-from cleverhans.utils_tf import clip_eta, random_lp_vector
 
 from lib.utils import dist_matrix
 
 
 class LinfBaseAttack:
-    ord = np.inf
-
     def __init__(self,
                  model,
                  eps: float = 0.3,
                  eps_iter: float = 0.05,
-                 nb_iter: int = 10,
-                 rand_init: bool = True,
-                 rand_init_eps: float = 0.3,
                  loss_fn: str = "xent"):
         """Attack parameter initialization. The attack performs k steps of
         size a, while always staying within epsilon from the initial
@@ -27,9 +21,6 @@ class LinfBaseAttack:
         self.model = model
         self.eps = eps
         self.eps_iter = eps_iter
-        self.nb_iter = nb_iter
-        self.rand_init = rand_init
-        self.rand_init_eps = rand_init_eps
         self.loss_fn = loss_fn
         self.c = {'xent': 1.1, 'cw': 10.0}[loss_fn]
 
@@ -58,22 +49,14 @@ class LinfBaseAttack:
     def attack_step(self, x_nat, x_adv, y):
         ...
 
-    def perturb(self, x_nat, y):
+    def perturb(self, x_nat, x_adv, y):
         """Given a set of examples (x_nat, y), returns a set of adversarial
         examples within epsilon of x_nat in l_infinity norm."""
-
-        if self.rand_init:
-            eta = random_lp_vector(x_nat.shape, self.ord, self.rand_init_eps)
-        else:
-            eta = tf.zeros_like(x_nat)
-        eta = clip_eta(eta, self.ord, self.eps)
-        x_adv = tf.clip_by_value(x_nat + eta, 0.0, 1.0)
-
         x_shape = x_nat.shape
         batch_size = x_shape[0]
         x_nat = tf.reshape(x_nat, (batch_size, -1))
         x_adv = tf.reshape(x_adv, (batch_size, -1))
-        for epoch in tf.range(self.nb_iter):
+        for epoch in tf.range(10):
             x_adv_iter = self.eps_iter * tf.sign(
                 self.attack_step(x_nat, x_adv, y))
             x_adv += x_adv_iter

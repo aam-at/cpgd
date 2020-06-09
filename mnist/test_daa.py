@@ -33,7 +33,8 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-flags.DEFINE_integer("attack_nb_restarts", "1", "number of attack restarts")
+flags.DEFINE_integer("attack_nb_iter", 200, "number of attack iterations")
+flags.DEFINE_integer("attack_nb_restarts", 1, "number of attack restarts")
 
 FLAGS = flags.FLAGS
 
@@ -89,8 +90,8 @@ def main(unused_args):
     # attack arguments
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
-        for kwarg in dir(FLAGS)
-        if kwarg.startswith("attack_") and kwarg not in ['attack_nb_restarts']
+        for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
+        and kwarg not in ['attack_nb_iter', 'attack_nb_restarts']
     }
     daa = daa_attacks[FLAGS.method](
         lambda x: test_classifier(tf.reshape(x, [-1] + X_shape[1:]))['logits'],
@@ -105,27 +106,18 @@ def main(unused_args):
     all_indices = tf.range(image_adv_final.shape[0])
 
     @tf.function
-    def attack_step(image, label, indx):
-        image_adv = daa.perturb(image, label)
+    def attack_step(image, image_adv, label):
+        image_adv = daa.perturb(image, image_adv, label)
         assert_op = tf.Assert(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0), [image_adv])
         with tf.control_dependencies([assert_op]):
-            is_adv = test_classifier(image_adv)['pred'] != label
-        image_adv_final.scatter_update(
-            tf.IndexedSlices(image_adv[is_adv], indx[is_adv]))
+            return image_adv
 
     @tf.function
     def test_step(image, image_adv, label):
         outs = test_classifier(image)
-        is_adv = outs["pred"] != label
-
-        batch_indices = tf.range(image.shape[0])
-        image_adv = tf.tensor_scatter_nd_update(
-            image_adv, tf.expand_dims(batch_indices[is_adv], axis=1),
-            image[is_adv])
-
         outs_adv = test_classifier(image_adv)
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -151,21 +143,40 @@ def main(unused_args):
         test_metrics["success_rate"](is_adv[is_corr])
 
     # reset metrics
-    reset_metrics(test_metrics)
     start_time = time.time()
     try:
+        is_corr0 = test_classifier(test_images)['pred'] == test_labels
         for restart_number in range(FLAGS.attack_nb_restarts):
-            for (image, label, indx) in test_ds:
-                attack_step(image, label, indx)
+            x_adv = tf.convert_to_tensor(
+                test_images +
+                tf.random.uniform(test_images.shape, -daa.eps, daa.eps))
+            x_adv = tf.clip_by_value(x_adv, 0.0, 1.0)
 
-        # compute final accuracy
-        test_ds = tf.data.Dataset.from_tensor_slices(
-            (test_images, image_adv_final, test_labels))
-        test_ds = make_input_pipeline(test_ds,
-                                      shuffle=False,
-                                      batch_size=FLAGS.batch_size)
-        for image, image_adv, label in test_ds:
-            test_step(image, image_adv, label)
+            for reshuffle in range(int(FLAGS.attack_nb_iter / 10)):
+                for (image, label, indx) in test_ds:
+                    image_adv = tf.gather(x_adv, tf.expand_dims(indx, 1))
+                    image_adv = attack_step(image, image_adv, label)
+                    x_adv = tf.tensor_scatter_nd_update(x_adv, tf.expand_dims(indx, 1),
+                                                        image_adv)
+            is_adv = tf.logical_and(test_classifier(x_adv)['pred'] != test_labels,
+                                    is_corr0)
+            image_adv_final.scatter_update(
+                tf.IndexedSlices(x_adv[is_adv], all_indices[is_adv]))
+
+            # compute accuracy (combining restarts)
+            reset_metrics(test_metrics)
+            test_ds2 = tf.data.Dataset.from_tensor_slices(
+                (test_images, image_adv_final, test_labels))
+            test_ds2 = make_input_pipeline(test_ds2,
+                                           shuffle=False,
+                                           batch_size=FLAGS.batch_size)
+            for image, image_adv, label in test_ds2:
+                test_step(image, image_adv, label)
+            log_metrics(
+                test_metrics,
+                "Test results after {} restarts [{:.2f}s]:".format(restart_number,
+                                                                   time.time() - start_time),
+            )
     except KeyboardInterrupt:
         logging.info("Stopping after {} restarts".format(restart_number))
     except Exception as e:
