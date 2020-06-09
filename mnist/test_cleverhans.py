@@ -145,7 +145,7 @@ def main(unused_args):
                                                batchsize=FLAGS.batch_size):
                 label_onehot = tf.keras.utils.to_categorical(
                     label, num_classes)
-                image_adv = attack.generate_np(image, y=label_onehot)
+                image_adv = attack.generate_np(image, y=label_onehot, **attack_kwargs)
                 image_adv_list.append(image_adv)
             image_adv = np.vstack(image_adv_list)
 

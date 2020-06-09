@@ -65,12 +65,9 @@ def test_lp_config(attack, runs=1, master_seed=1):
     num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 500
     attack_grid_args = {
-        'num_batches':
-        [num_images // batch_size],
-        'batch_size':
-        [batch_size],
-        'load_from':
-        models,
+        'num_batches': [num_images // batch_size],
+        'batch_size': [batch_size],
+        'load_from': models,
         'attack': [attack],
         'attack_loss': ["cw"],
         'attack_iterations': [500],
@@ -88,9 +85,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
     }
 
     if attack == 'l1g':
-        attack_grid_args.update({
-            'attack_hard_threshold': [True, False]
-        })
+        attack_grid_args.update({'attack_hard_threshold': [True, False]})
 
     if issubclass(attack_klass, ProximalGradientOptimizerAttack):
         attack_grid_args.update({
@@ -100,14 +95,10 @@ def test_lp_config(attack, runs=1, master_seed=1):
             'attack_adaptive_momentum': [True, False]
         })
     else:
-        attack_grid_args.update({
-            'attack_primal_optimizer': ["adam"]
-        })
+        attack_grid_args.update({'attack_primal_optimizer': ["adam"]})
 
     if norm == 'li':
-        attack_grid_args.update({
-            'attack_gradient_preprocessing': [True]
-        })
+        attack_grid_args.update({'attack_gradient_preprocessing': [True]})
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
@@ -166,9 +157,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
             base_name = f"mnist_{type}"
             name = format_name(base_name, attack_args) + '_'
             attack_args["name"] = name
-            p = [
-                s.name[:-1] for s in list(Path(working_dir).glob("*"))
-            ]
+            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
             if name in p or name in existing_names:
                 continue
             existing_names.append(name)
@@ -232,7 +221,8 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                 continue
 
             lr_config = ast.literal_eval(attack_args['attack_loop_lr_config'])
-            flr_config = ast.literal_eval(attack_args['attack_loop_finetune_lr_config'])
+            flr_config = ast.literal_eval(
+                attack_args['attack_loop_finetune_lr_config'])
             if lr_config['schedule'] != 'linear':
                 continue
             if flr_config['schedule'] != 'linear':
@@ -381,16 +371,15 @@ def fab_config(norm, seed=123):
         beta = 0.9
         eps = {
             'plain': {'li': 0.15, 'l2': 2.0, 'l1': 40.0},
-            'linf':  {'li': 0.3, 'l2':  2.0, 'l1': 40.0},
-            'l2':    {'li': 0.3, 'l2':  2.0, 'l1': 40.0}
+            'linf': {'li': 0.3, 'l2': 2.0, 'l1': 40.0},
+            'l2': {'li': 0.3, 'l2': 2.0, 'l1': 40.0}
         }
         eps['madry'] = eps['linf']
 
         # params
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_fab/test_{type}_{norm}"
-        attack_args.update(
-        {
+        attack_args.update({
             'attack_n_iter': n_iter,
             'attack_n_restarts': n_restarts,
             'attack_alpha_max': alpha_max,
@@ -402,81 +391,54 @@ def fab_config(norm, seed=123):
         })
         name = f"mnist_fab_{type}_{norm}_n{n_iter}_N{n_restarts}_"
         attack_args["name"] = name
-        p = [
-            s.name[:-1] for s in list(Path(working_dir).glob("*"))
-        ]
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
         print(generate_test_optimizer('test_fab', **attack_args))
 
 
-# foolbox attacks
-def foolbox_config(norm, attack, seed=123):
-    import test_foolbox
-    from test_foolbox import import_flags
+# cleverhans attacks
+def cleverhans_config(norm, attack, seed=123):
+    import test_cleverhans
+    from test_cleverhans import import_flags
 
     flags.FLAGS._flags().clear()
-    importlib.reload(test_foolbox)
+    importlib.reload(test_cleverhans)
     import_flags(norm, attack)
 
-    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 500
     attack_grid_args = {
-        'num_batches':
-        [num_images // batch_size],
-        'batch_size':
-        [batch_size],
-        'load_from':
-        models,
+        'num_batches': [num_images // batch_size],
+        'batch_size': [batch_size],
+        'load_from': models,
         'attack': [attack],
         'norm': [norm],
         'seed': [seed]
     }
-    if attack == 'df':
+    if attack == 'cw':
         # default params
         attack_grid_args.update({
-            'attack_steps': [50],
-            'attack_overshoot': [0.02],
-        })
-        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
-    elif attack == 'cw':
-        # default params
-        attack_grid_args.update({
-            'attack_steps': [10000],
-            'attack_stepsize': [0.01],
-            'attack_initial_const': [0.001],
+            'attack_max_iterations': [10000],
+            'attack_learning_rate': [0.01],
+            'attack_initial_const': [1e-3],
             'attack_binary_search_steps': [9],
             'attack_abort_early': [False],
         })
-        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
-    elif attack == 'newton':
-        # default params
-        attack_grid_args.update({
-            'attack_steps': [1000],
-            'attack_stepsize': [0.01],
-        })
-        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_"
+        name_fn = lambda: f"mnist_{type}_{attack}_cleverhans_n{attack_args['attack_max_iterations']}_lr{attack_args['attack_learning_rate']}_C{attack_args['attack_initial_const']}_"
     elif attack == 'ead':
         # default params
         attack_grid_args.update({
-            'attack_steps': [1000],
+            'attack_max_iterations': [1000],
+            'attack_learning_rate': [0.01],
             'attack_initial_const': [0.001],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
-            'attack_regularization': [0.05],
+            'attack_beta': [0.05],
             'attack_abort_early': [False],
         })
-        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
-    elif attack == 'ddn':
-        # default params for mnist
-        # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
-        attack_grid_args.update({
-            'attack_steps': [1000],
-            'attack_init_epsilon': [1.0],
-            'attack_gamma': [0.05],
-        })
-        name_fn = lambda : f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_"
+        name_fn = lambda: f"mnist_{type}_{attack}_cleverhans_n{attack_args['attack_max_iterations']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
@@ -491,9 +453,91 @@ def foolbox_config(norm, attack, seed=123):
         })
         name = name_fn()
         attack_args["name"] = name
-        p = [
-            s.name[:-1] for s in list(Path(working_dir).glob("*"))
-        ]
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_cleverhans', **attack_args))
+
+
+# foolbox attacks
+def foolbox_config(norm, attack, seed=123):
+    import test_foolbox
+    from test_foolbox import import_flags
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_foolbox)
+    import_flags(norm, attack)
+
+    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    batch_size = 500
+    attack_grid_args = {
+        'num_batches': [num_images // batch_size],
+        'batch_size': [batch_size],
+        'load_from': models,
+        'attack': [attack],
+        'norm': [norm],
+        'seed': [seed]
+    }
+    if attack == 'df':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [50],
+            'attack_overshoot': [0.02],
+        })
+        name_fn = lambda: f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
+    elif attack == 'cw':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [10000],
+            'attack_stepsize': [0.01],
+            'attack_initial_const': [0.001],
+            'attack_binary_search_steps': [9],
+            'attack_abort_early': [False],
+        })
+        name_fn = lambda: f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
+    elif attack == 'newton':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [1000],
+            'attack_stepsize': [0.01],
+        })
+        name_fn = lambda: f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_"
+    elif attack == 'ead':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [1000],
+            'attack_initial_const': [0.001],
+            'attack_binary_search_steps': [9],
+            'attack_decision_rule': ['L1'],
+            'attack_regularization': [0.05],
+            'attack_abort_early': [False],
+        })
+        name_fn = lambda: f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
+    elif attack == 'ddn':
+        # default params for mnist
+        # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
+        attack_grid_args.update({
+            'attack_steps': [1000],
+            'attack_init_epsilon': [1.0],
+            'attack_gamma': [0.05],
+        })
+        name_fn = lambda: f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_"
+
+    attack_arg_names = list(attack_grid_args.keys())
+    existing_names = []
+
+    for attack_arg_value in itertools.product(*attack_grid_args.values()):
+        model = attack_arg_value[attack_arg_names.index('load_from')]
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/mnist_{attack}/test_{type}_{norm}"
+        attack_args = dict(zip(attack_arg_names, attack_arg_value))
+        attack_args.update({
+            'working_dir': working_dir,
+        })
+        name = name_fn()
+        attack_args["name"] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
@@ -621,13 +665,10 @@ def art_config(norm, attack, seed=123):
     num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
     batch_size = 500
     attack_grid_args = {
-        'num_batches':
-        [num_images // batch_size],
-        'batch_size':
-        [batch_size],
+        'num_batches': [num_images // batch_size],
+        'batch_size': [batch_size],
         'attack_batch_size': [batch_size],
-        'load_from':
-        models,
+        'load_from': models,
         'attack': [attack],
         'norm': [norm],
         'seed': [seed]
@@ -639,7 +680,7 @@ def art_config(norm, attack, seed=123):
             'attack_nb_grads': [10],
             'attack_epsilon': [0.02],
         })
-        name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_os{attack_args['attack_epsilon']}_"
+        name_fn = lambda: f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_os{attack_args['attack_epsilon']}_"
     elif attack == 'cw':
         # default params
         if norm == "l2":
@@ -648,13 +689,13 @@ def art_config(norm, attack, seed=123):
                 'attack_initial_const': [0.001],
                 'attack_binary_search_steps': [9],
             })
-            name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
+            name_fn = lambda: f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
         else:
             attack_grid_args.update({
                 'attack_max_iter': [10000],
                 'attack_eps': [0.3],
             })
-            name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_eps{attack_args['attack_eps']}_"
+            name_fn = lambda: f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_eps{attack_args['attack_eps']}_"
     elif attack == 'ead':
         # default params
         attack_grid_args.update({
@@ -664,7 +705,7 @@ def art_config(norm, attack, seed=123):
             'attack_decision_rule': ['L1'],
             'attack_beta': [0.05],
         })
-        name_fn = lambda : f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
+        name_fn = lambda: f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
@@ -679,9 +720,7 @@ def art_config(norm, attack, seed=123):
         })
         name = name_fn()
         attack_args["name"] = name
-        p = [
-            s.name[:-1] for s in list(Path(working_dir).glob("*"))
-        ]
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
@@ -699,8 +738,8 @@ def jsma_config(seed=123):
     }
     existing_names = []
     for model, targets, theta, lib in itertools.product(
-            models, ["all", "random", "second"],
-            [1.0, 0.1], ["cleverhans", "art"]):
+            models, ["all", "random", "second"], [1.0, 0.1],
+        ["cleverhans", "art"]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/mnist_jsma/test_{type}_{norm}"
         attack_args.update({
