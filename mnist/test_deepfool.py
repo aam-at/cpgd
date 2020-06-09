@@ -41,7 +41,7 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    assert FLAGS.norm in ['l2', 'linf']
+    assert FLAGS.norm in ['l2', 'li']
     setup_experiment(f"madry_deepfool_{FLAGS.norm}_test", [__file__])
 
     # data

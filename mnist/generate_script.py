@@ -425,6 +425,7 @@ def cleverhans_config(norm, attack, seed=123):
             'attack_initial_const': [1e-3],
             'attack_binary_search_steps': [9],
             'attack_abort_early': [False],
+            'attack_batch_size': [batch_size]
         })
         name_fn = lambda: f"mnist_{type}_{attack}_cleverhans_n{attack_args['attack_max_iterations']}_lr{attack_args['attack_learning_rate']}_C{attack_args['attack_initial_const']}_"
     elif attack == 'ead':
@@ -437,6 +438,7 @@ def cleverhans_config(norm, attack, seed=123):
             'attack_decision_rule': ['L1'],
             'attack_beta': [0.05],
             'attack_abort_early': [False],
+            'attack_batch_size': [batch_size]
         })
         name_fn = lambda: f"mnist_{type}_{attack}_cleverhans_n{attack_args['attack_max_iterations']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
 
@@ -583,36 +585,39 @@ def bethge_config(norm, seed=123):
         print(generate_test_optimizer('test_bethge', **attack_args))
 
 
-def lra_config(seed=123):
-    import test_lra
+def deepfool_config(norm, seed=123):
+    import test_sparsefool
 
     flags.FLAGS._flags().clear()
-    importlib.reload(test_lra)
+    importlib.reload(test_sparsefool)
 
-    num_images = 500
-    batch_size = 50
+    assert norm in ['l2', 'linf']
+    num_images = 1000
+    batch_size = 500
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
+        'norm': norm,
         'seed': seed
     }
-    norm = "l2"
 
     existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_lra/test_{type}_{norm}"
+        working_dir = f"../results/mnist_deepfool/test_{type}_{norm}"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
+            'attack_overshoot': 0.02,
+            'attack_max_iter': 50,
         })
-        name = f"mnist_lra_{type}_{norm}_"
+        name = f"mnist_deepfool_{type}_{norm}_l{lambda_}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_lra', **attack_args))
+        print(generate_test_optimizer('test_deepfool', **attack_args))
 
 
 def sparsefool_config(seed=123):
