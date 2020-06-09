@@ -96,10 +96,6 @@ def deepfool(image,
         else:
             pert_image = image + (1 + overshoot) * torch.from_numpy(r_tot)
         pert_image.clamp_(0.0, 1.0)
-        r_tot = pert_image - image
-        if is_cuda:
-            r_tot = r_tot.cpu()
-        r_tot = r_tot.numpy()
         x = Variable(pert_image, requires_grad=True)
         fs = net.forward(x)
         k_i = np.argmax(fs.data.cpu().numpy().flatten())
