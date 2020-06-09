@@ -586,10 +586,10 @@ def bethge_config(norm, seed=123):
 
 
 def deepfool_config(norm, seed=123):
-    import test_sparsefool
+    import test_deepfool
 
     flags.FLAGS._flags().clear()
-    importlib.reload(test_sparsefool)
+    importlib.reload(test_deepfool)
 
     assert norm in ['l2', 'li']
     num_images = 1000
@@ -611,7 +611,7 @@ def deepfool_config(norm, seed=123):
             'attack_overshoot': 0.02,
             'attack_max_iter': 50,
         })
-        name = f"mnist_deepfool_{type}_{norm}_l{lambda_}_"
+        name = f"mnist_deepfool_{type}_{norm}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
