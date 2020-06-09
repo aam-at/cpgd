@@ -65,6 +65,10 @@ def main(unused_args):
                                data_format="NHWC",
                                seed=FLAGS.data_seed)
     test_images, test_labels = test_ds
+    if FLAGS.num_batches != -1:
+        total_examples = FLAGS.num_batches * FLAGS.batch_size
+        test_images = test_images[:total_examples]
+        test_labels = test_labels[:total_examples]
 
     # models
     num_classes = 10
