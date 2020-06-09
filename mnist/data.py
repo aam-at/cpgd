@@ -32,19 +32,3 @@ def load_mnist(validation_size=10000,
     x_train, y_train = x_train[:train_examples], y_train[:train_examples]
     return ((x_transform(x_train), y_train), (x_transform(x_val), y_val),
             (x_transform(x_test), y_test))
-
-
-def batch_iterator(inputs, targets, batchsize, shuffle=False):
-    assert len(inputs) == len(targets)
-    n_samples = inputs.shape[0]
-    if shuffle:
-        # Shuffles indicies of training data, so we can draw batches
-        # from random indicies instead of shuffling whole data
-        indx = np.random.permutation(range(n_samples))
-    else:
-        indx = range(n_samples)
-    for i in range((n_samples + batchsize - 1) // batchsize):
-        sl = slice(i * batchsize, (i + 1) * batchsize)
-        X_batch = inputs[indx[sl]]
-        y_batch = targets[indx[sl]]
-        yield X_batch, y_batch

@@ -133,6 +133,22 @@ class NanError(BaseException):
 
 
 # data utils
+def batch_iterator(inputs, targets, batchsize, shuffle=False):
+    assert len(inputs) == len(targets)
+    n_samples = inputs.shape[0]
+    if shuffle:
+        # Shuffles indicies of training data, so we can draw batches
+        # from random indicies instead of shuffling whole data
+        indx = np.random.permutation(range(n_samples))
+    else:
+        indx = range(n_samples)
+    for i in range((n_samples + batchsize - 1) // batchsize):
+        sl = slice(i * batchsize, (i + 1) * batchsize)
+        X_batch = inputs[indx[sl]]
+        y_batch = targets[indx[sl]]
+        yield X_batch, y_batch
+
+
 def select_balanced_subset(X, y, num_classes=10, samples_per_class=10, seed=1):
     total_samples = num_classes * samples_per_class
     X_subset = np.zeros([total_samples] + list(X.shape[1:]), dtype=X.dtype)

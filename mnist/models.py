@@ -87,6 +87,7 @@ class MadryCNN(tf.keras.Model):
             z = act()(h)
             logits = dense(10)(z)
         self.model = tf.keras.Model(inputs=x, outputs=[h, logits])
+        super(MadryCNN, self).build(inputs_shape)
 
     def call(self, inputs, training=True):
         h, logits = self.model(inputs, training=training)
