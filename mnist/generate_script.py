@@ -591,7 +591,7 @@ def deepfool_config(norm, seed=123):
     flags.FLAGS._flags().clear()
     importlib.reload(test_sparsefool)
 
-    assert norm in ['l2', 'linf']
+    assert norm in ['l2', 'li']
     num_images = 1000
     batch_size = 500
     attack_args = {
