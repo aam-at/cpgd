@@ -69,7 +69,7 @@ def import_flags(norm, attack):
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_{FLAGS.attack}_{FLAGS.norm}_test", [__file__])
+    setup_experiment(f"madry_foolbox_{FLAGS.attack}_{FLAGS.norm}_test", [__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
