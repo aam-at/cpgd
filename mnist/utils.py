@@ -7,7 +7,7 @@ import torch
 from tensorflow.python.training import py_checkpoint_reader
 
 
-def load_madry(load_from, model_vars):
+def load_madry(load_from, model_vars, sess=None):
     w = scipy.io.loadmat(load_from)
     mapping = {
         "A0": "conv2d/kernel:0",
@@ -28,7 +28,10 @@ def load_madry(load_from, model_vars):
         model_var_name = mapping[var_name]
         model_var = [v for v in model_vars if v.name == model_var_name]
         assert len(model_var) == 1
-        model_var[0].assign(var)
+        if sess:
+            sess.run(model_var[0].assign(var))
+        else:
+            model_var[0].assign(var)
 
 
 def load_madry_official(load_from, model_vars):
