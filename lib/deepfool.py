@@ -1,5 +1,6 @@
 # copy from https://github.com/LTS4/DeepFool/
 import copy
+import logging
 
 import numpy as np
 import torch as torch
@@ -7,7 +8,12 @@ from torch.autograd import Variable
 from torch.autograd.gradcheck import zero_gradients
 
 
-def deepfool(image, net, num_classes=10, overshoot=0.02, max_iter=50, ord=2):
+def deepfool(image,
+             net,
+             num_classes: int=10,
+             overshoot: float = 0.02,
+             max_iter: int = 50,
+             ord=2):
     """Deepfool attack
 
     :param image: Image of size HxWx3
@@ -25,11 +31,11 @@ def deepfool(image, net, num_classes=10, overshoot=0.02, max_iter=50, ord=2):
     assert ord in [2, np.inf]
 
     if is_cuda:
-        print("Using GPU")
         image = image.cuda()
         net = net.cuda()
+        logging.debug("Using GPU")
     else:
-        print("Using CPU")
+        logging.debug("Using CPU")
 
     f_image = net.forward(
         Variable(image[None, :, :, :],
@@ -78,11 +84,10 @@ def deepfool(image, net, num_classes=10, overshoot=0.02, max_iter=50, ord=2):
                 w = w_k
 
         # compute r_i and r_tot
-        # Added 1e-4 for numerical stability
         if ord == 2:
-            r_i = (pert + 1e-4) * w / np.linalg.norm(w)
+            r_i = pert * w / np.linalg.norm(w)
         else:
-            r_i = (pert + 1e-4) * np.sign(w)
+            r_i = pert * np.sign(w)
         r_tot = np.float32(r_tot + r_i)
 
         if is_cuda:
@@ -90,7 +95,11 @@ def deepfool(image, net, num_classes=10, overshoot=0.02, max_iter=50, ord=2):
                                   overshoot) * torch.from_numpy(r_tot).cuda()
         else:
             pert_image = image + (1 + overshoot) * torch.from_numpy(r_tot)
-
+        pert_image.clamp_(0.0, 1.0)
+        r_tot = pert_image - image
+        if is_cuda:
+            r_tot = r_tot.cpu()
+        r_tot = r_tot.numpy()
         x = Variable(pert_image, requires_grad=True)
         fs = net.forward(x)
         k_i = np.argmax(fs.data.cpu().numpy().flatten())
