@@ -138,16 +138,10 @@ def main(unused_args):
 
         # measure norm
         lp = alp.lp_metric(image - image_lp)
+        is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds[norm]:
-            acc_th = get_acc_for_lp_threshold(
-                lambda x: test_classifier(x)["logits"],
-                image,
-                image_lp,
-                label,
-                lp,
-                threshold,
-            )
-            test_metrics[f"acc_{norm}_%.2f" % threshold](acc_th)
+            is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
+            test_metrics[f"acc_{norm}_%.2f" % threshold](~is_adv_at_th)
         test_metrics[f"{norm}"](lp)
         # compute statistics only for correctly classified inputs
         is_corr = outs["pred"] == label
