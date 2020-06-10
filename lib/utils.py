@@ -56,11 +56,16 @@ def flags_to_params(fls):
 
 def import_klass_annotations_as_flags(klass,
                                       prefix='',
+                                      exclude_args=None,
                                       include_kwargs_with_defaults=False):
+    if exclude_args is None:
+        exclude_args = []
+    imported = []
     for base_klass in klass.mro():
-        import_func_annotations_as_flags(
+        imported += import_func_annotations_as_flags(
             base_klass.__init__,
             prefix=prefix,
+            exclude_args=exclude_args + imported,
             include_kwargs_with_defaults=include_kwargs_with_defaults)
 
 
@@ -83,6 +88,8 @@ def import_func_annotations_as_flags(f,
     }
     imported = []
     for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
+        if kwarg in exclude_args:
+            continue
         try:
             kwarg_default = spec.defaults[index]
         except:
@@ -90,8 +97,6 @@ def import_func_annotations_as_flags(f,
         if kwarg_type not in flag_defines:
             logging.debug(f"Uknown {kwarg} type {kwarg_type}")
         else:
-            if kwarg in exclude_args:
-                continue
             arg_name = f"{prefix}{kwarg}"
             try:
                 flag_defines[kwarg_type](arg_name, kwarg_default, f"{kwarg}")
@@ -114,6 +119,7 @@ def import_func_annotations_as_flags(f,
                                              f"{kwarg}")
                 except DuplicateFlagError as e:
                     logging.debug(e)
+    return imported
 
 
 def prepare_dir(dir_path, subdir_name):
