@@ -22,6 +22,9 @@
   hide_result_if_not_all_adv = False
 
   df = parse_output_logs(dirs, norm, type, export_test_params=test_params)
+  for col in df.columns:
+      if col.startswith(f"acc_{norm}_"):
+          df[col] = df[col] * 100
 #+END_SRC
 
 #+NAME: output_results
@@ -453,7 +456,7 @@
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :noweb yes :var attack="jsma" :var norm="l0" :var type="linf" :results value :return df_org
+#+BEGIN_SRC python :noweb yes :var attack="jsma" :var norm="l0" :var type="l2" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
