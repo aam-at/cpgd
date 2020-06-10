@@ -119,7 +119,7 @@ def main(unused_args):
         image_lp = allp.run_loop(image, label_onehot)
 
         outs = test_classifier(image)
-        outs_lp = test_classifier(image_lp)
+        outs_adv = test_classifier(image_lp)
 
         # metrics
         nll_loss = tf.keras.metrics.sparse_categorical_crossentropy(
@@ -127,14 +127,14 @@ def main(unused_args):
         )
         acc_fn = tf.keras.metrics.sparse_categorical_accuracy
         acc = acc_fn(label, outs["logits"])
-        acc_lp = acc_fn(label, outs_lp["logits"])
+        acc_adv = acc_fn(label, outs_adv["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_{norm}"](acc_lp)
-        test_metrics[f"conf_{norm}"](outs_lp["conf"])
+        test_metrics[f"acc_{norm}"](acc_adv)
+        test_metrics[f"conf_{norm}"](outs_adv["conf"])
 
         # measure norm
         lp = alp.lp_metric(image - image_lp)
