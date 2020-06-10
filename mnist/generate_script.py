@@ -267,7 +267,7 @@ def pgd_config(norm, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 500
     attack_args = {
         'norm': norm,
@@ -280,7 +280,7 @@ def pgd_config(norm, seed=123):
     for model in models:
         type = Path(model).stem.split("_")[-1]
         for nb_iter, nb_restarts, eps, eps_scale in itertools.product(
-                [100], [1, 10, 100], test_model_thresholds[type][norm], [1, 2, 4, 10, 25, 50]):
+                [100], [1, 10, 100], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
             working_dir = f"../results/mnist_pgd/test_{type}_{norm}"
             attack_args.update({
                 'load_from': model,
@@ -352,7 +352,7 @@ def fab_config(norm, seed=123):
     importlib.reload(test_fab)
     import_klass_annotations_as_flags(FABAttack, 'attack_')
 
-    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 500
     attack_args = {
         'attack_norm': norm,
