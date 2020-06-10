@@ -232,11 +232,11 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
             if round(flr_config['config']['initial_learning_rate'] /
                      flr_config['config']['minimal_learning_rate']) != 10:
                 continue
-            attack_args['working_dir'] = f"../results/mnist_final/test_{type}_{norm}"
+            attack_args['working_dir'] = f"../results/mnist_cpgd/test_{type}_{norm}"
 
             # change args
             j += 1
-            for upd, R in itertools.product([True, False], [1, 10, 100]):
+            for upd, R in itertools.product([True], [1, 10, 100]):
                 attack_args['attack_simultaneous_updates'] = upd
                 attack_args['attack_loop_number_restarts'] = R
                 # generate unique name
