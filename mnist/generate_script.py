@@ -171,13 +171,12 @@ def test_lp_config(attack, runs=1, master_seed=1):
 
 def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
     import test_optimizer_lp_madry
-    from test_optimizer_lp_madry import lp_attacks
+    from test_optimizer_lp_madry import import_flags, lp_attacks
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_optimizer_lp_madry)
-    assert attack in lp_attacks
+    import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
-    import_klass_annotations_as_flags(attack_klass, 'attack_')
     # import args
     defined_flags = flags.FLAGS._flags().keys()
     test_params = [
@@ -185,7 +184,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
         if flag not in ['attack_simultaneous_updates']
     ]
 
-    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 500
     attack_args = {
         'attack': attack,
