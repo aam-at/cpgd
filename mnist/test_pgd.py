@@ -116,6 +116,7 @@ def main(unused_args):
 
     @tf.function
     def test_step(image, label):
+        label_onehot = tf.one_hot(label, num_classes)
         outs = test_classifier(image)
         is_corr = test_classifier(image)['pred'] == label
 
@@ -127,6 +128,7 @@ def main(unused_args):
             image_adv = tf.tensor_scatter_nd_update(
                 image_adv, tf.expand_dims(batch_indices[~is_adv], axis=1),
                 pgd.generate(image[~is_adv],
+                             y=label_onehot[~is_adv],
                              clip_min=0.0,
                              clip_max=1.0,
                              rand_init=True,
