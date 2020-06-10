@@ -323,7 +323,7 @@ def daa_config(seed=123):
     for model in models:
         type = Path(model).stem.split("_")[-1]
         for nb_iter, nb_restarts, method, eps, eps_scale in itertools.product(
-                [200], [1, 50], ['dgf', 'blob'], test_model_thresholds[type][norm], [1, 2, 4, 10, 25, 30, 50]):
+                [200], [1, 50], ['dgf', 'blob'], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
             working_dir = f"../results/mnist_daa/test_{type}_{norm}"
             attack_args.update({
                 'load_from': model,
