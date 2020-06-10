@@ -5,6 +5,7 @@ import json
 import logging
 import os
 import subprocess
+import typing
 from argparse import Namespace
 from functools import partial
 from pathlib import Path
@@ -72,9 +73,13 @@ def import_func_annotations_as_flags(f,
     spec = inspect.getfullargspec(f)
     flag_defines = {
         str: flags.DEFINE_string,
+        typing.Optional[str]: flags.DEFINE_string,
         bool: flags.DEFINE_bool,
+        typing.Optional[bool]: flags.DEFINE_bool,
         int: flags.DEFINE_integer,
-        float: flags.DEFINE_float
+        typing.Optional[int]: flags.DEFINE_integer,
+        float: flags.DEFINE_float,
+        typing.Optional[float]: flags.DEFINE_float,
     }
     imported = []
     for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
