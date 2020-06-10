@@ -422,7 +422,7 @@ def cleverhans_config(norm, attack, seed=123):
         attack_grid_args.update({
             'attack_max_iterations': [10000],
             'attack_learning_rate': [0.01],
-            'attack_initial_const': [1e-3],
+            'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_abort_early': [False],
             'attack_batch_size': [batch_size]
@@ -433,7 +433,7 @@ def cleverhans_config(norm, attack, seed=123):
         attack_grid_args.update({
             'attack_max_iterations': [1000],
             'attack_learning_rate': [0.01],
-            'attack_initial_const': [0.001],
+            'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
             'attack_beta': [0.05],
@@ -554,7 +554,7 @@ def bethge_config(norm, seed=123):
     importlib.reload(test_bethge)
     import_flags(norm)
 
-    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 100
     attack_args = {
         'norm': norm,
