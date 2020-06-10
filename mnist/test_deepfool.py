@@ -12,6 +12,7 @@ import tensorflow as tf
 import torch
 from absl import flags
 
+import lib
 from config import test_thresholds
 from data import load_mnist
 from lib.deepfool import deepfool
@@ -42,7 +43,8 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     assert FLAGS.norm in ['l2', 'li']
-    setup_experiment(f"madry_deepfool_{FLAGS.norm}_test", [__file__])
+    setup_experiment(f"madry_deepfool_{FLAGS.norm}_test",
+                     [__file__, lib.deepfool.__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
