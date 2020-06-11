@@ -76,8 +76,8 @@ def main(unused_args):
 
     # models
     num_classes = 10
-    classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
+    model_type = Path(FLAGS.load_from).stem.split("_")[-1]
+    classifier = MadryCNN(model_type=model_type)
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
@@ -86,7 +86,9 @@ def main(unused_args):
     X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
     y_shape = [FLAGS.batch_size, num_classes]
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
+    load_madry(FLAGS.load_from,
+               classifier.trainable_variables,
+               model_type=model_type)
 
     # attack arguments
     attack_kwargs = {
