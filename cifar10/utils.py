@@ -1,4 +1,5 @@
 import scipy.io
+import torch
 
 
 def load_madry(load_dir, model_vars, model_type="plain"):
@@ -48,3 +49,48 @@ def load_madry(load_dir, model_vars, model_type="plain"):
         model_var = [v for v in model_vars if v.name == model_var_name]
         assert len(model_var) == 1
         model_var[0].assign(var)
+
+
+
+def load_madry_pt(load_from, model_params, model_type="plain"):
+    w = scipy.io.loadmat(load_from)
+    if model_type != "plain":
+        names = [
+            "A0",
+            "A1",
+            "A2",
+            "A3",
+            "A4",
+            "A5",
+            "A6",
+            "A7",
+            "A8",
+            "A9",
+            "A10",
+            "A11",
+        ]
+    else:
+        names = [
+            "A0", "bA0",
+            "A1", "bA1",
+            "A2", "bA2",
+            "A3", "bA3",
+            "A4", "bA4",
+            "A5", "bA5",
+            "A6", "bA6",
+            "A7", "bA7",
+            "A8", "bA8",
+            "A9", "bA9"
+        ]
+    t = list(model_params)
+    for name, model_param in zip(names, t):
+        load_var = w[name]
+        if load_var.ndim == 2:
+            load_var = load_var.transpose()
+            load_var = load_var.squeeze()
+        elif load_var.ndim == 4:
+            load_var = load_var.transpose(3, 2, 0, 1)
+        model_param_shape = model_param.detach().numpy().shape
+        load_var_shape = load_var.shape
+        assert model_param_shape == load_var_shape
+        model_param.data.copy_(torch.from_numpy(load_var))

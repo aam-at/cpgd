@@ -59,18 +59,19 @@ class MadryCNNPt(torch.nn.Module):
     def __init__(self, model_type='plain'):
         super(MadryCNNPt, self).__init__()
         use_bias = model_type == 'plain'
-        self.c1 = nn.Conv2d(3, 96, 3, padding=1, bias=use_bias)
-        self.c2 = nn.Conv2d(96, 96, 3, padding=1, bias=use_bias)
-        self.c3 = nn.Conv2d(96, 192, 3, padding=1, stride=2, bias=use_bias)
+        self.c0 = nn.Conv2d(3, 96, 3, padding=1, bias=use_bias)
+        self.c1 = nn.Conv2d(96, 96, 3, padding=1, bias=use_bias)
+        self.c2 = nn.Conv2d(96, 192, 3, padding=1, stride=2, bias=use_bias)
+        self.c3 = nn.Conv2d(192, 192, 3, padding=1, bias=use_bias)
         self.c4 = nn.Conv2d(192, 192, 3, padding=1, bias=use_bias)
-        self.c5 = nn.Conv2d(192, 192, 3, padding=1, bias=use_bias)
-        self.c6 = nn.Conv2d(192, 192, 3, padding=1, stride=2, bias=use_bias)
-        self.c7 = nn.Conv2d(192, 192, 3, padding=1, bias=use_bias)
-        self.c7 = nn.Conv2d(192, 384, 3, padding=1, stride=2, bias=use_bias)
+        self.c5 = nn.Conv2d(192, 192, 3, padding=1, stride=2, bias=use_bias)
+        self.c6 = nn.Conv2d(192, 192, 3, padding=1, bias=use_bias)
+        self.c7 = nn.Conv2d(192, 384, 2, padding=1, stride=2, bias=use_bias)
         self.fc1 = nn.Linear(6144, 1200)
         self.fc2 = nn.Linear(1200, 10)
 
     def forward(self, x):
+        o = F.relu(self.c0(x))
         o = F.relu(self.c1(x))
         o = F.relu(self.c2(x))
         o = F.relu(self.c3(x))
