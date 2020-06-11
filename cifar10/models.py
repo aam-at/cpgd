@@ -11,9 +11,9 @@ FLAGS = flags.FLAGS
 
 class MadryCNN(tf.keras.Model):
     # Model trained using adversarial training with projected gradient attack
-    def __init__(self, model_type='plain'):
+    def __init__(self, model_type='plain', name="", **kwargs):
         self.model_type = model_type
-        super(MadryCNN, self).__init__()
+        super(MadryCNN, self).__init__(name=name, **kwargs)
 
     def build(self, inputs_shape):
         # configure inputs
@@ -46,6 +46,7 @@ class MadryCNN(tf.keras.Model):
             z = act()(h)
             logits = dense(10)(z)
         self.model = tf.keras.Model(inputs=x, outputs=[z, logits])
+        super(MadryCNN, self).build([inputs_shape])
 
     def call(self, inputs, training=True):
         if self.model_type == 'l2':

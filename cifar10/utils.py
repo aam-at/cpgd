@@ -2,7 +2,7 @@ import scipy.io
 import torch
 
 
-def load_madry(load_dir, model_vars, model_type="plain"):
+def load_madry(load_dir, model_vars, model_type="plain", sess=None):
     w = scipy.io.loadmat(load_dir)
     mapping = {
         "A0": "conv2d/kernel:0",
@@ -48,8 +48,10 @@ def load_madry(load_dir, model_vars, model_type="plain"):
             var = -var
         model_var = [v for v in model_vars if v.name == model_var_name]
         assert len(model_var) == 1
-        model_var[0].assign(var)
-
+        if sess:
+            sess.run(model_var[0].assign(var))
+        else:
+            model_var[0].assign(var)
 
 
 def load_madry_pt(load_from, model_params, model_type="plain"):
