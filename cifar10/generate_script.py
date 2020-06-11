@@ -64,7 +64,7 @@ def test_random(runs=1, master_seed=1):
 
 def test_lp_config(attack, runs=1, master_seed=1):
     norm, attack_klass = lp_attacks[attack]
-    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 500
     attack_grid_args = {
         'num_batches':
@@ -198,7 +198,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
         if flag not in ['attack_simultaneous_updates']
     ]
 
-    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 250
     attack_args = {
         'attack': attack,
@@ -361,7 +361,7 @@ def fab_config(norm, runs=1, master_seed=1):
     flags.FLAGS._flags().clear()
     import_klass_annotations_as_flags(FABAttack, 'attack_')
 
-    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 250
     attack_args = {
         'attack_norm': norm,
@@ -423,7 +423,7 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
         flags.DEFINE_string("attack_decision_rule", "L1", "")
     import_klass_annotations_as_flags(lp_attacks[norm][attack], prefix="attack_")
 
-    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 250
     attack_grid_args = {
         'num_batches':
@@ -507,7 +507,7 @@ def bethge_config(norm, runs=1, master_seed=1):
     import_klass_annotations_as_flags(attack_klass, 'attack_')
 
     assert norm in lp_attacks
-    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 100
     attack_args = {
         'num_batches': num_images // batch_size,
@@ -545,7 +545,7 @@ def art_config(norm, attack, runs=1, master_seed=1):
                                       prefix="attack_",
                                       include_kwargs_with_defaults=True)
 
-    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 250
     attack_grid_args = {
         'num_batches':
