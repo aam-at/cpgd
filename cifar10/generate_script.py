@@ -587,7 +587,7 @@ def bethge_config(norm, runs=1, master_seed=1):
     }
 
     existing_names = []
-    for model, lr, num_decay in itertools.product(models, [1.0, 0.1, 0.01, 0.001], [20, 100]):
+    for model, lr, num_decay in itertools.product(models, [1.0, 0.1, 0.01], [20, 100]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results/cifar10_bethge/test_{type}_{norm}"
         attack_args.update({
@@ -603,7 +603,7 @@ def bethge_config(norm, runs=1, master_seed=1):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_bethge_attack', **attack_args))
+        print(generate_test_optimizer('test_bethge', **attack_args))
 
 
 def art_config(norm, attack, runs=1, master_seed=1):
