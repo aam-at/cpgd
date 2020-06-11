@@ -83,7 +83,7 @@ def main(unused_args):
         return classifier(x, training=False, **kwargs)
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
+    X_shape = [FLAGS.batch_size, 32, 32, 3]
     y_shape = [FLAGS.batch_size, num_classes]
     classifier(tf.zeros(X_shape))
     load_madry(FLAGS.load_from,
@@ -138,7 +138,7 @@ def main(unused_args):
         is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds["li"]:
             is_adv_at_th = tf.logical_and(li <= threshold + 5e-6, is_adv)
-            test_metrics["acc_li_%.2f" % threshold](~is_adv_at_th)
+            test_metrics["acc_li_%.3f" % threshold](~is_adv_at_th)
         test_metrics["li"](li)
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
@@ -157,7 +157,7 @@ def main(unused_args):
 
             for reshuffle in range(int(FLAGS.attack_nb_iter / 10)):
                 for (image, label, indx) in test_ds:
-                    image_adv = tf.gather(x_adv, tf.expand_dims(indx, 1))
+                    image_adv = tf.gather_nd(x_adv, tf.expand_dims(indx, 1))
                     image_adv = attack_step(image, image_adv, label)
                     x_adv = tf.tensor_scatter_nd_update(x_adv, tf.expand_dims(indx, 1),
                                                         image_adv)
