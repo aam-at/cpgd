@@ -46,7 +46,7 @@ class MadryCNN(tf.keras.Model):
             z = act()(h)
             logits = dense(10)(z)
         self.model = tf.keras.Model(inputs=x, outputs=[z, logits])
-        super(MadryCNN, self).build([inputs_shape])
+        super(MadryCNN, self).build(inputs_shape)
 
     def call(self, inputs, training=True):
         if self.model_type == 'l2':
