@@ -92,6 +92,8 @@ def load_madry_pt(load_from, model_params, model_type="plain"):
             load_var = load_var.squeeze()
         elif load_var.ndim == 4:
             load_var = load_var.transpose(3, 2, 0, 1)
+        if load_var.ndim == 1 and model_type == "plain":
+            load_var = -load_var
         model_param_shape = model_param.detach().numpy().shape
         load_var_shape = load_var.shape
         assert model_param_shape == load_var_shape
