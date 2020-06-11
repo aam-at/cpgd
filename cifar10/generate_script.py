@@ -356,6 +356,77 @@ def daa_config(seed=123):
             print(generate_test_optimizer('test_daa', **attack_args))
 
 
+def deepfool_config(norm, seed=123):
+    import test_deepfool
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_deepfool)
+
+    assert norm in ['l2', 'li']
+    num_images = 1000
+    batch_size = 500
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'norm': norm,
+        'seed': seed
+    }
+
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/cifar10_deepfool/test_{type}_{norm}"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_overshoot': 0.02,
+            'attack_max_iter': 50,
+        })
+        name = f"cifar10_deepfool_{type}_{norm}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_deepfool', **attack_args))
+
+
+def sparsefool_config(seed=123):
+    import test_sparsefool
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_sparsefool)
+
+    norm = 'l1'
+    num_images = 1000
+    batch_size = 500
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': seed
+    }
+
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/cifar10_sparsefool/test_{type}_{norm}"
+        lambda_ = 3.0
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_epsilon': 0.02,
+            'attack_max_iter': 20,
+            'attack_lambda_': lambda_,
+        })
+        name = f"cifar10_sparsefool_{type}_{norm}_l{lambda_}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_sparsefool', **attack_args))
+
+
 # fab attack
 def fab_config(norm, runs=1, master_seed=1):
     flags.FLAGS._flags().clear()
