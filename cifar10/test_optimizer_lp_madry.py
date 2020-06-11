@@ -70,11 +70,13 @@ def main(unused_args):
     )
 
     # data
-    _, _, test_ds = load_cifar10(
-        FLAGS.validation_size, data_format="NHWC", seed=FLAGS.data_seed
-    )
+    _, _, test_ds = load_cifar10(FLAGS.validation_size,
+                                 data_format="NHWC",
+                                 seed=FLAGS.data_seed)
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(test_ds, shuffle=False, batch_size=FLAGS.batch_size)
+    test_ds = make_input_pipeline(test_ds,
+                                  shuffle=False,
+                                  batch_size=FLAGS.batch_size)
 
     # models
     num_classes = 10
