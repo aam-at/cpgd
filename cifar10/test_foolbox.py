@@ -65,7 +65,7 @@ def import_flags(norm, attack):
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_{FLAGS.attack}_{FLAGS.norm}_test", [__file__])
+    setup_experiment(f"madry_foolbox_{FLAGS.attack}_{FLAGS.norm}_test", [__file__])
 
     # data
     _, _, test_ds = load_cifar10(FLAGS.validation_size,
@@ -114,14 +114,20 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
-        # get attack starting points
-        image_adv = attack.run(fclassifier, image, label)
+        outs = test_classifier(image)
+
+        batch_indices = tf.range(image.shape[0])
+        is_corr = outs['pred'] == label
+        image_adv = tf.identity(image)
+        image_adv = tf.tensor_scatter_nd_update(
+            image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
+            attack.run(fclassifier, image[is_corr], label[is_corr]))
+        # safety check
         assert tf.reduce_all(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
-        outs = test_classifier(image)
         outs_adv = test_classifier(image_adv)
 
         # metrics
@@ -145,7 +151,8 @@ def main(unused_args):
         test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
+        test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+        test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 
@@ -166,8 +173,8 @@ def main(unused_args):
             save_path = os.path.join(FLAGS.samples_dir,
                                      "epoch_orig-%d.png" % batch_index)
             save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     f"epoch_{FLAGS.norm}-%d.png" % batch_index)
+            save_path = os.path.join(
+                FLAGS.samples_dir, f"epoch_{FLAGS.norm}-%d.png" % batch_index)
             save_images(X_lp, save_path, data_format="NHWC")
             # save adversarial data
             X_lp_list.append(X_lp)
