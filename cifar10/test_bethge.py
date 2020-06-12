@@ -46,6 +46,12 @@ lp_attacks = {
 }
 
 
+def import_flags(norm):
+    global lp_attacks
+    assert norm in lp_attacks
+    import_klass_annotations_as_flags(lp_attacks[norm], "attack_")
+
+
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
@@ -86,13 +92,13 @@ def main(unused_args):
         "l2": l2_metric,
         "li": li_metric,
     }
-    # attacks
+    # attack arguments
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
         if kwarg not in ["attack_l0_pixel_metric"]
     }
-    olp = lp_attacks[FLAGS.norm](**attack_kwargs)
+    b_and_b = lp_attacks[FLAGS.norm](**attack_kwargs)
     # init attacks
     a0 = LinearSearchBlendedUniformNoiseAttack()
     a0_2 = DatasetAttack()
@@ -105,39 +111,55 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
+        outs = test_classifier(image)
+
+        # run attack on correctly classified points
+        batch_indices = tf.range(image.shape[0])
+        is_corr = outs['pred'] == label
+        image_s = image[is_corr]
+        label_s = label[is_corr]
+
         # get attack starting points
-        x0 = a0.run(fclassifier, image, label)
-        is_adv = tf.argmax(fclassifier(x0), axis=-1) != label
+        x0 = a0.run(fclassifier, image_s, label_s)
+        is_adv = tf.argmax(fclassifier(x0), axis=-1) != label_s
         # run dataset attack if LinearSearchBlendedUniformNoiseAttack fails
         if not tf.reduce_all(is_adv):
             x0 = tf.where(
                 tf.reshape(
                     tf.argmax(fclassifier(x0), axis=-1) != label,
-                    (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image, label))
-        image_lp, _, _ = olp(fclassifier,
-                             image,
-                             label,
-                             starting_points=x0,
-                             epsilons=None)
+                    (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image_s,
+                                                 label_s))
+        image_adv = tf.identity(image)
+        image_adv = tf.tensor_scatter_nd_update(
+            image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
+            b_and_b(fclassifier,
+                    image_s,
+                    label_s,
+                    starting_points=x0,
+                    epsilons=None)[0])
+        # safety check
+        assert tf.reduce_all(
+            tf.logical_and(
+                tf.reduce_min(image_adv) >= 0,
+                tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
-        outs = test_classifier(image)
-        outs_lp = test_classifier(image_lp)
+        outs_adv = test_classifier(image_adv)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
-        acc_lp = acc_fn(label, outs_lp["logits"])
+        acc_adv = acc_fn(label, outs_adv["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_{FLAGS.norm}"](acc_lp)
-        test_metrics[f"conf_{FLAGS.norm}"](outs_lp["conf"])
+        test_metrics[f"acc_{FLAGS.norm}"](acc_adv)
+        test_metrics[f"conf_{FLAGS.norm}"](outs_adv["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_lp)
-        is_adv = outs_lp["pred"] != label
+        lp = lp_metrics[FLAGS.norm](image - image_adv)
+        is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
@@ -146,9 +168,10 @@ def main(unused_args):
             test_metrics[f"{FLAGS.norm}_all"](l0_metric(image - image_lp))
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
+        test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+        test_metrics["success_rate"](is_adv[is_corr])
 
-        return image_lp
+        return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
@@ -185,7 +208,7 @@ def main(unused_args):
             log_metrics(
                 test_metrics,
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
-                                                    batch_index),
+                                                     batch_index),
             )
             X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
             y_all = tf.concat(y_list, axis=0).numpy()
@@ -196,6 +219,5 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
-    assert args.norm in lp_attacks
-    import_klass_annotations_as_flags(lp_attacks[args.norm], "attack_")
+    import_flags(args.norm)
     absl.app.run(main)
