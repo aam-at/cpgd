@@ -375,7 +375,7 @@ def deepfool_config(norm, seed=123):
     existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_deepfool/test_{type}_{norm}"
+        working_dir = f"../results/cifar10_df/test_{type}_{norm}"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
@@ -634,17 +634,15 @@ def foolbox_config(norm, attack, runs=1, master_seed=1):
 
 
 def bethge_config(norm, runs=1, master_seed=1):
-    import test_bethge_attack
-    from test_bethge_attack import lp_attacks
+    import test_bethge
+    from test_bethge import import_flags
 
     flags.FLAGS._flags().clear()
-    importlib.reload(test_bethge_attack)
-    attack_klass = lp_attacks[norm]
-    import_klass_annotations_as_flags(attack_klass, 'attack_')
+    importlib.reload(test_bethge)
+    import_flags(norm)
 
-    assert norm in lp_attacks
     num_images = 1000
-    batch_size = 100
+    batch_size = 250
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,

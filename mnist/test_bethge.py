@@ -87,7 +87,7 @@ def main(unused_args):
         "l0": l0_metric,
         "l1": l1_metric,
         "l2": l2_metric,
-        "li": li_metric
+        "li": li_metric,
     }
     # attack arguments
     attack_kwargs = {
