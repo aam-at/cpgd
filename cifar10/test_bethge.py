@@ -124,11 +124,11 @@ def main(unused_args):
         is_adv = tf.argmax(fclassifier(x0), axis=-1) != label_s
         # run dataset attack if LinearSearchBlendedUniformNoiseAttack fails
         if not tf.reduce_all(is_adv):
+            x0_2 = a0_2.run(fclassifier, image_s, label_s)
             x0 = tf.where(
                 tf.reshape(
-                    tf.argmax(fclassifier(x0), axis=-1) != label,
-                    (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image_s,
-                                                 label_s))
+                    tf.argmax(fclassifier(x0), axis=-1) != label_s,
+                    (-1, 1, 1, 1)), x0, x0_2)
         image_adv = tf.identity(image)
         image_adv = tf.tensor_scatter_nd_update(
             image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
@@ -165,7 +165,7 @@ def main(unused_args):
             test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
         test_metrics[f"{FLAGS.norm}"](lp)
         if FLAGS.norm == "l0":
-            test_metrics[f"{FLAGS.norm}_all"](l0_metric(image - image_lp))
+            test_metrics[f"{FLAGS.norm}_all"](l0_metric(image - image_adv))
         # exclude incorrectly classified
         is_corr = outs["pred"] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
