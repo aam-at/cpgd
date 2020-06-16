@@ -16,10 +16,10 @@ from config import test_thresholds
 from data import load_mnist
 from lib.sparsefool import sparsefool
 from lib.utils import (MetricsDictionary, add_default_end_points,
-                       import_func_annotations_as_flags, l1_metric,
-                       limit_gpu_growth, log_metrics, make_input_pipeline,
-                       register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
+                       import_func_annotations_as_flags, l0_metric, l1_metric,
+                       l2_metric, li_metric, limit_gpu_growth, log_metrics,
+                       make_input_pipeline, register_experiment_flags,
+                       reset_metrics, save_images, setup_experiment)
 from models import MadryCNNPt
 from utils import load_madry_pt
 
@@ -116,15 +116,26 @@ def main(unused_args):
         test_metrics["conf_l1"](outs_adv["conf"])
 
         # measure norm
-        lp = l1_metric(image - image_adv)
+        r = image - image_adv
+        l0 = l0_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics[f"l0"](l0)
+        test_metrics[f"l1"](l1)
+        test_metrics[f"l2"](l2)
+        test_metrics[f"li"](li)
+        # exclude incorrectly classified
+        test_metrics[f"l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics[f"l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
+        test_metrics[f"l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
+        test_metrics[f"li_corr"](li[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
         is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds["l1"]:
-            is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
+            is_adv_at_th = tf.logical_and(l1 <= threshold, is_adv)
             test_metrics[f"acc_l1_%.2f" % threshold](~is_adv_at_th)
-        test_metrics[f"l1"](lp)
-        # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics[f"l1_corr"](lp[tf.logical_and(is_corr, is_adv)])
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
