@@ -264,6 +264,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                                                 **attack_args))
 
 
+# fab attack
 def fab_config(norm, runs=1, master_seed=1):
     import test_fab
 
@@ -283,7 +284,7 @@ def fab_config(norm, runs=1, master_seed=1):
     existing_names = []
     for type, n_restarts in itertools.product(
             models.keys(), [1, 5] if norm == 'l1' else [1, 10]):
-        # default params for cifar10
+        # default params for imagenet
         # see page 12: https://openreview.net/pdf?id=HJlzxgBtwH
         n_iter = 300 if norm == 'l1' else 100
         alpha_max = 0.05
@@ -321,6 +322,90 @@ def fab_config(norm, runs=1, master_seed=1):
             seed = np.random.randint(1000)
             attack_args["seed"] = seed
             print(generate_test_optimizer('test_fab', **attack_args))
+
+
+# foolbox attacks
+def foolbox_config(norm, attack, seed=123):
+    import test_foolbox
+    from test_foolbox import import_flags
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_foolbox)
+    import_flags(norm, attack)
+
+    num_images = 500
+    batch_size = 50
+    attack_grid_args = {
+        'num_batches': [num_images // batch_size],
+        'batch_size': [batch_size],
+        'load_from': models,
+        'attack': [attack],
+        'norm': [norm],
+        'seed': [seed]
+    }
+    if attack == 'df':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [50],
+            'attack_overshoot': [0.02],
+        })
+        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
+    elif attack == 'cw':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [10000],
+            'attack_stepsize': [0.01],
+            'attack_initial_const': [0.001],
+            'attack_binary_search_steps': [9],
+            'attack_abort_early': [False],
+        })
+        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
+    elif attack == 'newton':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [1000],
+            'attack_stepsize': [0.01],
+        })
+        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_"
+    elif attack == 'ead':
+        # default params
+        attack_grid_args.update({
+            'attack_steps': [1000],
+            'attack_initial_const': [0.001],
+            'attack_binary_search_steps': [9],
+            'attack_decision_rule': ['L1'],
+            'attack_regularization': [0.05],
+            'attack_abort_early': [False],
+        })
+        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
+    elif attack == 'ddn':
+        # default params for imagenet
+        # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
+        attack_grid_args.update({
+            'attack_steps': [1000],
+            'attack_init_epsilon': [1.0],
+            'attack_gamma': [0.05],
+        })
+        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_"
+
+    attack_arg_names = list(attack_grid_args.keys())
+    existing_names = []
+
+    for attack_arg_value in itertools.product(*attack_grid_args.values()):
+        model = attack_arg_value[attack_arg_names.index('load_from')]
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results/imagenet_{attack}/test_{type}_{norm}"
+        attack_args = dict(zip(attack_arg_names, attack_arg_value))
+        attack_args.update({
+            'working_dir': working_dir,
+        })
+        name = name_fn()
+        attack_args["name"] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_foolbox', **attack_args))
 
 
 def bethge_config(norm, runs=1, master_seed=1):
