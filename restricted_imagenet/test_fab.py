@@ -94,19 +94,20 @@ def main(unused_args):
         label_pt = torch.from_numpy(label.numpy()).cuda()
         image_adv_pt = fab.perturb(image_pt, label_pt)
         image_adv = image_adv_pt.cpu().numpy()
-        outs_lp = test_classifier(image_adv)
+        outs_adv = test_classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
-        acc_lp = acc_fn(label, outs_lp["logits"])
+        acc_adv = acc_fn(label, outs_adv["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_{FLAGS.attack_norm}"](acc_lp)
-        test_metrics[f"conf_{FLAGS.attack_norm}"](outs_lp["conf"])
+        test_metrics[f"acc_{FLAGS.attack_norm}"](acc_adv)
+        test_metrics[f"conf_{FLAGS.attack_norm}"](outs_adv["conf"])
 
         # measure norm
         r = image - image_adv
@@ -128,7 +129,6 @@ def main(unused_args):
 
         # robust accuracy at threshold
         lp = lp_metrics[FLAGS.attack_norm](image - image_adv)
-        is_adv = outs_lp["pred"] != label
         for threshold in test_thresholds[f"{FLAGS.attack_norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_{FLAGS.attack_norm}_%.4f" %
