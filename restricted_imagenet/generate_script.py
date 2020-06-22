@@ -308,20 +308,20 @@ def pgd_config(norm, seed=123):
 
 
 # fab attacks
-def fab_config(norm, runs=1, master_seed=1):
+def fab_config(norm, seed=123):
     import test_fab
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_fab)
     import_klass_annotations_as_flags(FABAttack, 'attack_')
 
-    num_images = {'li': 500, 'l1': 500, 'l2': 500}[norm]
+    num_images = 500
     batch_size = 25
     attack_args = {
         'attack_norm': norm,
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []
@@ -360,11 +360,7 @@ def fab_config(norm, runs=1, master_seed=1):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        np.random.seed(master_seed)
-        for i in range(runs):
-            seed = np.random.randint(1000)
-            attack_args["seed"] = seed
-            print(generate_test_optimizer('test_fab', **attack_args))
+        print(generate_test_optimizer('test_fab', **attack_args))
 
 
 # foolbox attacks

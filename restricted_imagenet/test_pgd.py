@@ -24,7 +24,7 @@ from models import TsiprasCNN
 from utils import load_tsipras
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_pgd")
+register_experiment_flags(working_dir="../results/imagenet/test_pgd")
 flags.DEFINE_string("norm", "lp", "lp-norm attack")
 flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")

@@ -17,7 +17,7 @@ from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
 from lib.fab import FABAttack, FABModelAdapter
 from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
-                       l0_metric, l1_metric, l2_metric, li_metric,
+                       l0_metric, l1_metric, l2_metric, li_metric, l0_pixel_metric,
                        limit_gpu_growth, log_metrics, make_input_pipeline,
                        random_targets, register_experiment_flags,
                        reset_metrics, save_images, setup_experiment)
@@ -49,9 +49,10 @@ def main(unused_args):
 
     # data
     augmentors = fbresnet_augmentor(224, training=False)
-    val_ds = get_imagenet_dataflow(
-        FLAGS.data_dir, FLAGS.batch_size,
-        augmentors, mode='val')
+    val_ds = get_imagenet_dataflow(FLAGS.data_dir,
+                                   FLAGS.batch_size,
+                                   augmentors,
+                                   mode='val')
     val_ds.reset_state()
 
     # models
@@ -67,11 +68,7 @@ def main(unused_args):
     classifier(tf.zeros(X_shape))
     load_tsipras(FLAGS.load_from, classifier.variables)
 
-    lp_metrics = {
-        "l1": l1_metric,
-        "l2": l2_metric,
-        "li": li_metric
-    }
+    lp_metrics = {"l1": l1_metric, "l2": l2_metric, "li": li_metric}
 
     # attacks
     attack_kwargs = {
@@ -112,22 +109,36 @@ def main(unused_args):
         test_metrics[f"conf_{FLAGS.attack_norm}"](outs_lp["conf"])
 
         # measure norm
+        r = image - image_adv
+        l0 = l0_metric(r)
+        l0p = l0_pixel_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics[f"l0"](l0)
+        test_metrics[f"l0p"](l0p)
+        test_metrics[f"l1"](l1)
+        test_metrics[f"l2"](l2)
+        test_metrics[f"li"](li)
+        # exclude incorrectly classified
+        test_metrics[f"l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics[f"l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
+        test_metrics[f"l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
+        test_metrics[f"li_corr"](li[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
         lp = lp_metrics[FLAGS.attack_norm](image - image_adv)
         is_adv = outs_lp["pred"] != label
         for threshold in test_thresholds[f"{FLAGS.attack_norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.attack_norm}_%.4f" % threshold](~is_adv_at_th)
-        test_metrics[f"{FLAGS.attack_norm}"](lp)
-        # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.attack_norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+            test_metrics[f"acc_{FLAGS.attack_norm}_%.4f" %
+                         threshold](~is_adv_at_th)
+        test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(val_ds, 1):
@@ -138,15 +149,6 @@ def main(unused_args):
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_l0-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -161,11 +163,6 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":
