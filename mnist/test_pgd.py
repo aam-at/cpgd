@@ -133,12 +133,14 @@ def main(unused_args):
                              clip_max=1.0,
                              rand_init=True,
                              **attack_kwargs))
+        # sanity check
         assert_op = tf.Assert(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0), [image_adv])
         with tf.control_dependencies([assert_op]):
             outs_adv = test_classifier(image_adv)
+            is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -156,13 +158,11 @@ def main(unused_args):
         # NOTE: cleverhans lp-norm projection may result in numerical error
         # add small constant eps = 1e-6
         lp = lp_metrics[FLAGS.norm](image - image_adv)
-        is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
             test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
         test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
-        is_corr = outs["pred"] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
         test_metrics["success_rate"](is_adv[is_corr])
 

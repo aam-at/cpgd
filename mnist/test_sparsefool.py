@@ -1,25 +1,24 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-import os
 import sys
 import time
-from pathlib import Path
 
 import absl
-import numpy as np
 import tensorflow as tf
 import torch
+import torch.nn.functional as F
 from absl import flags
 
 from config import test_thresholds
 from data import load_mnist
+from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
+                          li_metric)
 from lib.sparsefool import sparsefool
-from lib.utils import (MetricsDictionary, add_default_end_points,
-                       import_func_annotations_as_flags, l0_metric, l1_metric,
-                       l2_metric, li_metric, limit_gpu_growth, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
+from lib.utils import (import_func_annotations_as_flags, limit_gpu_growth,
+                       log_metrics, make_input_pipeline,
+                       register_experiment_flags, reset_metrics,
+                       setup_experiment)
 from models import MadryCNNPt
 from utils import load_madry_pt
 
@@ -61,14 +60,8 @@ def main(unused_args):
 
     # load classifier
     load_madry_pt(FLAGS.load_from, classifier.parameters())
-    classifier.cuda()
+    # classifier.cuda()
     classifier.eval()
-
-    def test_classifier(x):
-        logits = classifier(*to_torch(x))
-        if logits.is_cuda:
-            logits = logits.cpu()
-        return add_default_end_points({'logits': tf.convert_to_tensor(logits.detach().numpy())})
 
     # attacks
     attack_kwargs = {
@@ -82,31 +75,29 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
-        outs = test_classifier(image)
-
-        batch_indices = tf.range(image.shape[0])
+        outs = classifier(image)
         is_corr = outs['pred'] == label
-        image_adv = tf.identity(image)
-        for indx in batch_indices[is_corr]:
-            image_i = tf.expand_dims(image[indx], 0)
-            image_pt_i = torch.from_numpy(image_i.numpy()).to("cuda")
-            image_adv_pt_i = sparsefool(image_pt_i, classifier, 0.0, 1.0,
-                                        **attack_kwargs)[0]
-            image_adv = tf.tensor_scatter_nd_update(
-                image_adv, tf.expand_dims([indx], axis=1),
-                image_adv_pt_i.detach().cpu().numpy())
-        # safety check
+
+        image_adv = image.clone()
+        for indx in torch.where(is_corr)[0]:
+            image_i = torch.unsqueeze(image[indx], 0)
+            image_adv_i = sparsefool(image_i,
+                                     lambda x: classifier(x)['logits'], 0.0,
+                                     1.0, **attack_kwargs)[0]
+            image_adv[indx] = image_adv_i
+        # sanity check
         assert tf.reduce_all(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
-        outs_adv = test_classifier(image_adv)
+        outs_adv = classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
 
         # metrics
-        nll_loss = nll_loss_fn(label, outs["logits"])
-        acc = acc_fn(label, outs["logits"])
-        acc_adv = acc_fn(label, outs_adv["logits"])
+        nll_loss = F.cross_entropy(outs['logits'], label, reduction='none')
+        acc = outs["pred"] == label
+        acc_adv = outs_adv["pred"] == label
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
@@ -117,24 +108,24 @@ def main(unused_args):
 
         # measure norm
         r = image - image_adv
+        r = r.view(r.shape[0], -1)
         l0 = l0_metric(r)
         l1 = l1_metric(r)
         l2 = l2_metric(r)
         li = li_metric(r)
-        test_metrics[f"l0"](l0)
-        test_metrics[f"l1"](l1)
-        test_metrics[f"l2"](l2)
-        test_metrics[f"li"](li)
+        test_metrics["l0"](l0)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
         # exclude incorrectly classified
-        test_metrics[f"l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
-        test_metrics[f"l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
-        test_metrics[f"l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
-        test_metrics[f"li_corr"](li[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0_corr"](l0[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[torch.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[torch.logical_and(is_corr, is_adv)])
 
         # robust accuracy at threshold
-        is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds["l1"]:
-            is_adv_at_th = tf.logical_and(l1 <= threshold, is_adv)
+            is_adv_at_th = torch.logical_and(l1 <= threshold, is_adv)
             test_metrics[f"acc_l1_%.2f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
@@ -142,27 +133,16 @@ def main(unused_args):
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(test_ds, 1):
-            X_lp = test_step(image, label)
+            X_lp = test_step(*to_torch(image, label, cuda=False))
             log_metrics(
                 test_metrics,
                 "Batch results [{}, {:.2f}s]:".format(batch_index,
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image.numpy(), save_path, data_format="NCHW")
-            save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_l1-%d.png" % batch_index)
-            save_images(X_lp.numpy(), save_path, data_format="NCHW")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -177,11 +157,6 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":

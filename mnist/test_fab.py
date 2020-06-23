@@ -128,11 +128,6 @@ def main(unused_args):
             is_adv_at_th = torch.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_{FLAGS.attack_norm}_%.2f" %
                          threshold](~is_adv_at_th)
-        test_metrics[f"{FLAGS.attack_norm}"](lp)
-        # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.attack_norm}_corr"](lp[torch.logical_and(
-            is_corr, is_adv)])
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
