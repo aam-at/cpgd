@@ -118,7 +118,9 @@ def main(unused_args):
     @tf.function
     def test_step(image, image_adv, label):
         outs = test_classifier(image)
+        is_corr = outs["pred"] == label
         outs_adv = test_classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
@@ -131,14 +133,13 @@ def main(unused_args):
         test_metrics["acc_adv"](acc_adv)
         test_metrics["conf_adv"](outs_adv["conf"])
 
+        # robust accuracy at threshold
         li = li_metric(image - image_adv)
-        is_adv = outs_adv["pred"] != label
         for threshold in test_thresholds["li"]:
             is_adv_at_th = tf.logical_and(li <= threshold + 5e-6, is_adv)
             test_metrics["acc_li_%.2f" % threshold](~is_adv_at_th)
         test_metrics["li"](li)
         # exclude incorrectly classified
-        is_corr = outs["pred"] == label
         test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
         test_metrics["success_rate"](is_adv[is_corr])
 
