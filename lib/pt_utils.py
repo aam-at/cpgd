@@ -14,7 +14,10 @@ class PatchedAverage(ignite.metrics.Average):
         self.reset()
 
     def result(self):
-        return self.compute()
+        value = self.compute()
+        if value.is_cuda:
+            value = value.cpu()
+        return np.asscalar(value.detach())
 
 
 class MetricsDictionary(dict):

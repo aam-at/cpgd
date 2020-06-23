@@ -16,10 +16,10 @@ from data import load_mnist
 from lib.fab import FABAttack, FABPtModelAdapter
 from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, to_torch)
-from lib.utils import (import_klass_annotations_as_flags, l0_metric, l1_metric,
-                       l2_metric, li_metric, limit_gpu_growth, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, setup_experiment)
+from lib.utils import (import_klass_annotations_as_flags, limit_gpu_growth,
+                       log_metrics, make_input_pipeline,
+                       register_experiment_flags, reset_metrics,
+                       setup_experiment)
 from models import MadryCNNPt
 from utils import load_madry_pt
 
@@ -113,15 +113,15 @@ def main(unused_args):
         l1 = l1_metric(r)
         l2 = l2_metric(r)
         li = li_metric(r)
-        test_metrics[f"l0"](l0)
-        test_metrics[f"l1"](l1)
-        test_metrics[f"l2"](l2)
-        test_metrics[f"li"](li)
+        test_metrics["l0"](l0)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
         # exclude incorrectly classified
-        test_metrics[f"l0_corr"](l0[torch.logical_and(is_corr, is_adv)])
-        test_metrics[f"l1_corr"](l1[torch.logical_and(is_corr, is_adv)])
-        test_metrics[f"l2_corr"](l2[torch.logical_and(is_corr, is_adv)])
-        test_metrics[f"li_corr"](li[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l0_corr"](l0[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[torch.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[torch.logical_and(is_corr, is_adv)])
 
         # robust accuracy at threshold
         for threshold in test_thresholds[f"{FLAGS.attack_norm}"]:
