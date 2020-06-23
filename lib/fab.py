@@ -8,14 +8,14 @@ from __future__ import absolute_import, division, print_function
 
 import time
 
-import numpy as np
 import tensorflow as tf
 import torch
+from torch.autograd.gradcheck import zero_gradients
 
 DEFAULT_EPS_DICT_BY_NORM = {"li": 0.3, "l2": 1.0, "l1": 5.0}
 
 
-class FABModelAdapter:
+class FABTfModelAdapter:
     def __init__(self, model):
         self.model = model
 
@@ -55,6 +55,32 @@ class FABModelAdapter:
         if cuda:
             pt_pred = pt_pred.cuda()
         return pt_pred
+
+
+class FABPtModelAdapter:
+    def __init__(self, model, device='cuda'):
+        self.model = model
+        self.device = device
+
+    def grad_logits(self, x):
+        xc = x.to(self.device).clone().requires_grad_()
+        with torch.enable_grad():
+            logits = self.model(xc)
+
+        jac = torch.zeros([logits.shape[-1], *xc.size()]).to(self.device)
+        grad_mask = torch.zeros_like(logits)
+        for counter in range(logits.shape[-1]):
+            zero_gradients(xc)
+            grad_mask[:, counter] = 1.0
+            logits.backward(grad_mask, retain_graph=True)
+            grad_mask[:, counter] = 0.0
+            jac[counter] = xc.grad.data
+        jac = jac.transpose(1, 0)
+        return jac
+
+    def predict(self, x):
+        x = x.to(self.device)
+        return self.model(x)
 
 
 class FABAttack:
