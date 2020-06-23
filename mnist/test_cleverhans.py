@@ -94,9 +94,9 @@ def main(unused_args):
 
     def test_step(image, image_adv, label):
         outs = test_classifier(image)
-        is_corr = outs['pred'] == label
+        is_corr = tf.equal(outs['pred'], label)
         outs_adv = test_classifier(image_adv)
-        is_adv = outs_adv["pred"] != label
+        is_adv = tf.not_equal(outs_adv["pred"], label)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
