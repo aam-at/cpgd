@@ -6,6 +6,7 @@ git+git://github.com/aam-at/foolbox@master#egg=foolbox
 https://storage.googleapis.com/jax-releases/cuda101/jaxlib-0.1.47-cp37-none-linux_x86_64.whl
 jax>=0.1.69
 numba==0.47
+pytorch-ignite>=0.3.0
 tensorboard>=2.2.0
 tensorflow-gpu>=2.2.0
 tensorflow-probability==0.9.0
