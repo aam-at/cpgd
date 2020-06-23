@@ -106,7 +106,12 @@ class MadryCNNPt(torch.nn.Module):
         self.fc1 = nn.Linear(3136, 1024)
         self.fc2 = nn.Linear(1024, 10)
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
     def forward(self, x):
+        from lib.pt_utils import add_default_end_points
         o = F.relu(self.c1(x))
         o = self.m1(o)
         o = F.relu(self.c2(o))
@@ -115,4 +120,5 @@ class MadryCNNPt(torch.nn.Module):
         o = o.permute(0, 2, 3, 1)
         o = o.reshape(x.shape[0], -1)
         o = F.relu(self.fc1(o))
-        return self.fc2(o)
+        logits = self.fc2(o)
+        return add_default_end_points({'logits': logits})
