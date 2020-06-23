@@ -113,7 +113,7 @@ def main(unused_args):
 
         # measure norm
         r = image - image_adv
-        lp = lp_metrics[FLAGS.attack_norm](r)
+        lp = lp_metrics[FLAGS.norm](r)
         l0 = l0_metric(r)
         l1 = l1_metric(r)
         l2 = l2_metric(r)
