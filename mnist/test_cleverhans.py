@@ -9,13 +9,13 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
+
 from cleverhans.attacks import CarliniWagnerL2, ElasticNetMethod
 from cleverhans.model import Model
-
 from config import test_thresholds
 from data import load_mnist
 from lib.utils import (batch_iterator, import_func_annotations_as_flags,
-                       l1_metric, l2_metric, log_metrics,
+                       l0_metric, l1_metric, l2_metric, li_metric, log_metrics,
                        register_experiment_flags, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
@@ -94,7 +94,9 @@ def main(unused_args):
 
     def test_step(image, image_adv, label):
         outs = test_classifier(image)
+        is_corr = outs['pred'] == label
         outs_adv = test_classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -110,16 +112,28 @@ def main(unused_args):
         results[f"conf_{FLAGS.norm}"] = outs_adv["conf"]
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_adv)
-        is_adv = tf.not_equal(outs_adv["pred"], label)
+        r = image - image_adv
+        lp = lp_metrics[FLAGS.attack_norm](r)
+        l0 = l0_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        results["l0"] = l0
+        results["l1"] = l1
+        results["l2"] = l2
+        results["li"] = li
+        # exclude incorrectly classified
+        results["l0_corr"] = l0[tf.logical_and(is_corr, is_adv)]
+        results["l1_corr"] = l1[tf.logical_and(is_corr, is_adv)]
+        results["l2_corr"] = l2[tf.logical_and(is_corr, is_adv)]
+        results["li_corr"] = li[tf.logical_and(is_corr, is_adv)]
+
+        # robust accuracy at threshold
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             results[f"acc_{FLAGS.norm}_%.2f" % threshold] = ~is_adv_at_th
-        results[f"{FLAGS.norm}"] = lp
-        # exclude incorrectly classified
-        is_corr = tf.equal(outs["pred"], label)
-        results[f"{FLAGS.norm}_corr"] = lp[tf.logical_and(is_corr, is_adv)]
         results["success_rate"] = is_adv[is_corr]
+
         return results
 
     # reset metrics
