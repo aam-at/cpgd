@@ -436,14 +436,14 @@ def l1_normalize(d, axes=None):
     return d / d_l1
 
 
-def l2_metric(x, epsilon=1e-12, axes=None, keepdims=False):
+def l2_metric(x, axes=None, keepdims=False):
     """Stable l2 normalization
     """
     if axes is None:
         axes = list(range(1, x.shape.ndims))
     x = tf.convert_to_tensor(x, name="x")
     square_sum = tf.reduce_sum(tf.square(x), axes, keepdims=keepdims)
-    return tf.math.sqrt(epsilon + square_sum)
+    return tf.math.sqrt(square_sum)
 
 
 def l2_normalize(d, axes=None, epsilon=1e-12):
