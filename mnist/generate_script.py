@@ -564,9 +564,9 @@ def bethge_config(norm, seed=123):
 
     existing_names = []
     for model, steps, lr, num_decay in itertools.product(
-            models, [1000], [1.0], [20, 100]):
+            models, [1000], [1.0, 0.1, 0.01], [20, 100]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_bethge/test_{type}_{norm}"
+        working_dir = f"../results_mnist/bethge/test_{type}_{norm}"
         attack_args.update({
             'norm': norm,
             'load_from': model,
