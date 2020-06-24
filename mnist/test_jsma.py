@@ -17,7 +17,7 @@ from lib.utils import (MetricsDictionary, l0_metric, log_metrics,
                        make_input_pipeline, random_targets,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
-from models import MadryCNN
+from models import MadryCNNTf
 from utils import load_madry
 
 # general experiment parameters
@@ -53,7 +53,7 @@ def main(unused_args):
 
     # models
     num_classes = 10
-    classifier = MadryCNN()
+    classifier = MadryCNNTf()
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)

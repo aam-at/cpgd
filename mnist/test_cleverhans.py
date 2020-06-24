@@ -17,7 +17,7 @@ from data import load_mnist
 from lib.utils import (batch_iterator, import_func_annotations_as_flags,
                        l0_metric, l1_metric, l2_metric, li_metric, log_metrics,
                        register_experiment_flags, setup_experiment)
-from models import MadryCNN
+from models import MadryCNNTf
 from utils import load_madry
 
 tf.compat.v1.disable_v2_behavior()
@@ -72,7 +72,7 @@ def main(unused_args):
 
     # models
     num_classes = 10
-    classifier = MadryCNN()
+    classifier = MadryCNNTf()
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
