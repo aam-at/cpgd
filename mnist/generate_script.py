@@ -493,7 +493,7 @@ def foolbox_config(norm, attack, seed=123):
         attack_grid_args.update({
             'attack_steps': [10000],
             'attack_stepsize': [0.01],
-            'attack_initial_const': [0.001],
+            'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_abort_early': [False],
         })
@@ -509,7 +509,7 @@ def foolbox_config(norm, attack, seed=123):
         # default params
         attack_grid_args.update({
             'attack_steps': [1000],
-            'attack_initial_const': [0.001],
+            'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
             'attack_regularization': [0.05],
@@ -604,14 +604,14 @@ def deepfool_config(norm, seed=123):
     existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_deepfool/test_{type}_{norm}"
+        working_dir = f"../results_mnist/test_{type}/{norm}/df"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
             'attack_overshoot': 0.02,
             'attack_max_iter': 50,
         })
-        name = f"mnist_deepfool_{type}_{norm}_"
+        name = f"mnist_df_orig_{type}_{norm}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
@@ -636,10 +636,9 @@ def sparsefool_config(seed=123):
     }
 
     existing_names = []
-    for model in models:
+    for model, lambda_ in models, [1.0, 2.0, 3.0]:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_sparsefool/test_{type}_{norm}"
-        lambda_ = 3.0
+        working_dir = f"../results_mnist/test_{type}/{norm}/sparsefool"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
@@ -647,7 +646,7 @@ def sparsefool_config(seed=123):
             'attack_max_iter': 20,
             'attack_lambda_': lambda_,
         })
-        name = f"mnist_sparsefool_{type}_{norm}_l{lambda_}_"
+        name = f"mnist_sf_orig_{type}_{norm}_l{lambda_}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
