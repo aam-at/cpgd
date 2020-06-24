@@ -137,6 +137,7 @@ def main(unused_args):
                 tf.reduce_max(image_adv) <= 1.0), [image_adv])
         with tf.control_dependencies([assert_op]):
             outs_adv = test_classifier(image_adv)
+            is_adv = test_classifier(image_adv)['pred'] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
