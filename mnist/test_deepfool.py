@@ -1,25 +1,25 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-import os
 import sys
 import time
-from pathlib import Path
 
 import absl
 import numpy as np
 import tensorflow as tf
 import torch
+import torch.nn.functional as F
 from absl import flags
 
 import lib
 from config import test_thresholds
 from data import load_mnist
 from lib.deepfool import deepfool
-from lib.utils import (MetricsDictionary, add_default_end_points,
-                       import_func_annotations_as_flags, l2_metric, li_metric,
-                       limit_gpu_growth, log_metrics, make_input_pipeline,
-                       register_experiment_flags, reset_metrics, save_images,
+from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
+                          li_metric, to_torch)
+from lib.utils import (import_func_annotations_as_flags, limit_gpu_growth,
+                       log_metrics, make_input_pipeline,
+                       register_experiment_flags, reset_metrics,
                        setup_experiment)
 from models import MadryCNNPt
 from utils import load_madry_pt
@@ -55,13 +55,9 @@ def main(unused_args):
                                   shuffle=False,
                                   batch_size=FLAGS.batch_size)
 
-    def to_torch(*args, cuda=True):
-        torch_tensors = [torch.from_numpy(a.numpy()) for a in args]
-        return [t.cuda() if cuda else t for t in torch_tensors]
-
     # models
     num_classes = 10
-    classifier = MadryCNNPt()
+    classifier = MadryCNNPt(wrap_outputs=False)
 
     lp_metrics = {
         "l2": l2_metric,
@@ -73,12 +69,6 @@ def main(unused_args):
     classifier.cuda()
     classifier.eval()
 
-    def test_classifier(x):
-        logits = classifier(*to_torch(x))
-        if logits.is_cuda:
-            logits = logits.cpu()
-        return add_default_end_points({'logits': tf.convert_to_tensor(logits.detach().numpy())})
-
     # attacks
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
@@ -87,36 +77,29 @@ def main(unused_args):
     attack_kwargs['num_classes'] = num_classes
     attack_kwargs['ord'] = 2 if FLAGS.norm == 'l2' else np.inf
 
-    nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
-    acc_fn = tf.keras.metrics.sparse_categorical_accuracy
-
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
-        outs = test_classifier(image)
-
-        batch_indices = tf.range(image.shape[0])
+        outs = classifier(image, wrap_outputs=True)
         is_corr = outs['pred'] == label
-        image_adv = tf.identity(image)
-        for indx in batch_indices[is_corr]:
-            image_pt_i = torch.from_numpy(image[indx].numpy()).to("cuda")
-            image_adv_pt_i = deepfool(
-                image_pt_i, classifier, **attack_kwargs)[-1]
-            image_adv = tf.tensor_scatter_nd_update(
-                image_adv, tf.expand_dims([indx], axis=1),
-                image_adv_pt_i.detach().cpu().numpy())
-        # safety check
-        assert tf.reduce_all(
-            tf.logical_and(
-                tf.reduce_min(image_adv) >= 0,
-                tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
-        outs_adv = test_classifier(image_adv)
+        image_adv = image.clone()
+        for indx in torch.where(is_corr)[0]:
+            image_i = image[indx]
+            image_adv_i = deepfool(image_i, classifier, **attack_kwargs)[-1]
+            image_adv[indx] = image_adv_i
+
+        # sanity check
+        assert torch.all(
+            torch.logical_and(image_adv.min() >= 0,
+                              image_adv.max() <= 1.0)), "Outside range"
+        outs_adv = classifier(image_adv, wrap_outputs=True)
+        is_adv = outs_adv["pred"] != label
 
         # metrics
-        nll_loss = nll_loss_fn(label, outs["logits"])
-        acc = acc_fn(label, outs["logits"])
-        acc_adv = acc_fn(label, outs_adv["logits"])
+        nll_loss = F.cross_entropy(outs['logits'], label, reduction='none')
+        acc = outs["pred"] == label
+        acc_adv = outs_adv["pred"] == label
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
@@ -126,42 +109,43 @@ def main(unused_args):
         test_metrics[f"conf_{FLAGS.norm}"](outs_adv["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_adv)
-        is_adv = outs_adv["pred"] != label
-        for threshold in test_thresholds[f"{FLAGS.norm}"]:
-            is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
-        test_metrics[f"{FLAGS.norm}"](lp)
+        r = image - image_adv
+        r = r.view(r.shape[0], -1)
+        lp = lp_metrics[FLAGS.norm](r)
+        l0 = l0_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics["l0"](l0)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
         # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0_corr"](l0[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[torch.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[torch.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
+        for threshold in test_thresholds[f"{FLAGS.norm}"]:
+            is_adv_at_th = torch.logical_and(lp <= threshold, is_adv)
+            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(test_ds, 1):
-            X_lp = test_step(image, label)
+            X_lp = test_step(*to_torch(image, label))
             log_metrics(
                 test_metrics,
                 "Batch results [{}, {:.2f}s]:".format(batch_index,
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image.numpy(), save_path, data_format="NCHW")
-            save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_l1-%d.png" % batch_index)
-            save_images(X_lp.numpy(), save_path, data_format="NCHW")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -176,11 +160,6 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":
