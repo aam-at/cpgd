@@ -155,15 +155,17 @@ def main(unused_args):
         test_metrics["conf_adv"](outs_adv["conf"])
 
         # measure norm
-        # NOTE: cleverhans lp-norm projection may result in numerical error
-        # add small constant eps = 1e-6
         lp = lp_metrics[FLAGS.norm](image - image_adv)
-        for threshold in test_thresholds[f"{FLAGS.norm}"]:
-            is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
         test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
         test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
+        # NOTE: cleverhans lp-norm projection may result in numerical error
+        # add small constant eps = 1e-6
+        for threshold in test_thresholds[f"{FLAGS.norm}"]:
+            is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
+            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

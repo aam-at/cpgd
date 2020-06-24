@@ -131,14 +131,16 @@ def main(unused_args):
         test_metrics["acc_adv"](acc_adv)
         test_metrics["conf_adv"](outs_adv["conf"])
 
-        # robust accuracy at threshold
+        # measure norm
         li = li_metric(image - image_adv)
-        for threshold in test_thresholds["li"]:
-            is_adv_at_th = tf.logical_and(li <= threshold + 5e-6, is_adv)
-            test_metrics["acc_li_%.2f" % threshold](~is_adv_at_th)
         test_metrics["li"](li)
         # exclude incorrectly classified
         test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
+        for threshold in test_thresholds["li"]:
+            is_adv_at_th = tf.logical_and(li <= threshold + 5e-6, is_adv)
+            test_metrics["acc_li_%.2f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
     # reset metrics
