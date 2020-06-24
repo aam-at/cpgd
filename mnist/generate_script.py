@@ -470,7 +470,7 @@ def foolbox_config(norm, attack, seed=123):
     importlib.reload(test_foolbox)
     import_flags(norm, attack)
 
-    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 500
     attack_grid_args = {
         'num_batches': [num_images // batch_size],
@@ -531,7 +531,7 @@ def foolbox_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_{attack}/test_{type}_{norm}"
+        working_dir = f"../results_mnist/{attack}/test_{type}_{norm}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,

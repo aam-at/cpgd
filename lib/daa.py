@@ -2,7 +2,6 @@ from __future__ import absolute_import, division, print_function
 
 from abc import abstractmethod
 
-import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 

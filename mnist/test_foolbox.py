@@ -19,7 +19,7 @@ from foolbox.models import TensorFlowModel
 from config import test_thresholds
 from data import load_mnist
 from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
-                       l1_metric, l2_metric, li_metric, log_metrics,
+                       l0_metric, l1_metric, l2_metric, li_metric, log_metrics,
                        make_input_pipeline, register_experiment_flags,
                        reset_metrics, save_images, setup_experiment)
 from models import MadryCNN
@@ -123,13 +123,14 @@ def main(unused_args):
         image_adv = tf.tensor_scatter_nd_update(
             image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
             attack.run(fclassifier, image[is_corr], label[is_corr]))
-        # safety check
-        assert tf.reduce_all(
+        # sanity check
+        assert_op = tf.Assert(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
-                tf.reduce_max(image_adv) <= 1.0)), "Outside range"
-
-        outs_adv = test_classifier(image_adv)
+                tf.reduce_max(image_adv) <= 1.0), [image_adv])
+        with tf.control_dependencies([assert_op]):
+            outs_adv = test_classifier(image_adv)
+            is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -143,16 +144,26 @@ def main(unused_args):
         test_metrics[f"acc_{FLAGS.norm}"](acc_adv)
         test_metrics[f"conf_{FLAGS.norm}"](outs_adv["conf"])
 
-        # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_adv)
-        is_adv = outs_adv["pred"] != label
+        r = image - image_adv
+        lp = lp_metrics[FLAGS.attack_norm](r)
+        l0 = l0_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics["l0"](l0)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
+        # exclude incorrectly classified
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
-        test_metrics[f"{FLAGS.norm}"](lp)
-        # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
