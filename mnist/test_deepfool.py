@@ -42,7 +42,7 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    assert FLAGS.norm in ['l2', 'li']
+    assert FLAGS.norm in ["l2", "li"]
     setup_experiment(f"madry_deepfool_{FLAGS.norm}_test",
                      [__file__, lib.deepfool.__file__])
 
@@ -74,14 +74,14 @@ def main(unused_args):
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    attack_kwargs['num_classes'] = num_classes
-    attack_kwargs['ord'] = 2 if FLAGS.norm == 'l2' else np.inf
+    attack_kwargs["num_classes"] = num_classes
+    attack_kwargs["ord"] = 2 if FLAGS.norm == "l2" else np.inf
 
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
         outs = classifier(image, wrap_outputs=True)
-        is_corr = outs['pred'] == label
+        is_corr = outs["pred"] == label
 
         image_adv = image.clone()
         for indx in torch.where(is_corr)[0]:
@@ -97,7 +97,7 @@ def main(unused_args):
         is_adv = outs_adv["pred"] != label
 
         # metrics
-        nll_loss = F.cross_entropy(outs['logits'], label, reduction='none')
+        nll_loss = F.cross_entropy(outs["logits"], label, reduction="none")
         acc = outs["pred"] == label
         acc_adv = outs_adv["pred"] == label
 

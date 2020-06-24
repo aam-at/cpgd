@@ -13,7 +13,7 @@ from absl import flags
 from config import test_thresholds
 from data import load_mnist
 from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
-                          li_metric)
+                          li_metric, to_torch)
 from lib.sparsefool import sparsefool
 from lib.utils import (import_func_annotations_as_flags, limit_gpu_growth,
                        log_metrics, make_input_pipeline,
@@ -50,17 +50,13 @@ def main(unused_args):
                                   shuffle=False,
                                   batch_size=FLAGS.batch_size)
 
-    def to_torch(*args, cuda=True):
-        torch_tensors = [torch.from_numpy(a.numpy()) for a in args]
-        return [t.cuda() if cuda else t for t in torch_tensors]
-
     # models
     num_classes = 10
-    classifier = MadryCNNPt()
+    classifier = MadryCNNPt(wrap_outputs=False)
 
     # load classifier
     load_madry_pt(FLAGS.load_from, classifier.parameters())
-    # classifier.cuda()
+    classifier.cuda()
     classifier.eval()
 
     # attacks
@@ -75,27 +71,25 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
-        outs = classifier(image)
-        is_corr = outs['pred'] == label
+        outs = classifier(image, wrap_outputs=True)
+        is_corr = outs["pred"] == label
 
         image_adv = image.clone()
         for indx in torch.where(is_corr)[0]:
             image_i = torch.unsqueeze(image[indx], 0)
-            image_adv_i = sparsefool(image_i,
-                                     lambda x: classifier(x)['logits'], 0.0,
-                                     1.0, **attack_kwargs)[0]
+            image_adv_i = sparsefool(image_i, classifier, 0.0, 1.0,
+                                     **attack_kwargs)[0]
             image_adv[indx] = image_adv_i
-        # sanity check
-        assert tf.reduce_all(
-            tf.logical_and(
-                tf.reduce_min(image_adv) >= 0,
-                tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
-        outs_adv = classifier(image_adv)
+        # sanity check
+        assert torch.all(
+            torch.logical_and(image_adv.min() >= 0,
+                              image_adv.max() <= 1.0)), "Outside range"
+        outs_adv = classifier(image_adv, wrap_outputs=True)
         is_adv = outs_adv["pred"] != label
 
         # metrics
-        nll_loss = F.cross_entropy(outs['logits'], label, reduction='none')
+        nll_loss = F.cross_entropy(outs["logits"], label, reduction="none")
         acc = outs["pred"] == label
         acc_adv = outs_adv["pred"] == label
 
@@ -136,7 +130,7 @@ def main(unused_args):
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(test_ds, 1):
-            X_lp = test_step(*to_torch(image, label, cuda=False))
+            X_lp = test_step(*to_torch(image, label))
             log_metrics(
                 test_metrics,
                 "Batch results [{}, {:.2f}s]:".format(batch_index,
