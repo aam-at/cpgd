@@ -48,17 +48,17 @@ class TradesCNN(tf.keras.Model):
             h = act()(h)
             logits = tf.keras.layers.Dense(10, activation=None)(h)
         self.model = tf.keras.Model(inputs=x, outputs=[z, logits])
-        super(MadryCNN, self).build([inputs_shape])
+        super(TradesCNN, self).build([inputs_shape])
 
     def call(self, inputs, training=True):
         z, logits = self.model(inputs, training=training)
         return add_default_end_points({'features': z, 'logits': logits})
 
 
-class MadryCNN(tf.keras.Model):
+class MadryCNNTf(tf.keras.Model):
     # Model trained using adversarial training with projected gradient attack
     def __init__(self, name="", **kwargs):
-        super(MadryCNN, self).__init__(name=name, **kwargs)
+        super(MadryCNNTf, self).__init__(name=name, **kwargs)
 
     def build(self, inputs_shape):
         # configure inputs
@@ -88,7 +88,7 @@ class MadryCNN(tf.keras.Model):
             z = act()(h)
             logits = dense(10)(z)
         self.model = tf.keras.Model(inputs=x, outputs=[h, logits])
-        super(MadryCNN, self).build([inputs_shape])
+        super(MadryCNNTf, self).build([inputs_shape])
 
     def call(self, inputs, training=True):
         h, logits = self.model(inputs, training=training)
@@ -97,7 +97,7 @@ class MadryCNN(tf.keras.Model):
 
 class MadryCNNPt(torch.nn.Module):
     # Model trained using adversarial training with projected gradient attack
-    def __init__(self):
+    def __init__(self, wrap_outputs=True):
         super(MadryCNNPt, self).__init__()
         self.c1 = nn.Conv2d(1, 32, 5, padding=2)
         self.m1 = nn.MaxPool2d(2)
@@ -105,13 +105,16 @@ class MadryCNNPt(torch.nn.Module):
         self.m2 = nn.MaxPool2d(2)
         self.fc1 = nn.Linear(3136, 1024)
         self.fc2 = nn.Linear(1024, 10)
+        self.wrap_outputs = wrap_outputs
 
     @property
     def device(self):
         return next(self.parameters()).device
 
-    def forward(self, x):
+    def forward(self, x, wrap_outputs=None):
         from lib.pt_utils import add_default_end_points
+        if wrap_outputs is None:
+            wrap_outputs = self.wrap_outputs
         o = F.relu(self.c1(x))
         o = self.m1(o)
         o = F.relu(self.c2(o))
@@ -121,4 +124,7 @@ class MadryCNNPt(torch.nn.Module):
         o = o.reshape(x.shape[0], -1)
         o = F.relu(self.fc1(o))
         logits = self.fc2(o)
-        return add_default_end_points({'logits': logits})
+        if wrap_outputs:
+            return add_default_end_points({'logits': logits})
+        else:
+            return logits
