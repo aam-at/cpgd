@@ -555,7 +555,7 @@ def bethge_config(norm, seed=123):
     import_flags(norm)
 
     num_images = 1000
-    batch_size = 100
+    batch_size = 500
     attack_args = {
         'norm': norm,
         'num_batches': num_images // batch_size,
@@ -734,7 +734,7 @@ def art_config(norm, attack, seed=123):
 
 def jsma_config(seed=123):
     num_images = 1000
-    batch_size = 100
+    batch_size = 500
     norm = "l0"
     attack_args = {
         'num_batches': num_images // batch_size,
@@ -766,7 +766,7 @@ def jsma_config(seed=123):
 
 def one_pixel_attack_config(seed=123):
     num_images = 1000
-    batch_size = 100
+    batch_size = 200
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
