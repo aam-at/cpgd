@@ -2,10 +2,8 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
-import os
 import sys
 import time
-from pathlib import Path
 
 import absl
 import numpy as np
