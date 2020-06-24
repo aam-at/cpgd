@@ -280,7 +280,7 @@ def pgd_config(norm, seed=123):
         type = Path(model).stem.split("_")[-1]
         for nb_iter, nb_restarts, eps, eps_scale in itertools.product(
                 [100], [1, 10, 100], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
-            working_dir = f"../results_mnist/pgd/test_{type}_{norm}"
+            working_dir = f"../results_mnist/test_{type}/{norm}/pgd"
             attack_args.update({
                 'load_from': model,
                 'working_dir': working_dir,
@@ -324,7 +324,7 @@ def daa_config(seed=123):
         type = Path(model).stem.split("_")[-1]
         for nb_iter, nb_restarts, method, eps, eps_scale in itertools.product(
                 [200], [1, 50], ['dgf', 'blob'], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
-            working_dir = f"../results/mnist_daa/test_{type}_{norm}"
+            working_dir = f"../results_mnist/test_{type}/{norm}/daa"
             attack_args.update({
                 'load_from': model,
                 'working_dir': working_dir,
@@ -485,6 +485,7 @@ def foolbox_config(norm, attack, seed=123):
         attack_grid_args.update({
             'attack_steps': [50],
             'attack_overshoot': [0.02],
+            'attack_candidates': [10]
         })
         name_fn = lambda: f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
     elif attack == 'cw':
@@ -519,11 +520,11 @@ def foolbox_config(norm, attack, seed=123):
         # default params for mnist
         # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
         attack_grid_args.update({
-            'attack_steps': [1000],
-            'attack_init_epsilon': [1.0],
-            'attack_gamma': [0.05],
+            'attack_steps': [1000, 10000],
+            'attack_init_epsilon': [1.0, 0.1],
+            'attack_gamma': [0.1, 0.05, 0.01],
         })
-        name_fn = lambda: f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_"
+        name_fn = lambda: f"mnist_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_gamma{attack_args['attack_gamma']}_"
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
@@ -531,7 +532,7 @@ def foolbox_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/{attack}/test_{type}_{norm}"
+        working_dir = f"../results_mnist/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -566,7 +567,7 @@ def bethge_config(norm, seed=123):
     for model, steps, lr, num_decay in itertools.product(
             models, [1000], [1.0, 0.1, 0.01], [20, 100]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/bethge/test_{type}_{norm}"
+        working_dir = f"../results_mnist/test_{type}/{norm}/bethge"
         attack_args.update({
             'norm': norm,
             'load_from': model,

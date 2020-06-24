@@ -2,10 +2,8 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
-import os
 import sys
 import time
-from pathlib import Path
 
 import absl
 import numpy as np
@@ -21,7 +19,7 @@ from data import load_mnist
 from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
                        l0_metric, l1_metric, l2_metric, li_metric, log_metrics,
                        make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
+                       reset_metrics, setup_experiment)
 from models import MadryCNN
 from utils import load_madry
 
@@ -60,9 +58,7 @@ def import_flags(norm, attack):
     assert attack in lp_attacks[norm]
     import_klass_annotations_as_flags(lp_attacks[norm][attack],
                                       prefix="attack_")
-    if attack == 'df' and norm == 'l2':
-        flags.DEFINE_integer("attack_candidates", None, "")
-    elif attack == 'ead':
+    if attack == 'ead':
         flags.DEFINE_string("attack_decision_rule", "L1", "")
 
 
@@ -145,7 +141,7 @@ def main(unused_args):
         test_metrics[f"conf_{FLAGS.norm}"](outs_adv["conf"])
 
         r = image - image_adv
-        lp = lp_metrics[FLAGS.attack_norm](r)
+        lp = lp_metrics[FLAGS.norm](r)
         l0 = l0_metric(r)
         l1 = l1_metric(r)
         l2 = l2_metric(r)
@@ -170,8 +166,6 @@ def main(unused_args):
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(test_ds, 1):
@@ -182,15 +176,6 @@ def main(unused_args):
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_{FLAGS.norm}-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -205,11 +190,6 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":
