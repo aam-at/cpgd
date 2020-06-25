@@ -51,84 +51,37 @@ def round(l, decimals=6):
     return rl
 
 
-def parse_test_log(root_wildcard,
-                   exclude=None,
-                   export_org=False,
-                   export_test_params=None):
+def parse_log(load_dir, exclude=None, export_test_params=None):
     if exclude is None:
         exclude = []
     if export_test_params is None:
         export_test_params = []
 
-    failed = []
-    test_results = []
-    for index, load_dir in enumerate(sorted(glob.glob(str(root_wildcard)))):
-        with open(os.path.join(load_dir, "tensorflow.log"), "r") as f:
-            test_param_str = f.readline()
-            test_params = load_params(test_param_str)
-            text = "\n".join(f.readlines())
-        name = os.path.basename(load_dir)
+    with open(os.path.join(load_dir, "tensorflow.log"), "r") as f:
+        test_param_str = f.readline()
+        test_params = load_params(test_param_str)
+        text = "\n".join(f.readlines())
+    name = os.path.basename(load_dir)
 
-        try:
-            test_results_str = re.findall("(?<=Test results).*", text)[-1]
-            test_results_str = test_results_str[test_results_str.find(":") +
-                                                1:]
-            test_values_with_name = test_results_str.split(",")
-            test_result = {"name": name}
+    try:
+        test_results_str = re.findall("(?<=Test results).*", text)[-1]
+        test_results_str = test_results_str[test_results_str.find(":") + 1:]
+        test_values_with_name = test_results_str.split(",")
+        test_result = {"name": name}
 
-            for test_value_with_name in test_values_with_name:
-                test_name, test_value = test_value_with_name.split(":")
-                test_name = test_name.strip()
-                test_value = float(test_value)
-                if test_name not in exclude:
-                    test_result[test_name] = float(test_value)
+        for test_value_with_name in test_values_with_name:
+            test_name, test_value = test_value_with_name.split(":")
+            test_name = test_name.strip()
+            test_value = float(test_value)
+            if test_name not in exclude:
+                test_result[test_name] = float(test_value)
 
-            for param_name in export_test_params:
-                test_result[param_name] = test_params[param_name]
-            test_results.append(test_result)
-        except:
-            failed.append(load_dir)
+        for param_name in export_test_params:
+            test_result[param_name] = test_params[param_name]
+    except:
+        print(f"Failed to parse directory: {load_dir}")
 
-    if len(failed) > 0:
-        print("Failed to parse directories: %s" % failed)
-
-    df = pd.DataFrame.from_dict(test_results)
-    if export_org:
-        return org_table(df)
-    else:
-        return df
-
-
-def parse_output_logs(paths,
-                      norm,
-                      type,
-                      prefix="",
-                      export_test_params=None,
-                      allowed_thresholds=None):
-    if not isinstance(paths, (list, tuple)):
-        paths = list(paths)
-    if allowed_thresholds is None:
-        allowed_thresholds = []
-
-    df_sublist = []
-    for p in paths:
-        p = Path(p)
-        if prefix is None or len(prefix) == 0:
-            path = p / f"test_{type}_{norm}" / "*"
-        else:
-            path = p / f"test_{type}_{norm}" / (prefix + "*")
-        df = parse_test_log(path,
-                            exclude=["nll_loss", "conf"],
-                            export_test_params=export_test_params)
-        df_sublist.append(df)
-    df = pd.concat(df_sublist, ignore_index=True)
-    if len(allowed_thresholds) > 0:
-        for col in df.columns:
-            if col.startswith(f"acc_{norm}_"):
-                threshold = float(col.replace(f"acc_{norm}_", ""))
-                if threshold not in allowed_thresholds:
-                    df = df.drop(columns=[col])
-    df = df.sort_values(norm, ascending=True)
+    df = pd.DataFrame.from_dict([test_result])
     return df
 
 
@@ -225,24 +178,6 @@ def org_group_and_summarize(
         org_table.append(group_stat_list[3])
     org_table.append(None)
     return round(org_table, decimals)
-
-
-def output_org_results(df_log,
-                       norm,
-                       allowed_thresholds=None,
-                       topk=100):
-    if allowed_thresholds is None:
-        allowed_thresholds = []
-    if len(allowed_thresholds) > 0:
-        for col in df_log.columns:
-            if col.startswith(f"acc_{norm}_"):
-                threshold = float(col.replace(f"acc_{norm}_", ""))
-                if threshold not in allowed_thresholds:
-                    df_log = df_log.drop(columns=[col])
-    if topk is not None:
-        return org_table(df_log)[:3 + topk] + [None]
-    else:
-        return org_table(df_log)
 
 
 if __name__ == "__main__":
