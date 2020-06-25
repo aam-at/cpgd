@@ -13,7 +13,7 @@ from absl import flags
 
 from config import test_thresholds
 from data import load_mnist
-from lib.utils import (MetricsDictionary, l0_metric, log_metrics,
+from lib.utils import (MetricsDictionary, l0_metric, l1_metric, log_metrics,
                        make_input_pipeline, random_targets,
                        register_experiment_flags, reset_metrics, save_images,
                        setup_experiment)
@@ -193,30 +193,33 @@ def main(unused_args):
             image_adv = tf.where(tf.reshape(l0_ < bestlp, (-1, 1, 1, 1)), image_adv_, image_adv)
             bestlp = tf.minimum(l0_, bestlp)
 
-        outs_l0 = test_classifier(image_adv)
+        outs_adv = test_classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
-        acc_l0 = acc_fn(label, outs_l0["logits"])
+        acc_adv = acc_fn(label, outs_adv["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics["acc_l0"](acc_l0)
-        test_metrics["conf_l0"](outs_l0["conf"])
+        test_metrics["acc_l0"](acc_adv)
+        test_metrics["conf_l0"](outs_adv["conf"])
 
         # measure norm
-        l0 = l0_metric(image - image_adv)
-        is_adv = outs_l0["pred"] != label
+        r = image - image_adv
+        l0 = l0_metric(r)
+        l1 = l1_metric(r)
+        test_metrics["l0"](l0)
+        # exclude incorrectly classified
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
         for threshold in test_thresholds["l0"]:
             is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
             test_metrics["acc_l0_%.2f" % threshold](~is_adv_at_th)
-        test_metrics["l0"](l0)
-        # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
