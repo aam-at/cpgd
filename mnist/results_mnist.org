@@ -10,16 +10,25 @@
   import glob
 
   from config import test_model_thresholds
-  from lib.parse_logs import (output_org_results, parse_output_logs,
-                              parse_test_log)
+  from lib.parse_logs import (parse_log, org_table)
 
 
-  test_params = ['num_batches', 'batch_size']
-  dirs = glob.glob(f"../results_mnist/{norm}/{attack}")
-  thresholds = np.array(test_model_thresholds[type][norm])
-  topk = None
+  model_thresholds = np.array(test_model_thresholds[type][norm])
 
-  df = parse_output_logs(dirs, norm, type, export_test_params=test_params)
+  dirs = glob.glob(f"../results_mnist/test_{type}/{norm}/{attack}/*")
+  df_logs = []
+  for load_dir in dirs:
+      df_logs.append(parse_log(load_dir, exclude=["nll_loss", "conf"],
+                               export_test_params=["num_batches", "batch_size"]))
+  df = pd.concat(df_logs, ignore_index=True)
+
+  if len(model_thresholds) > 0:
+      for col in df.columns:
+          if col.startswith(f"acc_{norm}_"):
+              threshold = float(col.replace(f"acc_{norm}_", ""))
+              if threshold not in model_thresholds:
+                  df = df.drop(columns=[col])
+
   for col in df.columns:
       if col.startswith(f"acc_{norm}_"):
           df[col] = df[col] * 100
@@ -27,10 +36,7 @@
 
 #+NAME: output_results
 #+BEGIN_SRC python :noweb yes
-  df_org = output_org_results(df,
-                              norm,
-                              allowed_thresholds=thresholds,
-                              topk=topk)
+  df_org = org_table(df, decimals=3)
 #+END_SRC
 
 * Init

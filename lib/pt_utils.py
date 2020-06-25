@@ -46,7 +46,7 @@ def add_default_end_points(end_points):
     predictions = prediction(logits)
     prob = torch.softmax(logits, dim=-1)
     log_prob = torch.log_softmax(logits, dim=-1)
-    conf = torch.argmax(prob, dim=-1)
+    conf = torch.max(prob, dim=-1)
     end_points.update({
         "pred": predictions,
         "prob": prob,
