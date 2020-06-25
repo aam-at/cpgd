@@ -666,7 +666,7 @@ def art_config(norm, attack, seed=123):
                                       prefix="attack_",
                                       include_kwargs_with_defaults=True)
 
-    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 500
     attack_grid_args = {
         'num_batches': [num_images // batch_size],
@@ -690,7 +690,7 @@ def art_config(norm, attack, seed=123):
         if norm == "l2":
             attack_grid_args.update({
                 'attack_max_iter': [10000],
-                'attack_initial_const': [0.001],
+                'attack_initial_const': [0.01],
                 'attack_binary_search_steps': [9],
             })
             name_fn = lambda: f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
@@ -704,7 +704,7 @@ def art_config(norm, attack, seed=123):
         # default params
         attack_grid_args.update({
             'attack_max_iter': [1000],
-            'attack_initial_const': [0.001],
+            'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
             'attack_beta': [0.05],
@@ -717,7 +717,7 @@ def art_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_{attack}/test_{type}_{norm}"
+        working_dir = f"../results_mnist/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
