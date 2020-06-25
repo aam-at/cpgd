@@ -14,12 +14,10 @@
                               parse_test_log)
 
 
-  test_params = []
-  dirs = glob.glob(f"../results/mnist*_{attack}")
+  test_params = ['num_batches', 'batch_size']
+  dirs = glob.glob(f"../results_mnist/{norm}/{attack}")
   thresholds = np.array(test_model_thresholds[type][norm])
-  thresholds = np.ceil(thresholds * 100) / 100
   topk = None
-  hide_result_if_not_all_adv = False
 
   df = parse_output_logs(dirs, norm, type, export_test_params=test_params)
   for col in df.columns:
