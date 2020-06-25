@@ -636,7 +636,7 @@ def sparsefool_config(seed=123):
     }
 
     existing_names = []
-    for model, lambda_ in models, [1.0, 2.0, 3.0]:
+    for model, lambda_ in itertools.product(models, [1.0, 2.0, 3.0]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results_mnist/test_{type}/{norm}/sparsefool"
         attack_args.update({

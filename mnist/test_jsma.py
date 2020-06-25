@@ -1,10 +1,8 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-import os
 import sys
 import time
-from pathlib import Path
 
 import absl
 import numpy as np
@@ -15,7 +13,7 @@ from config import test_thresholds
 from data import load_mnist
 from lib.utils import (MetricsDictionary, l0_metric, l1_metric, log_metrics,
                        make_input_pipeline, random_targets,
-                       register_experiment_flags, reset_metrics, save_images,
+                       register_experiment_flags, reset_metrics,
                        setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
@@ -226,8 +224,6 @@ def main(unused_args):
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(test_ds, 1):
@@ -238,15 +234,6 @@ def main(unused_args):
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_l0-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -261,11 +248,6 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":
