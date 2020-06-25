@@ -97,8 +97,8 @@ def main(unused_args):
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics["acc_l1"](acc_adv)
-        test_metrics["conf_l1"](outs_adv["conf"])
+        test_metrics["acc_adv"](acc_adv)
+        test_metrics["conf_adv"](outs_adv["conf"])
 
         # measure norm
         r = image - image_adv
