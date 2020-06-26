@@ -60,14 +60,22 @@ def test_random(runs=1, master_seed=1):
             print(generate_test_optimizer('test_random', **attack_args))
 
 
-def test_lp_config(attack, runs=1, master_seed=1):
+def test_our_attack_config(attack, seed=123):
+    import test_our_attack
+    from test_our_attack import import_flags, lp_attacks
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_our_attack)
+    import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
-    num_images = {'l0': 1000, 'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+
+    num_images = 1000
     batch_size = 500
     attack_grid_args = {
         'num_batches': [num_images // batch_size],
         'batch_size': [batch_size],
         'load_from': models,
+        'seed': [seed],
         'attack': [attack],
         'attack_loss': ["cw"],
         'attack_iterations': [500],
@@ -78,10 +86,10 @@ def test_lp_config(attack, runs=1, master_seed=1):
         'attack_dual_ema': [True, False],
         'attack_use_proxy_constraint': [False],
         'attack_loop_number_restarts': [1],
-        'attack_loop_finetune': [True],
+        'attack_loop_finetune': [False],
         'attack_loop_r0_sampling_algorithm': ['uniform'],
         'attack_loop_r0_sampling_epsilon': [0.5],
-        'attack_loop_c0_initial_const': [1.0, 0.1, 0.01]
+        'attack_loop_c0_initial_const': [1.0, 0.1, 0.01],
     }
 
     if attack == 'l1g':
@@ -106,7 +114,7 @@ def test_lp_config(attack, runs=1, master_seed=1):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_10/test_{type}_{norm}"
+        working_dir = f"../results_mnist/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -161,20 +169,15 @@ def test_lp_config(attack, runs=1, master_seed=1):
             if name in p or name in existing_names:
                 continue
             existing_names.append(name)
-            np.random.seed(master_seed)
-            for i in range(runs):
-                seed = np.random.randint(1000)
-                attack_args["seed"] = seed
-                if True:
-                    print(generate_test_optimizer_lp(**attack_args))
+            print(generate_test_optimizer('test_our_attack', **attack_args))
 
 
-def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
-    import test_optimizer_lp_madry
-    from test_optimizer_lp_madry import import_flags, lp_attacks
+def test_our_attack_config_custom(attack, topk=1, runs=1, master_seed=1):
+    import test_our_attack
+    from test_our_attack import import_flags, lp_attacks
 
     flags.FLAGS._flags().clear()
-    importlib.reload(test_optimizer_lp_madry)
+    importlib.reload(test_our_attack)
     import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
     # import args
@@ -196,7 +199,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
     existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/mnist_10/test_{type}_{norm}"
+        working_dir = f"../results_mnist/test_{type}/{norm}/our"
         attack_args.update({'load_from': model, 'working_dir': working_dir})
 
         # parse test log
