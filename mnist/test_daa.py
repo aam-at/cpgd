@@ -14,10 +14,11 @@ import lib
 from config import test_thresholds
 from data import load_mnist
 from lib.daa import LinfBLOBAttack, LinfDGFAttack
-from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
-                       li_metric, log_metrics, make_input_pipeline,
+from lib.tf_utils import (MetricsDictionary, li_metric, make_input_pipeline,
+                          to_indexed_slices)
+from lib.utils import (import_klass_annotations_as_flags, log_metrics,
                        register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment, to_indexed_slices)
+                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 

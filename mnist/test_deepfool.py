@@ -17,8 +17,8 @@ from data import load_mnist
 from lib.deepfool import deepfool
 from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, to_torch)
-from lib.utils import (import_func_annotations_as_flags, limit_gpu_growth,
-                       log_metrics, make_input_pipeline,
+from lib.tf_utils import limit_gpu_growth, make_input_pipeline
+from lib.utils import (import_func_annotations_as_flags, log_metrics,
                        register_experiment_flags, reset_metrics,
                        setup_experiment)
 from models import MadryCNNPt

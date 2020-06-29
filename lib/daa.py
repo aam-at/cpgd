@@ -5,7 +5,7 @@ from abc import abstractmethod
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from lib.utils import dist_matrix
+from lib.tf_utils import dist_matrix
 
 
 class LinfBaseAttack:

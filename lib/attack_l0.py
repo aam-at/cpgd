@@ -4,7 +4,7 @@ import tensorflow as tf
 
 from .attack_lp import ProximalGradientOptimizerAttack
 from .attack_utils import proximal_l0
-from .utils import l0_pixel_metric
+from .tf_utils import l0_pixel_metric
 
 
 class ProximalL0Attack(ProximalGradientOptimizerAttack):

@@ -35,6 +35,7 @@ def load_madry(load_from, model_vars, sess=None):
 
 
 def load_madry_official(load_from, model_vars):
+    # function to load official mnist_challenge checkpoints
     ckpt_manager = tf.train.CheckpointManager(tf.train.Checkpoint(),
                                               load_from,
                                               max_to_keep=3)
@@ -50,7 +51,6 @@ def load_madry_official(load_from, model_vars):
         "dense_1/kernel:0": "Variable_6",
         "dense_1/bias:0": "Variable_7"
     }
-    initialized_vars = {var.name: False for var in model_vars}
     for model_var in model_vars:
         model_var_name = model_var.name
         try:

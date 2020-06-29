@@ -4,7 +4,7 @@ from absl import flags
 from torch import nn
 from torch.nn import functional as F
 
-from lib.utils import add_default_end_points, change_default_args
+from lib.tf_utils import add_default_end_points, change_default_args
 
 FLAGS = flags.FLAGS
 

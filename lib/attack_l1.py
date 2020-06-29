@@ -5,7 +5,7 @@ import tensorflow as tf
 from .attack_lp import (GradientOptimizerAttack,
                         ProximalGradientOptimizerAttack, compute_lambda)
 from .attack_utils import hard_threshold, proximal_l1
-from .utils import l1_metric
+from .tf_utils import l1_metric
 
 
 class BaseL1Attack(GradientOptimizerAttack):

@@ -11,9 +11,9 @@ from absl import flags
 
 from config import test_thresholds
 from data import load_mnist
-from lib.utils import (MetricsDictionary, l0_metric, l1_metric, log_metrics,
-                       make_input_pipeline, random_targets,
-                       register_experiment_flags, reset_metrics,
+from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric,
+                          make_input_pipeline, random_targets)
+from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
