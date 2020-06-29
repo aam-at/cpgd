@@ -78,10 +78,10 @@ def parse_log(load_dir, exclude=None, export_test_params=None):
 
         for param_name in export_test_params:
             test_result[param_name] = test_params[param_name]
+        df = pd.DataFrame.from_dict([test_result])
     except:
         print(f"Failed to parse directory: {load_dir}")
-
-    df = pd.DataFrame.from_dict([test_result])
+        df = None
     return df
 
 
