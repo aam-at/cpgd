@@ -17,10 +17,11 @@ from lib.attack_l1 import GradientL1Attack, ProximalL1Attack
 from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
 from lib.attack_li import ProximalLiAttack
 from lib.attack_utils import AttackOptimizationLoop
-from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
-                       l0_metric, l1_metric, l2_metric, li_metric, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, setup_experiment)
+from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
+                          li_metric, make_input_pipeline)
+from lib.utils import (import_klass_annotations_as_flags, log_metrics,
+                       register_experiment_flags, reset_metrics,
+                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 

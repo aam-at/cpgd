@@ -5,7 +5,7 @@ import tensorflow as tf
 
 from .attack_lp import ProximalGradientOptimizerAttack
 from .attack_utils import proximal_linf
-from .utils import li_metric
+from .tf_utils import li_metric
 
 
 class ProximalLiAttack(ProximalGradientOptimizerAttack):

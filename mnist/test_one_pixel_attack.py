@@ -12,9 +12,10 @@ from art.attacks import PixelAttack
 from art.classifiers import TensorFlowV2Classifier
 
 from data import load_mnist
-from lib.utils import (MetricsDictionary, l0_metric, l1_metric, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, setup_experiment)
+from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric,
+                          make_input_pipeline)
+from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 

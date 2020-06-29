@@ -9,14 +9,15 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-
 from cleverhans.attacks import CarliniWagnerL2, ElasticNetMethod
 from cleverhans.model import Model
+
 from config import test_thresholds
 from data import load_mnist
+from lib.tf_utils import l0_metric, l1_metric, l2_metric, li_metric
 from lib.utils import (batch_iterator, import_func_annotations_as_flags,
-                       l0_metric, l1_metric, l2_metric, li_metric, log_metrics,
-                       register_experiment_flags, setup_experiment)
+                       log_metrics, register_experiment_flags,
+                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 

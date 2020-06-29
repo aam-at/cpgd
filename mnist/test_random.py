@@ -11,8 +11,8 @@ from absl import flags
 
 from data import load_mnist
 from lib.attack_utils import init_r0, project_box
-from lib.utils import (MetricsDictionary, log_metrics, make_input_pipeline,
-                       register_experiment_flags, reset_metrics,
+from lib.tf_utils import MetricsDictionary, make_input_pipeline
+from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry

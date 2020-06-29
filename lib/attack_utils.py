@@ -4,7 +4,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from .utils import create_lr_schedule, l2_metric
+from .tf_utils import create_lr_schedule, l2_metric
 
 
 def margin(logits, y_onehot, delta=0.0, targeted=False):

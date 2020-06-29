@@ -7,6 +7,8 @@ import torch
 
 class PatchedAverage(ignite.metrics.Average):
     def __call__(self, value):
+        """Average metric compatible with tf.metrics.Mean
+        """
         value = value.view(-1, 1)
         self.update(value)
 
@@ -33,27 +35,9 @@ class MetricsDictionary(dict):
 
 
 def to_torch(*args, cuda=True):
+    # convert numpy tensors to pytorch tensors and transfer to gpu if necessary
     torch_tensors = [torch.from_numpy(np.asarray(a)) for a in args]
     return [t.cuda() if cuda else t for t in torch_tensors]
-
-
-def prediction(prob, dim=-1):
-    return torch.argmax(prob, dim=dim)
-
-
-def add_default_end_points(end_points):
-    logits = end_points["logits"]
-    predictions = prediction(logits)
-    prob = torch.softmax(logits, dim=-1)
-    log_prob = torch.log_softmax(logits, dim=-1)
-    conf = torch.max(prob, dim=-1)[0]
-    end_points.update({
-        "pred": predictions,
-        "prob": prob,
-        "log_prob": log_prob,
-        "conf": conf
-    })
-    return end_points
 
 
 def l0_metric(x, dim=-1, keepdim=False):
@@ -80,3 +64,23 @@ def l2_metric(x, dim=-1, keepdim=False):
     """
     square_sum = x.square().sum(dim=dim, keepdim=keepdim)
     return torch.sqrt(square_sum)
+
+
+def prediction(prob, dim=-1):
+    return torch.argmax(prob, dim=dim)
+
+
+# pytorch layer configuration utils
+def add_default_end_points(end_points):
+    logits = end_points["logits"]
+    predictions = prediction(logits)
+    prob = torch.softmax(logits, dim=-1)
+    log_prob = torch.log_softmax(logits, dim=-1)
+    conf = torch.max(prob, dim=-1)[0]
+    end_points.update({
+        "pred": predictions,
+        "prob": prob,
+        "log_prob": log_prob,
+        "conf": conf
+    })
+    return end_points

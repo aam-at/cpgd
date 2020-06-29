@@ -14,8 +14,8 @@ from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.fab import FABAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_log
-from lib.utils import (ConstantDecay, LinearDecay,
-                       import_func_annotations_as_flags,
+from lib.tf_utils import ConstantDecay, LinearDecay
+from lib.utils import (import_func_annotations_as_flags,
                        import_klass_annotations_as_flags)
 
 models = [

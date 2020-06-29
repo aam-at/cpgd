@@ -6,8 +6,7 @@ import tensorflow as tf
 
 from .attack_utils import (margin, project_box,
                            project_log_distribution_wrt_kl_divergence)
-from .utils import (create_optimizer, prediction, reset_optimizer,
-                    to_indexed_slices)
+from .tf_utils import create_optimizer, reset_optimizer, prediction, to_indexed_slices
 
 
 def compute_lambda(state):
@@ -181,7 +180,6 @@ class GradientOptimizerAttack(ABC):
         Args:
             X: images.
             y_onehot: original labels.
-            targeted: if the attack is targeted.
 
         Returns:
             Classification constraints and classification loss.

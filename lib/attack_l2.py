@@ -2,7 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 from .attack_lp import GradientOptimizerAttack, ProximalGradientOptimizerAttack
 from .attack_utils import proximal_l2
-from .utils import l2_metric
+from .tf_utils import l2_metric
 
 
 class GradientL2Attack(GradientOptimizerAttack):
