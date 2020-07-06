@@ -338,7 +338,7 @@ def daa_config(seed=123):
         type = Path(model).stem.split("_")[-1]
         for nb_iter, nb_restarts, method, eps, eps_scale in itertools.product(
                 [200], [1, 50], ['dgf', 'blob'], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
-            working_dir = f"../results/cifar10_daa/test_{type}_{norm}"
+            working_dir = f"../results_cifar10/test_{type}/{norm}/daa"
             attack_args.update({
                 'load_from': model,
                 'working_dir': working_dir,

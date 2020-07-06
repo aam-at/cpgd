@@ -2,7 +2,6 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -16,11 +15,12 @@ import lib
 from config import test_thresholds
 from data import load_cifar10
 from lib.daa import LinfBLOBAttack, LinfDGFAttack
-from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
-                       li_metric, log_metrics, make_input_pipeline,
+from lib.tf_utils import (MetricsDictionary, li_metric, make_input_pipeline,
+                          to_indexed_slices)
+from lib.utils import (import_klass_annotations_as_flags, log_metrics,
                        register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment, to_indexed_slices)
-from models import MadryCNN
+                       setup_experiment)
+from models import MadryCNNTf
 from utils import load_madry
 
 # general experiment parameters
@@ -77,7 +77,7 @@ def main(unused_args):
     # models
     num_classes = 10
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
-    classifier = MadryCNN(model_type=model_type)
+    classifier = MadryCNNTf(model_type=model_type)
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
@@ -121,7 +121,9 @@ def main(unused_args):
     @tf.function
     def test_step(image, image_adv, label):
         outs = test_classifier(image)
+        is_corr = outs["pred"] == label
         outs_adv = test_classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
@@ -134,15 +136,16 @@ def main(unused_args):
         test_metrics["acc_adv"](acc_adv)
         test_metrics["conf_adv"](outs_adv["conf"])
 
+        # measure norm
         li = li_metric(image - image_adv)
-        is_adv = outs_adv["pred"] != label
-        for threshold in test_thresholds["li"]:
-            is_adv_at_th = tf.logical_and(li <= threshold + 5e-6, is_adv)
-            test_metrics["acc_li_%.3f" % threshold](~is_adv_at_th)
         test_metrics["li"](li)
         # exclude incorrectly classified
-        is_corr = outs["pred"] == label
         test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
+        for threshold in test_thresholds["li"]:
+            is_adv_at_th = tf.logical_and(li <= threshold + 5e-6, is_adv)
+            test_metrics["acc_li_%.2f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
     # reset metrics
@@ -157,7 +160,7 @@ def main(unused_args):
 
             for reshuffle in range(int(FLAGS.attack_nb_iter / 10)):
                 for (image, label, indx) in test_ds:
-                    image_adv = tf.gather_nd(x_adv, tf.expand_dims(indx, 1))
+                    image_adv = tf.gather(x_adv, tf.expand_dims(indx, 1))
                     image_adv = attack_step(image, image_adv, label)
                     x_adv = tf.tensor_scatter_nd_update(x_adv, tf.expand_dims(indx, 1),
                                                         image_adv)
