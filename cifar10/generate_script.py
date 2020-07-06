@@ -13,8 +13,9 @@ from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.fab import FABAttack
 from lib.generate_script import format_name, generate_test_optimizer
-from lib.parse_logs import parse_test_log
-from lib.utils import ConstantDecay, LinearDecay, import_klass_annotations_as_flags
+from lib.parse_logs import parse_log
+from lib.tf_utils import ConstantDecay, LinearDecay
+from lib.utils import import_klass_annotations_as_flags
 
 models = [
     './models/cifar10_weights_plain.mat', './models/cifar10_weights_linf.mat',
@@ -375,7 +376,7 @@ def deepfool_config(norm, seed=123):
     existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_df/test_{type}_{norm}"
+        working_dir = f"../results_cifar10/test_{type}/{norm}/df"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
@@ -407,10 +408,9 @@ def sparsefool_config(seed=123):
     }
 
     existing_names = []
-    for model in models:
+    for model, lambda_ in itertools.product(models, [1.0, 2.0, 3.0]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_sparsefool/test_{type}_{norm}"
-        lambda_ = 3.0
+        working_dir = f"../results_cifar10/test_{type}/{norm}/sparsefool"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
