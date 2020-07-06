@@ -114,10 +114,11 @@ def main(unused_args):
 
         # measure norm
         r = image - image_adv
+        rc = r.view(r.shape[0], r.shape[1], -1)
         r = r.view(r.shape[0], -1)
         lp = lp_metrics[FLAGS.norm](r)
         l0 = l0_metric(r)
-        l0p = l0_pixel_metric(r)
+        l0p = l0_pixel_metric(rc, channel_dim=1)
         l1 = l1_metric(r)
         l2 = l2_metric(r)
         li = li_metric(r)

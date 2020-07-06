@@ -45,7 +45,7 @@ def l0_metric(x, dim=-1, keepdim=False):
 
 
 def l0_pixel_metric(u, channel_dim=-1, keepdim=False):
-    u_c = torch.argmax(u, dim=channel_dim)
+    u_c = torch.max(u, dim=channel_dim)[0]
     return l0_metric(u_c, keepdim=keepdim)
 
 
