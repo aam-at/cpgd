@@ -1,28 +1,28 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
-import os
 import sys
 import time
 from pathlib import Path
 
 import absl
-import numpy as np
 import tensorflow as tf
 import torch
+import torch.nn.functional as F
 from absl import flags
 
 import lib
 from config import test_thresholds
 from data import load_cifar10
-from lib.fab import FABAttack, FABModelAdapter
-from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags, l0_metric,
-                       l1_metric, l2_metric, li_metric, limit_gpu_growth,
-                       log_metrics, make_input_pipeline, random_targets,
-                       register_experiment_flags, reset_metrics, save_images,
+from lib.fab import FABAttack, FABPtModelAdapter
+from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
+                          li_metric, to_torch)
+from lib.tf_utils import limit_gpu_growth, make_input_pipeline
+from lib.utils import (import_klass_annotations_as_flags, log_metrics,
+                       register_experiment_flags, reset_metrics,
                        setup_experiment)
-from models import MadryCNN
-from utils import load_madry
+from models import MadryCNNPt
+from utils import load_madry_pt
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/cifar10/test_fab")
@@ -45,7 +45,7 @@ def main(unused_args):
 
     # data
     _, _, test_ds = load_cifar10(FLAGS.validation_size,
-                                 data_format="NHWC",
+                                 data_format="NCHW",
                                  seed=FLAGS.data_seed)
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
     test_ds = make_input_pipeline(test_ds,
@@ -55,20 +55,16 @@ def main(unused_args):
     # models
     num_classes = 10
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
-    classifier = MadryCNN(model_type=model_type)
-
-    def test_classifier(x, **kwargs):
-        return classifier(x, training=False, **kwargs)
+    classifier = MadryCNNPt(model_type=model_type, wrap_outputs=True)
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 32, 32, 3])
-    y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
-    classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from,
-               classifier.trainable_variables,
-               model_type=model_type)
+    load_madry_pt(FLAGS.load_from, classifier.parameters(),
+                  model_type=model_type)
+    classifier.cuda()
+    classifier.eval()
 
     lp_metrics = {
+        "l0": l0_metric,
         "l1": l1_metric,
         "l2": l2_metric,
         "li": li_metric
@@ -79,75 +75,78 @@ def main(unused_args):
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    fab = FABAttack(
-        model=FABModelAdapter(lambda x: test_classifier(x)['logits']),
-        seed=FLAGS.seed,
-        **attack_kwargs)
-
-    nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
-    acc_fn = tf.keras.metrics.sparse_categorical_accuracy
+    fab = FABAttack(model=FABPtModelAdapter(lambda x: classifier(x)['logits'],
+                                            device=classifier.device),
+                    seed=FLAGS.seed,
+                    verbose=True,
+                    **attack_kwargs)
 
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
-        outs = test_classifier(image)
+        outs = classifier(image)
         is_corr = outs['pred'] == label
 
-        # tensorflow model + pytorch attack
-        image_pt = torch.from_numpy(image.numpy()).cuda()
-        label_pt = torch.from_numpy(label.numpy()).cuda()
-        image_adv_pt = fab.perturb(image_pt, label_pt)
-        image_adv = image_adv_pt.cpu().numpy()
-        outs_lp = test_classifier(image_adv)
+        # fab attack
+        image_s = image[is_corr]
+        label_s = label[is_corr]
+        image_adv = image.clone()
+        image_adv[is_corr] = fab.perturb(image_s, label_s)
+
+        outs_adv = classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
 
         # metrics
-        nll_loss = nll_loss_fn(label, outs["logits"])
-        acc = acc_fn(label, outs["logits"])
-        acc_lp = acc_fn(label, outs_lp["logits"])
+        nll_loss = F.cross_entropy(outs['logits'], label, reduction='none')
+        acc = outs["pred"] == label
+        acc_adv = outs_adv["pred"] == label
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_{FLAGS.attack_norm}"](acc_lp)
-        test_metrics[f"conf_{FLAGS.attack_norm}"](outs_lp["conf"])
+        test_metrics[f"acc_{FLAGS.attack_norm}"](acc_adv)
+        test_metrics[f"conf_{FLAGS.attack_norm}"](outs_adv["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.attack_norm](image - image_adv)
-        is_adv = outs_lp["pred"] != label
-        for threshold in test_thresholds[f"{FLAGS.attack_norm}"]:
-            is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.attack_norm}_%.3f" % threshold](~is_adv_at_th)
-        test_metrics[f"{FLAGS.attack_norm}"](lp)
+        r = image - image_adv
+        r = r.view(r.shape[0], -1)
+        lp = lp_metrics[FLAGS.attack_norm](r)
+        l0 = l0_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics["l0"](l0)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
         # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.attack_norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0_corr"](l0[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[torch.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[torch.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
+        for threshold in test_thresholds[f"{FLAGS.attack_norm}"]:
+            is_adv_at_th = torch.logical_and(lp <= threshold, is_adv)
+            test_metrics[f"acc_{FLAGS.attack_norm}_%.2f" %
+                         threshold](~is_adv_at_th)
+        test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(test_ds, 1):
-            X_lp = test_step(image, label)
+            X_lp = test_step(*to_torch(image, label))
             log_metrics(
                 test_metrics,
                 "Batch results [{}, {:.2f}s]:".format(batch_index,
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_l0-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -162,11 +161,6 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":

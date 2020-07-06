@@ -72,8 +72,14 @@ class MadryCNNPt(torch.nn.Module):
         self.pad = nn.ConstantPad2d((0, 1, 0, 1), 0)
         self.wrap_outputs = wrap_outputs
 
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
     def forward(self, x, wrap_outputs=None):
         from lib.pt_utils import add_default_end_points
+        if wrap_outputs is None:
+            wrap_outputs = self.wrap_outputs
         if self.model_type == 'l2':
             xi = torch.ones(x.shape) * 0.5
             if x.is_cuda:
