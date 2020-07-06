@@ -357,76 +357,6 @@ def daa_config(seed=123):
             print(generate_test_optimizer('test_daa', **attack_args))
 
 
-def deepfool_config(norm, seed=123):
-    import test_deepfool
-
-    flags.FLAGS._flags().clear()
-    importlib.reload(test_deepfool)
-
-    assert norm in ['l2', 'li']
-    num_images = 1000
-    batch_size = 500
-    attack_args = {
-        'num_batches': num_images // batch_size,
-        'batch_size': batch_size,
-        'norm': norm,
-        'seed': seed
-    }
-
-    existing_names = []
-    for model in models:
-        type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/df"
-        attack_args.update({
-            'load_from': model,
-            'working_dir': working_dir,
-            'attack_overshoot': 0.02,
-            'attack_max_iter': 50,
-        })
-        name = f"cifar10_deepfool_{type}_{norm}_"
-        attack_args['name'] = name
-        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-        if name in p or name in existing_names:
-            continue
-        existing_names.append(name)
-        print(generate_test_optimizer('test_deepfool', **attack_args))
-
-
-def sparsefool_config(seed=123):
-    import test_sparsefool
-
-    flags.FLAGS._flags().clear()
-    importlib.reload(test_sparsefool)
-
-    norm = 'l1'
-    num_images = 1000
-    batch_size = 500
-    attack_args = {
-        'num_batches': num_images // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
-    }
-
-    existing_names = []
-    for model, lambda_ in itertools.product(models, [1.0, 2.0, 3.0]):
-        type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/sparsefool"
-        attack_args.update({
-            'load_from': model,
-            'working_dir': working_dir,
-            'attack_epsilon': 0.02,
-            'attack_max_iter': 20,
-            'attack_lambda_': lambda_,
-        })
-        name = f"cifar10_sparsefool_{type}_{norm}_l{lambda_}_"
-        attack_args['name'] = name
-        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-        if name in p or name in existing_names:
-            continue
-        existing_names.append(name)
-        print(generate_test_optimizer('test_sparsefool', **attack_args))
-
-
 # fab attack
 def fab_config(norm, runs=1, master_seed=1):
     flags.FLAGS._flags().clear()
@@ -557,7 +487,7 @@ def foolbox_config(norm, attack, seed=123):
     importlib.reload(test_foolbox)
     import_flags(norm, attack)
 
-    num_images = {'li': 1000, 'l1': 1000, 'l2': 500}[norm]
+    num_images = 1000
     batch_size = 500
     attack_grid_args = {
         'num_batches': [num_images // batch_size],
@@ -618,7 +548,7 @@ def foolbox_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_{attack}/test_{type}_{norm}"
+        working_dir = f"../results_cifar10/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -632,7 +562,7 @@ def foolbox_config(norm, attack, seed=123):
         print(generate_test_optimizer('test_foolbox', **attack_args))
 
 
-def bethge_config(norm, runs=1, master_seed=1):
+def bethge_config(norm, seed=123):
     import test_bethge
     from test_bethge import import_flags
 
@@ -645,7 +575,7 @@ def bethge_config(norm, runs=1, master_seed=1):
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []
@@ -668,7 +598,78 @@ def bethge_config(norm, runs=1, master_seed=1):
         print(generate_test_optimizer('test_bethge', **attack_args))
 
 
-def art_config(norm, attack, runs=1, master_seed=1):
+def deepfool_config(norm, seed=123):
+    import test_deepfool
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_deepfool)
+
+    assert norm in ['l2', 'li']
+    num_images = 1000
+    batch_size = 500
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'norm': norm,
+        'seed': seed
+    }
+
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results_cifar10/test_{type}/{norm}/df"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_overshoot': 0.02,
+            'attack_max_iter': 50,
+        })
+        name = f"cifar10_deepfool_{type}_{norm}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_deepfool', **attack_args))
+
+
+def sparsefool_config(seed=123):
+    import test_sparsefool
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_sparsefool)
+
+    norm = 'l1'
+    num_images = 1000
+    batch_size = 500
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': seed
+    }
+
+    existing_names = []
+    for model, lambda_ in itertools.product(models, [1.0, 2.0, 3.0]):
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results_cifar10/test_{type}/{norm}/sparsefool"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_epsilon': 0.02,
+            'attack_max_iter': 20,
+            'attack_lambda_': lambda_,
+        })
+        name = f"cifar10_sparsefool_{type}_{norm}_l{lambda_}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_sparsefool', **attack_args))
+
+
+# ibm art attacks
+def art_config(norm, attack, seed=123):
     import test_art
     from test_art import lp_attacks
 
@@ -689,7 +690,8 @@ def art_config(norm, attack, runs=1, master_seed=1):
         'load_from':
         models,
         'attack': [attack],
-        'norm': [norm]
+        'norm': [norm],
+        'seed': [seed]
     }
     if attack == 'df':
         # default params
@@ -724,7 +726,7 @@ def art_config(norm, attack, runs=1, master_seed=1):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_{attack}/test_{type}_{norm}"
+        working_dir = f"../results_cifar10/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -737,11 +739,7 @@ def art_config(norm, attack, runs=1, master_seed=1):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        np.random.seed(master_seed)
-        for i in range(runs):
-            seed = np.random.randint(1000)
-            attack_args["seed"] = seed
-            print(generate_test_optimizer('test_art', **attack_args))
+        print(generate_test_optimizer('test_art', **attack_args))
 
 
 def jsma_config(runs=1, master_seed=1):

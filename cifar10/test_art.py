@@ -2,27 +2,25 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
-import os
 import sys
 import time
 from pathlib import Path
 
 import absl
-import numpy as np
 import tensorflow as tf
 from absl import flags
-from art.attacks import CarliniL2Method, DeepFool, ElasticNet
+from art.attacks import (CarliniL2Method, CarliniLInfMethod, DeepFool,
+                         ElasticNet)
 from art.classifiers import TensorFlowV2Classifier
-from foolbox.attacks import (DDNAttack, EADAttack, L2CarliniWagnerAttack,
-                             L2DeepFoolAttack, LinfDeepFoolAttack)
 
 from config import test_thresholds
 from data import load_cifar10
-from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
-                       l1_metric, l2_metric, li_metric, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
-from models import MadryCNN
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric, make_input_pipeline)
+from lib.utils import (import_klass_annotations_as_flags, log_metrics,
+                       register_experiment_flags, reset_metrics,
+                       setup_experiment)
+from models import MadryCNNTf
 from utils import load_madry
 
 # general experiment parameters
@@ -43,6 +41,7 @@ lp_attacks = {
         'df': DeepFool,
         'cw': CarliniL2Method
     },
+    "li": {'cw': CarliniLInfMethod},
     "l1": {
         'ead': ElasticNet
     }
@@ -53,6 +52,7 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     setup_experiment(f"madry_{FLAGS.attack}_{FLAGS.norm}_art_test", [__file__])
+    logging.getLogger().setLevel(logging.INFO)
 
     # data
     _, _, test_ds = load_cifar10(FLAGS.validation_size,
@@ -68,7 +68,6 @@ def main(unused_args):
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
     classifier = MadryCNN(model_type=model_type)
 
-    @tf.function
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
 
@@ -109,15 +108,22 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
-        # get attack starting points
-        image_adv = attack.generate(image, label)
+        outs = test_classifier(image)
+        is_corr = outs["pred"] == label
+
+        batch_indices = tf.range(image.shape[0])
+        is_corr = outs['pred'] == label
+        image_adv = tf.identity(image)
+        image_adv = tf.tensor_scatter_nd_update(
+            image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
+            attack.generate(image[is_corr], label[is_corr]))
         assert tf.reduce_all(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0)), "Outside range"
 
-        outs = test_classifier(image)
         outs_adv = test_classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -132,22 +138,34 @@ def main(unused_args):
         test_metrics[f"conf_{FLAGS.norm}"](outs_adv["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_adv)
-        is_adv = outs_adv["pred"] != label
+        r = image - image_adv
+        lp = lp_metrics[FLAGS.norm](r)
+        l0 = l0_metric(r)
+        l0p = l0_pixel_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics["l0"](l0)
+        test_metrics["l0p"](l0p)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
+        # exclude incorrectly classified
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
-        test_metrics[f"{FLAGS.norm}"](lp)
-        # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
+        test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(test_ds, 1):
@@ -158,15 +176,6 @@ def main(unused_args):
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     f"epoch_{FLAGS.norm}-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -181,11 +190,6 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":
@@ -197,5 +201,5 @@ if __name__ == "__main__":
     assert args.attack in lp_attacks[args.norm]
     import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack],
                                       "attack_",
-                                      import_klass_annotations_as_flags=True)
+                                      include_kwargs_with_defaults=True)
     absl.app.run(main)
