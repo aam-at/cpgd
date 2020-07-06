@@ -15,10 +15,12 @@ from cleverhans.model import Model
 
 from config import test_thresholds
 from data import load_cifar10
+from lib.tf_utils import (l0_metric, l0_pixel_metric, l1_metric, l2_metric,
+                          li_metric)
 from lib.utils import (batch_iterator, import_func_annotations_as_flags,
-                       l1_metric, l2_metric, log_metrics,
-                       register_experiment_flags, setup_experiment)
-from models import MadryCNN
+                       log_metrics, register_experiment_flags,
+                       setup_experiment)
+from models import MadryCNNTf
 from utils import load_madry
 
 tf.compat.v1.disable_v2_behavior()
@@ -74,7 +76,7 @@ def main(unused_args):
     # models
     num_classes = 10
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
-    classifier = MadryCNN(model_type=model_type)
+    classifier = MadryCNNTf(model_type=model_type)
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
@@ -96,7 +98,9 @@ def main(unused_args):
 
     def test_step(image, image_adv, label):
         outs = test_classifier(image)
+        is_corr = tf.equal(outs['pred'], label)
         outs_adv = test_classifier(image_adv)
+        is_adv = tf.not_equal(outs_adv["pred"], label)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -112,16 +116,31 @@ def main(unused_args):
         results[f"conf_{FLAGS.norm}"] = outs_adv["conf"]
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_adv)
-        is_adv = tf.not_equal(outs_adv["pred"], label)
+        r = image - image_adv
+        lp = lp_metrics[FLAGS.norm](r)
+        l0 = l0_metric(r)
+        l0p = l0_pixel_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        results["l0"] = l0
+        test_metrics["l0p"](l0p)
+        results["l1"] = l1
+        results["l2"] = l2
+        results["li"] = li
+        # exclude incorrectly classified
+        results["l0_corr"] = l0[tf.logical_and(is_corr, is_adv)]
+        test_metrics["l0p_corr"](l0p[torch.logical_and(is_corr, is_adv)])
+        results["l1_corr"] = l1[tf.logical_and(is_corr, is_adv)]
+        results["l2_corr"] = l2[tf.logical_and(is_corr, is_adv)]
+        results["li_corr"] = li[tf.logical_and(is_corr, is_adv)]
+
+        # robust accuracy at threshold
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             results[f"acc_{FLAGS.norm}_%.2f" % threshold] = ~is_adv_at_th
-        results[f"{FLAGS.norm}"] = lp
-        # exclude incorrectly classified
-        is_corr = tf.equal(outs["pred"], label)
-        results[f"{FLAGS.norm}_corr"] = lp[tf.logical_and(is_corr, is_adv)]
         results["success_rate"] = is_adv[is_corr]
+
         return results
 
     # reset metrics
