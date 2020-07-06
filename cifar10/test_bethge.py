@@ -124,7 +124,7 @@ def main(unused_args):
         if not tf.reduce_all(is_adv):
             x0 = tf.where(
                 tf.reshape(
-                    tf.argmax(fclassifier(x0), axis=-1) != label,
+                    tf.argmax(fclassifier(x0), axis=-1) != label_s,
                     (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image_s,
                                                  label_s))
         image_adv = tf.identity(image)
