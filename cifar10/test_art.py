@@ -152,6 +152,7 @@ def main(unused_args):
         test_metrics["li"](li)
         # exclude incorrectly classified
         test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0p_corr"](l0p[tf.logical_and(is_corr, is_adv)])
         test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
         test_metrics["l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
         test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])

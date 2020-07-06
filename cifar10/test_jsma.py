@@ -11,9 +11,9 @@ import tensorflow as tf
 from absl import flags
 
 from config import test_thresholds
-from data import load_mnist
-from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric,
-                          make_input_pipeline, random_targets)
+from data import load_cifar10
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, make_input_pipeline, random_targets)
 from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
 from models import MadryCNNTf
@@ -53,7 +53,7 @@ def main(unused_args):
     # models
     num_classes = 10
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
-    classifier = MadryCNN(model_type=model_type)
+    classifier = MadryCNNTf(model_type=model_type)
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
@@ -126,7 +126,6 @@ def main(unused_args):
                     gradients = tf.expand_dims(gradients, axis=1).numpy()
 
                 return gradients
-
 
         art_model = PatchedTensorflowClassifier(model=art_classifier,
                                                 input_shape=X_shape[1:],
@@ -225,8 +224,10 @@ def main(unused_args):
 
         # robust accuracy at threshold
         for threshold in test_thresholds["l0"]:
-            is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
+            is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
             test_metrics["acc_l0_%.2f" % threshold](~is_adv_at_th)
+            is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
+            test_metrics["acc_l0p_%.2f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
