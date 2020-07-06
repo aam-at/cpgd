@@ -124,13 +124,13 @@ def main(unused_args):
         l2 = l2_metric(r)
         li = li_metric(r)
         results["l0"] = l0
-        test_metrics["l0p"](l0p)
+        results["l0p"] = l0p
         results["l1"] = l1
         results["l2"] = l2
         results["li"] = li
         # exclude incorrectly classified
         results["l0_corr"] = l0[tf.logical_and(is_corr, is_adv)]
-        test_metrics["l0p_corr"](l0p[torch.logical_and(is_corr, is_adv)])
+        results["l0p_corr"] = l0p[tf.logical_and(is_corr, is_adv)]
         results["l1_corr"] = l1[tf.logical_and(is_corr, is_adv)]
         results["l2_corr"] = l2[tf.logical_and(is_corr, is_adv)]
         results["li_corr"] = li[tf.logical_and(is_corr, is_adv)]

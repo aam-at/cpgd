@@ -774,19 +774,19 @@ def jsma_config(seed=123):
         print(generate_test_optimizer('test_jsma', **attack_args))
 
 
-def one_pixel_attack_config(runs=1, master_seed=1):
+def one_pixel_attack_config(seed=123):
     num_images = 1000
     batch_size = 100
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []
     for model, iters, es in itertools.product(models, [100], [1]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_one_pixel/test_{type}"
+        working_dir = f"../results_cifar10/test_{type}/{norm}/one_pixel"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,

@@ -86,7 +86,7 @@ def main(unused_args):
                model_type=model_type)
 
     lp_metrics = {
-        "l0": l0_pixel_metric,
+        "l0": l0_metric,
         "l1": l1_metric,
         "l2": l2_metric,
         "li": li_metric,
@@ -180,6 +180,9 @@ def main(unused_args):
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
+            if FLAGS.norm == "l0":
+                is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
+                test_metrics[f"acc_l0p_%.2f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
