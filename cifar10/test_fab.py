@@ -15,8 +15,8 @@ import lib
 from config import test_thresholds
 from data import load_cifar10
 from lib.fab import FABAttack, FABPtModelAdapter
-from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
-                          li_metric, to_torch)
+from lib.pt_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric, to_torch)
 from lib.tf_utils import limit_gpu_growth, make_input_pipeline
 from lib.utils import (import_klass_annotations_as_flags, log_metrics,
                        register_experiment_flags, reset_metrics,
@@ -64,7 +64,6 @@ def main(unused_args):
     classifier.eval()
 
     lp_metrics = {
-        "l0": l0_metric,
         "l1": l1_metric,
         "l2": l2_metric,
         "li": li_metric
@@ -113,15 +112,18 @@ def main(unused_args):
         r = r.view(r.shape[0], -1)
         lp = lp_metrics[FLAGS.attack_norm](r)
         l0 = l0_metric(r)
+        l0p = l0_pixel_metric(r)
         l1 = l1_metric(r)
         l2 = l2_metric(r)
         li = li_metric(r)
         test_metrics["l0"](l0)
+        test_metrics["l0p"](l0p)
         test_metrics["l1"](l1)
         test_metrics["l2"](l2)
         test_metrics["li"](li)
         # exclude incorrectly classified
         test_metrics["l0_corr"](l0[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l0p_corr"](l0p[torch.logical_and(is_corr, is_adv)])
         test_metrics["l1_corr"](l1[torch.logical_and(is_corr, is_adv)])
         test_metrics["l2_corr"](l2[torch.logical_and(is_corr, is_adv)])
         test_metrics["li_corr"](li[torch.logical_and(is_corr, is_adv)])
