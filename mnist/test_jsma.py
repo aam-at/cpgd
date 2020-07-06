@@ -211,8 +211,10 @@ def main(unused_args):
         l0 = l0_metric(r)
         l1 = l1_metric(r)
         test_metrics["l0"](l0)
+        test_metrics["l1"](l1)
         # exclude incorrectly classified
         test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
 
         # robust accuracy at threshold
         for threshold in test_thresholds["l0"]:

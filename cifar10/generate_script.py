@@ -742,13 +742,13 @@ def art_config(norm, attack, seed=123):
         print(generate_test_optimizer('test_art', **attack_args))
 
 
-def jsma_config(runs=1, master_seed=1):
+def jsma_config(seed=123):
     num_images = 1000
-    batch_size = 100
+    batch_size = 250
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []
