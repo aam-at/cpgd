@@ -16,11 +16,12 @@ from cleverhans.model import Model
 
 from config import test_thresholds
 from data import load_cifar10
-from lib.utils import (MetricsDictionary, import_func_annotations_as_flags,
-                       l1_metric, l2_metric, li_metric, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
-from models import MadryCNN
+from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
+                          make_input_pipeline)
+from lib.utils import (import_func_annotations_as_flags, log_metrics,
+                       register_experiment_flags, reset_metrics,
+                       setup_experiment)
+from models import MadryCNNTf
 from utils import load_madry
 
 # general experiment parameters
@@ -74,7 +75,7 @@ def main(unused_args):
     # models
     num_classes = 10
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
-    classifier = MadryCNN(model_type=model_type)
+    classifier = MadryCNNTf(model_type=model_type)
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
@@ -136,12 +137,14 @@ def main(unused_args):
                              clip_max=1.0,
                              rand_init=True,
                              **attack_kwargs))
+        # sanity check
         assert_op = tf.Assert(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0), [image_adv])
         with tf.control_dependencies([assert_op]):
             outs_adv = test_classifier(image_adv)
+            is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -156,25 +159,23 @@ def main(unused_args):
         test_metrics["conf_adv"](outs_adv["conf"])
 
         # measure norm
-        # NOTE: cleverhans lp-norm projection may result in numerical error
-        # add small constant eps = 1e-6
         lp = lp_metrics[FLAGS.norm](image - image_adv)
-        is_adv = outs_adv["pred"] != label
-        for threshold in test_thresholds[f"{FLAGS.norm}"]:
-            is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
         test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
-        is_corr = outs["pred"] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
+        # NOTE: cleverhans lp-norm projection may result in numerical error
+        # add small constant eps = 1e-6
+        for threshold in test_thresholds[f"{FLAGS.norm}"]:
+            is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
+            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(test_ds, 1):
@@ -185,15 +186,6 @@ def main(unused_args):
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_{FLAGS.norm}-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -208,11 +200,6 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":
