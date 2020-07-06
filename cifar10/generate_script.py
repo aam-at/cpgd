@@ -457,7 +457,7 @@ def fab_config(norm, runs=1, master_seed=1):
 
         # params
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_fab/test_{type}_{norm}"
+        working_dir = f"../results_cifar10/test_{type}/{norm}/fab"
         attack_args.update(
         {
             'attack_n_iter': n_iter,
