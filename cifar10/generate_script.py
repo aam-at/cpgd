@@ -651,7 +651,7 @@ def bethge_config(norm, runs=1, master_seed=1):
     existing_names = []
     for model, lr, num_decay in itertools.product(models, [1.0, 0.1, 0.01], [20, 100]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_bethge/test_{type}_{norm}"
+        working_dir = f"../results_cifar10/test_{type}/{norm}/bethge"
         attack_args.update({
             'norm': norm,
             'load_from': model,
