@@ -54,7 +54,7 @@ def main(unused_args):
     # models
     num_classes = 10
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
-    classifier = MadryCNNPt(wrap_outputs=False)
+    classifier = MadryCNNPt(model_type=model_type, wrap_outputs=False)
 
     # load classifier
     load_madry_pt(FLAGS.load_from,

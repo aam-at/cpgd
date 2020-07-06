@@ -1,21 +1,17 @@
 import tensorflow as tf
 import torch
-from absl import flags
 from torch import nn
 from torch.nn import functional as F
 
-from lib.utils import add_default_end_points, change_default_args
 
-FLAGS = flags.FLAGS
-
-
-class MadryCNN(tf.keras.Model):
+class MadryCNNTf(tf.keras.Model):
     # Model trained using adversarial training with projected gradient attack
     def __init__(self, model_type='plain', name="", **kwargs):
         self.model_type = model_type
-        super(MadryCNN, self).__init__(name=name, **kwargs)
+        super(MadryCNNTf, self).__init__(name=name, **kwargs)
 
     def build(self, inputs_shape):
+        from lib.tf_utils import change_default_args
         # configure inputs
         x_shape = inputs_shape
         x = tf.keras.layers.Input(shape=x_shape[1:], name='x')
@@ -46,9 +42,10 @@ class MadryCNN(tf.keras.Model):
             z = act()(h)
             logits = dense(10)(z)
         self.model = tf.keras.Model(inputs=x, outputs=[z, logits])
-        super(MadryCNN, self).build(inputs_shape)
+        super(MadryCNNTf, self).build(inputs_shape)
 
     def call(self, inputs, training=True):
+        from lib.tf_utils import add_default_end_points
         if self.model_type == 'l2':
             inputs = inputs - tf.ones_like(inputs) * 0.5
         h, logits = self.model(inputs, training=training)
@@ -57,7 +54,7 @@ class MadryCNN(tf.keras.Model):
 
 class MadryCNNPt(torch.nn.Module):
     # Model trained using adversarial training with projected gradient attack
-    def __init__(self, model_type='plain'):
+    def __init__(self, model_type='plain', wrap_outputs=True):
         super(MadryCNNPt, self).__init__()
         self.model_type = model_type
         use_bias = model_type == 'plain'
@@ -73,8 +70,10 @@ class MadryCNNPt(torch.nn.Module):
         self.fc2 = nn.Linear(1200, 10)
         # padding for tensorflow "SAME" behavior
         self.pad = nn.ConstantPad2d((0, 1, 0, 1), 0)
+        self.wrap_outputs = wrap_outputs
 
-    def forward(self, x):
+    def forward(self, x, wrap_outputs=None):
+        from lib.pt_utils import add_default_end_points
         if self.model_type == 'l2':
             xi = torch.ones(x.shape) * 0.5
             if x.is_cuda:
@@ -94,4 +93,8 @@ class MadryCNNPt(torch.nn.Module):
         o = o.permute(0, 2, 3, 1)
         o = o.reshape(x.shape[0], -1)
         o = F.relu(self.fc1(o))
-        return self.fc2(o)
+        logits = self.fc2(o)
+        if wrap_outputs:
+            return add_default_end_points({'logits': logits})
+        else:
+            return logits
