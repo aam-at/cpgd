@@ -10,17 +10,25 @@
   import glob
 
   from config import test_model_thresholds
-  from lib.parse_logs import (output_org_results, parse_output_logs,
-                              parse_test_log)
+  from lib.parse_logs import (parse_log, org_table)
 
 
-  test_params = ['batch_size', 'num_batches']
-  dirs = glob.glob(f"../results_final/cifar10*_{attack}")
-  thresholds = np.array(test_model_thresholds[type][norm])
-  thresholds = np.round(thresholds, 3)
-  topk = None
+  model_thresholds = np.array(test_model_thresholds[type][norm])
 
-  df = parse_output_logs(dirs, norm, type, export_test_params=test_params)
+  dirs = glob.glob(f"../results_cifar10/test_{type}/{norm}/{attack}/*")
+  df_logs = []
+  for load_dir in dirs:
+      df_logs.append(parse_log(load_dir, exclude=["nll_loss", "conf"],
+                               export_test_params=["num_batches", "batch_size"]))
+  df = pd.concat(df_logs, ignore_index=True)
+
+  if len(model_thresholds) > 0:
+      for col in df.columns:
+          if col.startswith(f"acc_{norm}_"):
+              threshold = float(col.replace(f"acc_{norm}_", ""))
+              if threshold not in model_thresholds:
+                  df = df.drop(columns=[col])
+
   for col in df.columns:
       if col.startswith(f"acc_{norm}_"):
           df[col] = df[col] * 100
@@ -28,59 +36,23 @@
 
 #+NAME: output_results
 #+BEGIN_SRC python :noweb yes
-  df_org = output_org_results(df,
-                              norm,
-                              allowed_thresholds=thresholds,
-                              topk=topk)
-#+END_SRC
-
-#+NAME: output_dir_results
-#+BEGIN_SRC python :noweb yes
-  df_sublist = []
-  for p in dirs:
-      path = Path(p) / f"test_{type}" / "*"
-      df = parse_test_log(path,
-                          exclude=["nll_loss", "conf"],
-                          export_test_params=test_params)
-      df_sublist.append(df)
-  df = pd.concat(df_sublist, ignore_index=True)
-  df = df.sort_values(norm, ascending=True)
-  df_org = output_org_results(df, norm, allowed_thresholds=thresholds, topk=None)
-#+END_SRC
-
-* All
-#+BEGIN_SRC python :noweb yes :results value :return df_org
-  <<init_block>>
-  logs = []
-  for norm, type in itertools.product(['l0', 'l1', 'l2', 'li'], ['plain', 'linf', 'l2']):
-      if norm != 'l1':
-          continue
-      df = parse_output_logs(["./results/cifar10_6"],
-                          norm,
-                          type,
-                          allowed_thresholds=None)
-      df = df[getattr(df, f"acc_{norm}") == 0]
-      df = df[getattr(df, f"conf_{norm}") > 0]
-      df = df[df.name.str.contains("100_10k")]
-      df['lp'] = df[norm]
-      logs.append(df)
-  df_org = output_org_results(logs, 'lp', summarize=True)
+  df_org = org_table(df, decimals=3)
 #+END_SRC
 
 * Init
 #+NAME: init_block_random
 #+BEGIN_SRC python :noweb yes
-  <<init_block>>
+  <<parse_results>>
   def parse_output_logs(paths, norm, type):
       if not isinstance(paths, (list, tuple)):
           paths = list(paths)
       df_sublist = []
       for p in paths:
           p = Path(p)
-          df = parse_test_optimizer_log(p / f"test_random_{type}_{norm}" / "cifar10")
+          df = parse_test_optimizer_log(p / f"test_random_{type}_{norm}" / "mnist")
           df_sublist.append(df)
       df = pd.concat(df_sublist, ignore_index=True)
-      df = df.sort_values('entropy_hat', ascending=False)
+      df = df.sort_values('entropy', ascending=False)
       return df
 #+END_SRC
 
@@ -133,27 +105,18 @@
 *** Plain
 #+BEGIN_SRC python :noweb yes :var attack="daa" :var type="plain" :var norm="li" :results value :return df_org
   <<parse_results>>
-  df = df[~df.name.str.contains('epss4_')]
-  df = df[~df.name.str.contains('epss30_')]
-  df = df[df.name.str.contains('N50_')]
   <<output_results>>
 #+END_SRC
 
 *** Linf
 #+BEGIN_SRC python :noweb yes :var attack="daa" :var type="linf" :var norm="li" :results value :return df_org
   <<parse_results>>
-  df = df[~df.name.str.contains('epss4_')]
-  df = df[~df.name.str.contains('epss30_')]
-  df = df[df.name.str.contains('N50_')]
   <<output_results>>
 #+END_SRC
 
 *** L2
 #+BEGIN_SRC python :noweb yes :var attack="daa" :var type="l2" :var norm="li" :results value :return df_org
   <<parse_results>>
-  df = df[~df.name.str.contains('epss4_')]
-  df = df[~df.name.str.contains('epss30_')]
-  df = df[df.name.str.contains('N50_')]
   <<output_results>>
 #+END_SRC
 
@@ -161,27 +124,18 @@
 *** Plain
 #+BEGIN_SRC python :noweb yes :var attack="pgd" :var type="plain" :var norm="li" :results value :return df_org
   <<parse_results>>
-  df = df[~df.name.str.contains('epss4_')]
-  df = df[~df.name.str.contains('epss30_')]
-  df = df[df.name.str.contains('N100_')]
   <<output_results>>
 #+END_SRC
 
 *** Linf
 #+BEGIN_SRC python :noweb yes :var attack="pgd" :var type="linf" :var norm="li" :results value :return df_org
   <<parse_results>>
-  df = df[~df.name.str.contains('epss4_')]
-  df = df[~df.name.str.contains('epss30_')]
-  df = df[df.name.str.contains('N100_')]
   <<output_results>>
 #+END_SRC
 
 *** L2
 #+BEGIN_SRC python :noweb yes :var attack="pgd" :var type="l2" :var norm="li" :results value :return df_org
   <<parse_results>>
-  df = df[~df.name.str.contains('epss4_')]
-  df = df[~df.name.str.contains('epss30_')]
-  df = df[df.name.str.contains('N1_')]
   <<output_results>>
 #+END_SRC
 
@@ -191,17 +145,6 @@
   <<parse_results>>
   <<output_results>>
 #+END_SRC
-
-RESULTS:
-|-------------------------------------------+-------+--------+----------+-------------+-------------+-------------+-------------+-------------+----------+----------+--------------|
-| name                                      |   acc | acc_li |  conf_li | acc_li_0.03 | acc_li_0.05 | acc_li_0.07 | acc_li_0.09 | acc_li_0.11 |       li |  li_corr | success_rate |
-|-------------------------------------------+-------+--------+----------+-------------+-------------+-------------+-------------+-------------+----------+----------+--------------|
-| mnist_bethge_plain_li_n1000_lr1.0_nd20_0  | 0.987 |    0.0 |  0.50457 |        92.0 |        77.4 |        45.6 |        18.3 |         3.7 | 0.067068 | 0.067951 |          1.0 |
-| mnist_bethge_plain_li_n1000_lr1.0_nd100_0 | 0.987 |    0.0 | 0.504566 |        92.0 |        77.4 |        45.4 |        18.5 |         4.0 |  0.06709 | 0.067973 |          1.0 |
-| mnist_bethge_plain_li_n1000_lr0.1_nd100_0 | 0.987 |  0.012 |  0.50389 |        92.0 |        78.5 |        47.6 |        20.2 |         5.6 | 0.067805 | 0.068731 |     0.987842 |
-| mnist_bethge_plain_li_n1000_lr0.1_nd20_0  | 0.987 |   0.15 | 0.504036 |        92.7 |        80.9 |        54.8 |        31.6 |        19.2 | 0.067849 | 0.068709 |     0.848024 |
-| mnist_bethge_plain_li_n1000_lr0.01_nd20_0 | 0.987 |  0.159 | 0.504035 |        92.6 |        81.6 |        56.7 |        34.5 |        20.8 | 0.069301 | 0.069799 |     0.838906 |
-|-------------------------------------------+-------+--------+----------+-------------+-------------+-------------+-------------+-------------+----------+----------+--------------|
 
 *** Linf
 #+BEGIN_SRC python :noweb yes :var attack="bethge" :var type="linf" :var norm="li" :results value :return df_org
@@ -234,21 +177,21 @@ RESULTS:
   <<output_results>>
 #+END_SRC
 
-** Cpgd attack
+** PDPGD attack
 *** Plain
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var type="plain" :var norm="li" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_li" :var type="plain" :var norm="li" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** Linf
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var type="linf" :var norm="li" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_li" :var type="linf" :var norm="li" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var type="l2" :var norm="li" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_li" :var type="l2" :var norm="li" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
@@ -315,7 +258,6 @@ RESULTS:
 *** Plain
 #+BEGIN_SRC python :noweb yes :var attack="pgd" :var type="plain" :var norm="l2" :results value :return df_org
   <<parse_results>>
-  df = df[df.name.str.contains('N100')]
   <<output_results>>
 #+END_SRC
 
@@ -369,21 +311,21 @@ RESULTS:
   <<output_results>>
 #+END_SRC
 
-** Our attack
+** PDGD attack
 *** Plain
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var type="plain" :var norm="l2" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="out_l2" :var type="plain" :var norm="l2" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** Linf
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var type="linf" :var norm="l2" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_l2" :var type="linf" :var norm="l2" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var type="l2" :var norm="l2" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_l2" :var type="l2" :var norm="l2" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
@@ -431,27 +373,18 @@ RESULTS:
 *** Plain
 #+BEGIN_SRC python :noweb yes :var attack="pgd" :var norm="l1" :var type="plain" :results value :return df_org
   <<parse_results>>
-  df = df[~df.name.str.contains('epss4_')]
-  df = df[~df.name.str.contains('epss30_')]
-  df = df[df.name.str.contains('N100_')]
   <<output_results>>
 #+END_SRC
 
 *** Linf
 #+BEGIN_SRC python :noweb yes :var attack="pgd" :var norm="l1" :var type="linf" :results value :return df_org
   <<parse_results>>
-  df = df[~df.name.str.contains('epss4_')]
-  df = df[~df.name.str.contains('epss30_')]
-  df = df[df.name.str.contains('N100_')]
   <<output_results>>
 #+END_SRC
 
 *** L2
 #+BEGIN_SRC python :noweb yes :var attack="pgd" :var norm="l1" :var type="l2" :results value :return df_org
   <<parse_results>>
-  df = df[~df.name.str.contains('epss4_')]
-  df = df[~df.name.str.contains('epss30_')]
-  df = df[df.name.str.contains('N100_')]
   <<output_results>>
 #+END_SRC
 
@@ -493,21 +426,21 @@ RESULTS:
   <<output_results>>
 #+END_SRC
 
-** Our attack
+** PDPGD attack
 *** Plain
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var norm="l1" :var type="plain" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_l1" :var norm="l1" :var type="plain" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** Linf
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var norm="l1" :var type="linf" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_l1" :var norm="l1" :var type="linf" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var norm="l1" :var type="l2" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_l1" :var norm="l1" :var type="l2" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
@@ -570,21 +503,21 @@ RESULTS:
   <<output_results>>
 #+END_SRC
 
-** Our attack
+** PDPGD attack
 *** Plain
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var norm="l0" :var type="plain" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_l0" :var norm="l0" :var type="plain" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** Linf
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var norm="l0" :var type="linf" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_l0" :var norm="l0" :var type="linf" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :noweb yes :var attack="cpgd" :var norm="l0" :var type="l2" :results value :return df_org
+#+BEGIN_SRC python :async :noweb yes :var attack="our_l0" :var norm="l0" :var type="l2" :results value :return df_org
   <<parse_results>>
   <<output_results>>
 #+END_SRC
