@@ -26,7 +26,7 @@
       for col in df.columns:
           if col.startswith(f"acc_{norm}_"):
               threshold = float(col.replace(f"acc_{norm}_", ""))
-              if threshold not in model_thresholds:
+              if threshold not in np.round(model_thresholds, 3):
                   df = df.drop(columns=[col])
 
   for col in df.columns:
@@ -36,7 +36,7 @@
 
 #+NAME: output_results
 #+BEGIN_SRC python :noweb yes
-  df_org = org_table(df, decimals=3)
+  df_org = org_table(df, decimals=4)
 #+END_SRC
 
 * Init
