@@ -137,7 +137,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = torch.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

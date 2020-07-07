@@ -145,7 +145,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds["li"]:
             is_adv_at_th = tf.logical_and(li <= threshold + 5e-6, is_adv)
-            test_metrics["acc_li_%.2f" % threshold](~is_adv_at_th)
+            test_metrics["acc_li_%.3f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
     # reset metrics
