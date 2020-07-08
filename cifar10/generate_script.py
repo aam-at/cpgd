@@ -755,7 +755,7 @@ def jsma_config(seed=123):
             models, ["all", "random", "second"],
             [1.0, 0.1], ["cleverhans", "art"]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/cifar10_jsma/test_{type}"
+        working_dir = f"../results_cifar10/test_{type}/{norm}/jsma"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
