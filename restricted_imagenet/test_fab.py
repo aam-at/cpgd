@@ -4,25 +4,24 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 
 import absl
-import numpy as np
-import tensorflow as tf
 import torch
+import torch.nn.functional as F
 from absl import flags
 
 import lib
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.fab import FABAttack, FABModelAdapter
-from lib.utils import (MetricsDictionary, import_klass_annotations_as_flags,
-                       l0_metric, l1_metric, l2_metric, li_metric, l0_pixel_metric,
-                       limit_gpu_growth, log_metrics, make_input_pipeline,
-                       random_targets, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
-from models import TsiprasCNN
-from utils import load_tsipras
+from lib.fab import FABAttack, FABPtModelAdapter
+from lib.pt_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric, to_torch)
+from lib.tf_utils import limit_gpu_growth
+from lib.utils import (import_klass_annotations_as_flags, log_metrics,
+                       register_experiment_flags, reset_metrics,
+                       setup_experiment)
+from models import TsiprasCNNPt
+from utils import load_tsipras_pt
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/imagenet/test_fab")
@@ -56,51 +55,52 @@ def main(unused_args):
     val_ds.reset_state()
 
     # models
-    num_classes = len(TsiprasCNN.LABEL_RANGES)
-    classifier = TsiprasCNN()
-
-    def test_classifier(x, **kwargs):
-        return classifier(x, training=False, **kwargs)
+    num_classes = len(TsiprasCNNPt.LABEL_RANGES)
+    classifier = TsiprasCNNPt(wrap_outputs=False)
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
-    y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
-    classifier(tf.zeros(X_shape))
-    load_tsipras(FLAGS.load_from, classifier.variables)
+    all_params = dict(classifier.named_parameters())
+    all_params.update(dict(classifier.named_buffers()))
+    load_tsipras_pt(FLAGS.load_from, all_params)
+    classifier.cuda()
+    classifier.eval()
 
-    lp_metrics = {"l1": l1_metric, "l2": l2_metric, "li": li_metric}
+    lp_metrics = {
+        "l1": l1_metric,
+        "l2": l2_metric,
+        "li": li_metric
+    }
 
     # attacks
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-    fab = FABAttack(
-        model=FABModelAdapter(lambda x: test_classifier(x)['logits']),
-        seed=FLAGS.seed,
-        **attack_kwargs)
-
-    nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
-    acc_fn = tf.keras.metrics.sparse_categorical_accuracy
+    fab = FABAttack(model=FABPtModelAdapter(lambda x: classifier(x)['logits'],
+                                            device=classifier.device),
+                    seed=FLAGS.seed,
+                    verbose=True,
+                    **attack_kwargs)
 
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
-        outs = test_classifier(image)
+        outs = classifier(image, wrap_outputs=True)
         is_corr = outs['pred'] == label
 
-        # tensorflow model + pytorch attack
-        image_pt = torch.from_numpy(image.numpy()).cuda()
-        label_pt = torch.from_numpy(label.numpy()).cuda()
-        image_adv_pt = fab.perturb(image_pt, label_pt)
-        image_adv = image_adv_pt.cpu().numpy()
-        outs_adv = test_classifier(image_adv)
+        # fab attack
+        image_s = image[is_corr]
+        label_s = label[is_corr]
+        image_adv = image.clone()
+        image_adv[is_corr] = fab.perturb(image_s, label_s)
+
+        outs_adv = classifier(image_adv, wrap_outputs=True)
         is_adv = outs_adv["pred"] != label
 
         # metrics
-        nll_loss = nll_loss_fn(label, outs["logits"])
-        acc = acc_fn(label, outs["logits"])
-        acc_adv = acc_fn(label, outs_adv["logits"])
+        nll_loss = F.cross_entropy(outs['logits'], label, reduction='none')
+        acc = outs["pred"] == label
+        acc_adv = outs_adv["pred"] == label
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
@@ -111,27 +111,30 @@ def main(unused_args):
 
         # measure norm
         r = image - image_adv
+        rc = r.view(r.shape[0], r.shape[1], -1)
+        r = r.view(r.shape[0], -1)
+        lp = lp_metrics[FLAGS.attack_norm](r)
         l0 = l0_metric(r)
-        l0p = l0_pixel_metric(r)
+        l0p = l0_pixel_metric(rc, channel_dim=1)
         l1 = l1_metric(r)
         l2 = l2_metric(r)
         li = li_metric(r)
-        test_metrics[f"l0"](l0)
-        test_metrics[f"l0p"](l0p)
-        test_metrics[f"l1"](l1)
-        test_metrics[f"l2"](l2)
-        test_metrics[f"li"](li)
+        test_metrics["l0"](l0)
+        test_metrics["l0p"](l0p)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
         # exclude incorrectly classified
-        test_metrics[f"l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
-        test_metrics[f"l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
-        test_metrics[f"l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
-        test_metrics[f"li_corr"](li[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0_corr"](l0[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l0p_corr"](l0p[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[torch.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[torch.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[torch.logical_and(is_corr, is_adv)])
 
         # robust accuracy at threshold
-        lp = lp_metrics[FLAGS.attack_norm](image - image_adv)
         for threshold in test_thresholds[f"{FLAGS.attack_norm}"]:
-            is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.attack_norm}_%.4f" %
+            is_adv_at_th = torch.logical_and(lp <= threshold, is_adv)
+            test_metrics[f"acc_{FLAGS.attack_norm}_%.3f" %
                          threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
@@ -142,7 +145,7 @@ def main(unused_args):
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(val_ds, 1):
-            X_lp = test_step(image, label)
+            X_lp = test_step(*to_torch(image, label))
             log_metrics(
                 test_metrics,
                 "Batch results [{}, {:.2f}s]:".format(batch_index,

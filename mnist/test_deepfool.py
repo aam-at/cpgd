@@ -59,15 +59,15 @@ def main(unused_args):
     num_classes = 10
     classifier = MadryCNNPt(wrap_outputs=False)
 
-    lp_metrics = {
-        "l2": l2_metric,
-        "li": li_metric,
-    }
-
     # load classifier
     load_madry_pt(FLAGS.load_from, classifier.parameters())
     classifier.cuda()
     classifier.eval()
+
+    lp_metrics = {
+        "l2": l2_metric,
+        "li": li_metric,
+    }
 
     # attacks
     attack_kwargs = {
