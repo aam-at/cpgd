@@ -508,7 +508,7 @@ def foolbox_config(norm, attack, seed=123):
         attack_grid_args.update({
             'attack_steps': [10000],
             'attack_stepsize': [0.01],
-            'attack_initial_const': [0.001],
+            'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_abort_early': [False],
         })
@@ -524,7 +524,7 @@ def foolbox_config(norm, attack, seed=123):
         # default params
         attack_grid_args.update({
             'attack_steps': [1000],
-            'attack_initial_const': [0.001],
+            'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
             'attack_regularization': [0.05],
@@ -704,7 +704,7 @@ def art_config(norm, attack, seed=123):
         # default params
         attack_grid_args.update({
             'attack_max_iter': [10000],
-            'attack_initial_const': [1.0, 0.001],
+            'attack_initial_const': [1.0, 0.01],
             'attack_binary_search_steps': [9],
         })
         name_fn = lambda : f"cifar10_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
@@ -712,7 +712,7 @@ def art_config(norm, attack, seed=123):
         # default params
         attack_grid_args.update({
             'attack_max_iter': [1000],
-            'attack_initial_const': [1.0, 0.001],
+            'attack_initial_const': [1.0, 0.01],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
             'attack_beta': [0.05],
