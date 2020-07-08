@@ -1,3 +1,5 @@
+"""This script can be used to generate test configs for the compared attacks.
+"""
 from __future__ import absolute_import, division, print_function
 
 import ast
