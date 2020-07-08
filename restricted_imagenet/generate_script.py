@@ -314,7 +314,7 @@ def daa_config(seed=123):
     importlib.reload(test_daa)
     import_flags("blob")
 
-    batch_size = 200
+    batch_size = 50
     norm = 'li'
     attack_args = {
         'num_batches': NUM_IMAGES // batch_size,

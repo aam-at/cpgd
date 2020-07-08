@@ -24,7 +24,7 @@ from models import TsiprasCNNPt
 from utils import load_tsipras_pt
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/cifar10/test_sparsefool")
+register_experiment_flags(working_dir="../results/imagenet/test_sparsefool")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 # test parameters
