@@ -9,7 +9,7 @@ class PatchedAverage(ignite.metrics.Average):
     def __call__(self, value):
         """Average metric compatible with tf.metrics.Mean
         """
-        value = value.view(-1, 1)
+        value = value.data.view(-1, 1)
         self.update(value)
 
     def reset_states(self):
