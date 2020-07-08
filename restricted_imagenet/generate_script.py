@@ -271,11 +271,10 @@ def pgd_config(norm, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    num_images = 500
     batch_size = 50
     attack_args = {
         'norm': norm,
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
         'seed': seed
     }
@@ -575,18 +574,17 @@ def jsma_config(seed=123):
         print(generate_test_optimizer('test_jsma', **attack_args))
 
 
-def one_pixel_attack_config(runs=1, master_seed=1):
-    num_images = 500
+def one_pixel_attack_config(seed=123):
     batch_size = 50
     attack_args = {
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []
     for type, iters, es in itertools.product(models.keys(), [100], [1]):
-        working_dir = f"../results/imagenet_one_pixel/test_{type}"
+        working_dir = f"../results_imagenet/test_{type}/{norm}/one_pixel"
         attack_args.update({
             'load_from': models[type],
             'working_dir': working_dir,
