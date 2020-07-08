@@ -493,7 +493,7 @@ def deepfool_config(norm, seed=123):
 
     assert norm in ['l2', 'li']
     num_images = 1000
-    batch_size = 100
+    batch_size = 50
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
@@ -510,13 +510,47 @@ def deepfool_config(norm, seed=123):
             'attack_overshoot': 0.02,
             'attack_max_iter': 50,
         })
-        name = f"cifar10_deepfool_{type}_{norm}_"
+        name = f"imagenet_deepfool_{type}_{norm}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
         print(generate_test_optimizer('test_deepfool', **attack_args))
+
+
+def sparsefool_config(seed=123):
+    import test_sparsefool
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_sparsefool)
+
+    norm = 'l1'
+    num_images = 1000
+    batch_size = 50
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': seed
+    }
+
+    existing_names = []
+    for type in models.keys():
+        working_dir = f"../results_imagenet/test_{type}/{norm}/sparsefool"
+        attack_args.update({
+            'load_from': models[type],
+            'working_dir': working_dir,
+            'attack_epsilon': 0.02,
+            'attack_max_iter': 20,
+            'attack_lambda_': lambda_,
+        })
+        name = f"imagenet_sparsefool_{type}_{norm}_l{lambda_}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_sparsefool', **attack_args))
 
 
 def jsma_config(runs=1, master_seed=1):
