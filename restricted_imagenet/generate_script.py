@@ -545,22 +545,19 @@ def sparsefool_config(seed=123):
         print(generate_test_optimizer('test_sparsefool', **attack_args))
 
 
-def jsma_config(runs=1, master_seed=1):
-    num_images = 500
-    batch_size = 100
+def jsma_config(seed=123):
+    batch_size = 50
     attack_args = {
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []
     for type, targets, theta, lib in itertools.product(
             models.keys(), ["all", "random", "second"],
             [1.0], ["cleverhans", "art"]):
-        if lib == 'cleverhans':
-            continue
-        working_dir = f"../results/imagenet_jsma/test_{type}"
+        working_dir = f"../results_imagenet/test_{type}/{norm}/jsma"
         attack_args.update({
             'load_from': models[type],
             'working_dir': working_dir,

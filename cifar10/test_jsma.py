@@ -109,7 +109,9 @@ def main(unused_args):
                                                        **kwargs)
                 else:
                     # Apply preprocessing
-                    x_preprocessed, _ = self._apply_preprocessing(x, y=None, fit=False)
+                    x_preprocessed, _ = self._apply_preprocessing(x,
+                                                                  y=None,
+                                                                  fit=False)
                     x_preprocessed_tf = tf.convert_to_tensor(x_preprocessed)
 
                     def grad_targets(x, y_t):
@@ -191,7 +193,8 @@ def main(unused_args):
             image_adv_ = test_jsma_generate(image, label_onehot)
             is_adv_ = test_classifier(image_adv_)['pred'] != label
             l0_ = tf.where(is_adv_, l0_metric(image - image_adv_), np.inf)
-            image_adv = tf.where(tf.reshape(l0_ < bestlp, (-1, 1, 1, 1)), image_adv_, image_adv)
+            image_adv = tf.where(tf.reshape(l0_ < bestlp, (-1, 1, 1, 1)),
+                                 image_adv_, image_adv)
             bestlp = tf.minimum(l0_, bestlp)
 
         outs_adv = test_classifier(image_adv)

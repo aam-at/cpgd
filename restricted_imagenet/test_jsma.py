@@ -13,10 +13,10 @@ from absl import flags
 
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                       log_metrics, make_input_pipeline, random_targets,
-                       register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, make_input_pipeline, random_targets)
+from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
+                       save_images, setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
@@ -100,6 +100,7 @@ def main(unused_args):
             return test_classifier(x)['logits']
 
         class PatchedTensorflowClassifier(TensorFlowV2Classifier):
+
             def class_gradient(self, x, label=None, **kwargs):
                 import tensorflow as tf
 
@@ -197,38 +198,46 @@ def main(unused_args):
                                  image_adv_, image_adv)
             bestlp = tf.minimum(l0_, bestlp)
 
-        outs_l0 = test_classifier(image_adv)
+        outs_adv = test_classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
-        acc_l0 = acc_fn(label, outs_l0["logits"])
+        acc_adv = acc_fn(label, outs_adv["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics["acc_l0"](acc_l0)
-        test_metrics["conf_l0"](outs_l0["conf"])
+        test_metrics["acc_adv"](acc_adv)
+        test_metrics["conf_adv"](outs_adv["conf"])
 
         # measure norm
-        l0 = l0_pixel_metric(image - image_adv)
-        is_adv = outs_l0["pred"] != label
+        r = image - image_adv
+        l0 = l0_metric(r)
+        l0p = l0_pixel_metric(r)
+        l1 = l1_metric(r)
+        test_metrics["l0"](l0)
+        test_metrics["l0p"](l0p)
+        test_metrics["l1"](l1)
+        # exclude incorrectly classified
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0p_corr"](l0p[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
         for threshold in test_thresholds["l0"]:
             is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
             test_metrics["acc_l0_%.2f" % threshold](~is_adv_at_th)
-        test_metrics["l0"](l0)
-        test_metrics["l0_all"](l0_metric(image - image_adv))
-        # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+            is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
+            test_metrics["acc_l0p_%.2f" % threshold](~is_adv_at_th)
+        test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(val_ds, 1):
@@ -239,15 +248,6 @@ def main(unused_args):
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_l0-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -262,11 +262,6 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv",
-                     X_adv=X_lp_all,
-                     y=y_all)
 
 
 if __name__ == "__main__":
