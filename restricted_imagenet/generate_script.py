@@ -24,8 +24,7 @@ models = {
 }
 hostname = subprocess.getoutput('hostname')
 
-FLAGS = flags.FLAGS
-
+NUM_IMAGES = 1000
 
 def generate_test_random(**kwargs):
     return generate_test_optimizer('test_random', **kwargs)
@@ -285,7 +284,7 @@ def pgd_config(norm, seed=123):
     for type in models.keys():
         for nb_iter, nb_restarts, eps, eps_scale in itertools.product(
                 [100], [1, 10], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
-            working_dir = f"../results_imagenet/pgd/test_{type}_{norm}"
+            working_dir = f"../results_imagenet/test_{type}/{norm}/pgd"
             attack_args.update({
                 'load_from': models[type],
                 'working_dir': working_dir,
@@ -310,26 +309,25 @@ def pgd_config(norm, seed=123):
 # fab attacks
 def fab_config(norm, seed=123):
     import test_fab
+    from lib.fab import FABAttack
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_fab)
     import_klass_annotations_as_flags(FABAttack, 'attack_')
 
-    num_images = 500
-    batch_size = 25
+    batch_size = 50
     attack_args = {
         'attack_norm': norm,
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
         'seed': seed
     }
 
     existing_names = []
-    for type, n_restarts in itertools.product(
-            models.keys(), [1, 5] if norm == 'l1' else [1, 10]):
+    for type, n_restarts in itertools.product(models.keys(), [10]):
         # default params for imagenet
         # see page 12: https://openreview.net/pdf?id=HJlzxgBtwH
-        n_iter = 300 if norm == 'l1' else 100
+        n_iter = 100
         alpha_max = 0.05
         eta = 1.3
         beta = 0.9
@@ -340,7 +338,7 @@ def fab_config(norm, seed=123):
         }
 
         # params
-        working_dir = f"../results/imagenet_fab/test_{type}_{norm}"
+        working_dir = f"../results_imagenet/test_{type}/{norm}/fab"
         attack_args.update(
         {
             'attack_n_iter': n_iter,
@@ -492,10 +490,9 @@ def deepfool_config(norm, seed=123):
     importlib.reload(test_deepfool)
 
     assert norm in ['l2', 'li']
-    num_images = 1000
     batch_size = 50
     attack_args = {
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
         'norm': norm,
         'seed': seed
@@ -526,10 +523,9 @@ def sparsefool_config(seed=123):
     importlib.reload(test_sparsefool)
 
     norm = 'l1'
-    num_images = 1000
     batch_size = 50
     attack_args = {
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
         'seed': seed
     }
