@@ -582,6 +582,79 @@ def sparsefool_config(seed=123):
         print(generate_test_optimizer('test_sparsefool', **attack_args))
 
 
+# ibm art attacks
+def art_config(norm, attack, seed=123):
+    import test_art
+    from test_foolbox import import_flags
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_art)
+    import_flags(norm, attack)
+
+    batch_size = 50
+    attack_grid_args = {
+        'num_batches': [NUM_IMAGES // batch_size],
+        'batch_size': [batch_size],
+        'attack_batch_size': [batch_size],
+        'load_from': models,
+        'attack': [attack],
+        'norm': [norm],
+        'seed': [seed]
+    }
+    if attack == 'df':
+        # default params
+        attack_grid_args.update({
+            'attack_max_iter': [100, 1000],
+            'attack_nb_grads': [10],
+            'attack_epsilon': [0.02],
+        })
+        name_fn = lambda: f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_os{attack_args['attack_epsilon']}_"
+    elif attack == 'cw':
+        # default params
+        if norm == "l2":
+            attack_grid_args.update({
+                'attack_max_iter': [10000],
+                'attack_initial_const': [0.01],
+                'attack_binary_search_steps': [9],
+            })
+            name_fn = lambda: f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
+        else:
+            attack_grid_args.update({
+                'attack_max_iter': [10000],
+                'attack_eps': [0.3],
+            })
+            name_fn = lambda: f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_eps{attack_args['attack_eps']}_"
+    elif attack == 'ead':
+        # default params
+        attack_grid_args.update({
+            'attack_max_iter': [1000],
+            'attack_initial_const': [0.01],
+            'attack_binary_search_steps': [9],
+            'attack_decision_rule': ['L1'],
+            'attack_beta': [0.05],
+        })
+        name_fn = lambda: f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
+
+    attack_arg_names = list(attack_grid_args.keys())
+    existing_names = []
+
+    for attack_arg_value in itertools.product(*attack_grid_args.values()):
+        model = attack_arg_value[attack_arg_names.index('load_from')]
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results_imagenet/test_{type}/{norm}/{attack}"
+        attack_args = dict(zip(attack_arg_names, attack_arg_value))
+        attack_args.update({
+            'working_dir': working_dir,
+        })
+        name = name_fn()
+        attack_args["name"] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_art', **attack_args))
+
+
 def jsma_config(seed=123):
     batch_size = 50
     attack_args = {

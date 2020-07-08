@@ -670,13 +670,11 @@ def sparsefool_config(seed=123):
 # ibm art attacks
 def art_config(norm, attack, seed=123):
     import test_art
-    from test_art import lp_attacks
+    from test_foolbox import import_flags
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_art)
-    import_klass_annotations_as_flags(lp_attacks[norm][attack],
-                                      prefix="attack_",
-                                      include_kwargs_with_defaults=True)
+    import_flags(norm, attack)
 
     num_images = 1000
     batch_size = 250

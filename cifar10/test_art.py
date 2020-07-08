@@ -48,6 +48,15 @@ lp_attacks = {
 }
 
 
+def import_flags(norm, attack):
+    global lp_attacks
+    assert args.norm in lp_attacks
+    assert args.attack in lp_attacks[args.norm]
+    import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack],
+                                      "attack_",
+                                      include_kwargs_with_defaults=True)
+
+
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
@@ -198,9 +207,5 @@ if __name__ == "__main__":
     parser.add_argument("--attack", default=None, type=str)
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
-    assert args.norm in lp_attacks
-    assert args.attack in lp_attacks[args.norm]
-    import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack],
-                                      "attack_",
-                                      include_kwargs_with_defaults=True)
+    import_flags(args.norm, args.attack)
     absl.app.run(main)

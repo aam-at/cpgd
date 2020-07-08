@@ -2,6 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
+import os
 import sys
 import time
 
@@ -13,17 +14,17 @@ from art.attacks import (CarliniL2Method, CarliniLInfMethod, DeepFool,
 from art.classifiers import TensorFlowV2Classifier
 
 from config import test_thresholds
-from data import load_mnist
-from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
-                          li_metric, make_input_pipeline)
+from data import fbresnet_augmentor, get_imagenet_dataflow
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric)
 from lib.utils import (import_klass_annotations_as_flags, log_metrics,
                        register_experiment_flags, reset_metrics,
                        setup_experiment)
-from models import MadryCNNTf
-from utils import load_madry
+from models import TsiprasCNN
+from utils import load_tsipras
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/mnist/test_art")
+register_experiment_flags(working_dir="../results/cifar10/test_art")
 flags.DEFINE_string("attack", None, "attack class")
 flags.DEFINE_string("norm", "l2", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
@@ -59,21 +60,22 @@ def import_flags(norm, attack):
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
+    assert FLAGS.data_dir is not None
+    if FLAGS.data_dir.startswith("$"):
+        FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
     setup_experiment(f"madry_{FLAGS.attack}_{FLAGS.norm}_art_test", [__file__])
     logging.getLogger().setLevel(logging.INFO)
 
     # data
-    _, _, test_ds = load_mnist(FLAGS.validation_size,
-                               data_format="NHWC",
-                               seed=FLAGS.data_seed)
-    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(test_ds,
-                                  shuffle=False,
-                                  batch_size=FLAGS.batch_size)
+    augmentors = fbresnet_augmentor(224, training=False)
+    val_ds = get_imagenet_dataflow(
+        FLAGS.data_dir, FLAGS.batch_size,
+        augmentors, mode='val')
+    val_ds.reset_state()
 
     # models
-    num_classes = 10
-    classifier = MadryCNNTf()
+    num_classes = len(TsiprasCNN.LABEL_RANGES)
+    classifier = TsiprasCNN()
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
@@ -84,10 +86,10 @@ def main(unused_args):
         "li": li_metric,
     }
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 28, 28, 1])
+    X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
     y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
     classifier(tf.zeros(X_shape))
-    load_madry(FLAGS.load_from, classifier.trainable_variables)
+    load_tsipras(FLAGS.load_from, classifier.variables)
 
     # art model wrapper
     def art_classifier(x):
@@ -146,15 +148,18 @@ def main(unused_args):
         r = image - image_adv
         lp = lp_metrics[FLAGS.norm](r)
         l0 = l0_metric(r)
+        l0p = l0_pixel_metric(r)
         l1 = l1_metric(r)
         l2 = l2_metric(r)
         li = li_metric(r)
         test_metrics["l0"](l0)
+        test_metrics["l0p"](l0p)
         test_metrics["l1"](l1)
         test_metrics["l2"](l2)
         test_metrics["li"](li)
         # exclude incorrectly classified
         test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0p_corr"](l0p[tf.logical_and(is_corr, is_adv)])
         test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
         test_metrics["l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
         test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
@@ -162,7 +167,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
@@ -171,7 +176,7 @@ def main(unused_args):
     reset_metrics(test_metrics)
     start_time = time.time()
     try:
-        for batch_index, (image, label) in enumerate(test_ds, 1):
+        for batch_index, (image, label) in enumerate(val_ds, 1):
             X_lp = test_step(image, label)
             log_metrics(
                 test_metrics,
