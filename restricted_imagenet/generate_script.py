@@ -446,29 +446,25 @@ def foolbox_config(norm, attack, seed=123):
 
 
 def bethge_config(norm, runs=1, master_seed=1):
-    import test_bethge_attack
-    from test_bethge_attack import lp_attacks
+    import test_bethge
+    from test_bethge import import_flags
 
     flags.FLAGS._flags().clear()
-    importlib.reload(test_bethge_attack)
-    attack_klass = lp_attacks[norm]
-    import_klass_annotations_as_flags(attack_klass, 'attack_')
+    importlib.reload(test_bethge)
+    import_flags(norm)
 
-    assert norm in lp_attacks
-    num_images = {'l0': 500, 'li': 500, 'l1': 500, 'l2': 500}[norm]
-    batch_size = 25
+    batch_size = 50
     attack_args = {
         'norm': norm,
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
         'seed': 1
     }
 
     existing_names = []
     for type, lr, num_decay in itertools.product(models.keys(), [1.0], [20]):
-        working_dir = f"../results/imagenet_bethge/test_{type}_{norm}"
+        working_dir = f"../results_imagenet/test_{type}/{norm}/bethge"
         attack_args.update({
-            'norm': norm,
             'load_from': models[type],
             'working_dir': working_dir,
             'attack_lr': lr,

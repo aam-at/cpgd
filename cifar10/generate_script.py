@@ -572,6 +572,7 @@ def bethge_config(norm, seed=123):
     num_images = 1000
     batch_size = 250
     attack_args = {
+        'norm': norm,
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
         'seed': seed
@@ -582,7 +583,6 @@ def bethge_config(norm, seed=123):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results_cifar10/test_{type}/{norm}/bethge"
         attack_args.update({
-            'norm': norm,
             'load_from': model,
             'working_dir': working_dir,
             'attack_lr': lr,
