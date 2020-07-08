@@ -369,10 +369,9 @@ def foolbox_config(norm, attack, seed=123):
     importlib.reload(test_foolbox)
     import_flags(norm, attack)
 
-    num_images = 500
     batch_size = 50
     attack_grid_args = {
-        'num_batches': [num_images // batch_size],
+        'num_batches': [NUM_IMAGES // batch_size],
         'batch_size': [batch_size],
         'load_from': models,
         'attack': [attack],
@@ -391,7 +390,7 @@ def foolbox_config(norm, attack, seed=123):
         attack_grid_args.update({
             'attack_steps': [10000],
             'attack_stepsize': [0.01],
-            'attack_initial_const': [0.001],
+            'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_abort_early': [False],
         })
@@ -407,7 +406,7 @@ def foolbox_config(norm, attack, seed=123):
         # default params
         attack_grid_args.update({
             'attack_steps': [1000],
-            'attack_initial_const': [0.001],
+            'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
             'attack_regularization': [0.05],
@@ -430,7 +429,7 @@ def foolbox_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results/imagenet_{attack}/test_{type}_{norm}"
+        working_dir = f"../results_imagenet/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -444,7 +443,7 @@ def foolbox_config(norm, attack, seed=123):
         print(generate_test_optimizer('test_foolbox', **attack_args))
 
 
-def bethge_config(norm, runs=1, master_seed=1):
+def bethge_config(norm, seed=123):
     import test_bethge
     from test_bethge import import_flags
 
@@ -457,7 +456,7 @@ def bethge_config(norm, runs=1, master_seed=1):
         'norm': norm,
         'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
-        'seed': 1
+        'seed': seed
     }
 
     existing_names = []
