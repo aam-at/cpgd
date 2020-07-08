@@ -3,7 +3,6 @@ from __future__ import absolute_import, division, print_function
 import ast
 import importlib
 import itertools
-import os
 import subprocess
 from pathlib import Path
 
@@ -12,10 +11,11 @@ from absl import flags
 
 from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
-from lib.fab import FABAttack
 from lib.generate_script import format_name, generate_test_optimizer
-from lib.parse_logs import parse_test_log
-from lib.utils import ConstantDecay, LinearDecay, import_klass_annotations_as_flags
+from lib.parse_logs import parse_log
+from lib.tf_utils import ConstantDecay, LinearDecay
+from lib.utils import (import_func_annotations_as_flags,
+                       import_klass_annotations_as_flags)
 
 models = {
     'plain': './models/train_224_nat_slim',
@@ -483,6 +483,41 @@ def bethge_config(norm, runs=1, master_seed=1):
             continue
         existing_names.append(name)
         print(generate_test_optimizer('test_bethge_attack', **attack_args))
+
+
+def deepfool_config(norm, seed=123):
+    import test_deepfool
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_deepfool)
+
+    assert norm in ['l2', 'li']
+    num_images = 1000
+    batch_size = 100
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'norm': norm,
+        'seed': seed
+    }
+
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results_imagenet/test_{type}/{norm}/df"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_overshoot': 0.02,
+            'attack_max_iter': 50,
+        })
+        name = f"cifar10_deepfool_{type}_{norm}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_deepfool', **attack_args))
 
 
 def jsma_config(runs=1, master_seed=1):
