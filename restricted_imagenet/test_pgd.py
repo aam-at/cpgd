@@ -16,10 +16,11 @@ from cleverhans.model import Model
 
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.utils import (MetricsDictionary, import_func_annotations_as_flags,
-                       l1_metric, l2_metric, li_metric, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
+from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
+                          make_input_pipeline)
+from lib.utils import (import_func_annotations_as_flags, log_metrics,
+                       register_experiment_flags, reset_metrics,
+                       setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
@@ -136,12 +137,14 @@ def main(unused_args):
                              clip_max=1.0,
                              rand_init=True,
                              **attack_kwargs))
+        # sanity check
         assert_op = tf.Assert(
             tf.logical_and(
                 tf.reduce_min(image_adv) >= 0,
                 tf.reduce_max(image_adv) <= 1.0), [image_adv])
         with tf.control_dependencies([assert_op]):
             outs_adv = test_classifier(image_adv)
+            is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
@@ -156,17 +159,17 @@ def main(unused_args):
         test_metrics["conf_adv"](outs_adv["conf"])
 
         # measure norm
-        # NOTE: cleverhans lp-norm projection may result in numerical error
-        # add small constant eps = 1e-6
         lp = lp_metrics[FLAGS.norm](image - image_adv)
-        is_adv = outs_adv["pred"] != label
-        for threshold in test_thresholds[f"{FLAGS.norm}"]:
-            is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
         test_metrics[f"{FLAGS.norm}"](lp)
         # exclude incorrectly classified
-        is_corr = outs["pred"] == label
         test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
+        # NOTE: cleverhans lp-norm projection may result in numerical error
+        # add small constant eps = 1e-6
+        for threshold in test_thresholds[f"{FLAGS.norm}"]:
+            is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
+            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
