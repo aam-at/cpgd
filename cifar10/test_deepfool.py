@@ -61,17 +61,17 @@ def main(unused_args):
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
     classifier = MadryCNNPt(model_type=model_type, wrap_outputs=False)
 
-    lp_metrics = {
-        "l2": l2_metric,
-        "li": li_metric,
-    }
-
     # load classifier
     load_madry_pt(FLAGS.load_from,
                   classifier.parameters(),
                   model_type=model_type)
     classifier.cuda()
     classifier.eval()
+
+    lp_metrics = {
+        "l2": l2_metric,
+        "li": li_metric,
+    }
 
     # attacks
     attack_kwargs = {

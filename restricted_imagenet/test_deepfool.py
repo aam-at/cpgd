@@ -61,17 +61,17 @@ def main(unused_args):
     num_classes = len(TsiprasCNNPt.LABEL_RANGES)
     classifier = TsiprasCNNPt(wrap_outputs=False)
 
-    lp_metrics = {
-        "l2": l2_metric,
-        "li": li_metric,
-    }
-
     # load classifier
     all_params = dict(classifier.named_parameters())
     all_params.update(dict(classifier.named_buffers()))
     load_tsipras_pt(FLAGS.load_from, all_params)
     classifier.cuda()
     classifier.eval()
+
+    lp_metrics = {
+        "l2": l2_metric,
+        "li": li_metric,
+    }
 
     # attacks
     attack_kwargs = {
