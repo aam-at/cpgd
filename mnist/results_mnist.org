@@ -21,6 +21,7 @@
       df_logs.append(parse_log(load_dir, exclude=["nll_loss", "conf"],
                                export_test_params=["num_batches", "batch_size"]))
   df = pd.concat(df_logs, ignore_index=True)
+  df = df.sort_values(f"{norm}_corr")
 
   if len(model_thresholds) > 0:
       for col in df.columns:
