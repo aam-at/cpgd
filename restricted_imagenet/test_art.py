@@ -24,7 +24,7 @@ from models import TsiprasCNN
 from utils import load_tsipras
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/cifar10/test_art")
+register_experiment_flags(working_dir="../results/imagenet/test_art")
 flags.DEFINE_string("attack", None, "attack class")
 flags.DEFINE_string("norm", "l2", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")

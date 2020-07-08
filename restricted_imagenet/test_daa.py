@@ -2,6 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -13,27 +14,19 @@ from absl import flags
 
 import lib
 from config import test_thresholds
-from data import load_cifar10
-from lib.daa import LinfBLOBAttack, LinfDGFAttack
-from lib.tf_utils import (MetricsDictionary, li_metric, make_input_pipeline,
-                          to_indexed_slices)
-from lib.utils import (import_klass_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
-from models import MadryCNNTf
-from utils import load_madry
-from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
+from lib.daa import LinfBLOBAttack, LinfDGFAttack
 from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric)
-from lib.utils import (import_klass_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
-                       setup_experiment)
+                          l1_metric, l2_metric, li_metric, make_input_pipeline,
+                          to_indexed_slices)
+from lib.utils import (batch_iterator, import_klass_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       save_images, setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
 # general experiment parameters
-register_experiment_flags(working_dir="../results/cifar10/test_daa")
+register_experiment_flags(working_dir="../results/imagenet/test_daa")
 flags.DEFINE_string("method", "blob", "daa method")
 flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
@@ -61,6 +54,8 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     assert FLAGS.data_dir is not None
+    if FLAGS.data_dir.startswith("$"):
+        FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
     setup_experiment(f"madry_daa_{FLAGS.method}_test",
                      [__file__, lib.daa.__file__])
 
@@ -80,8 +75,8 @@ def main(unused_args):
         test_labels.append(label.numpy())
         if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
             break
-    test_images = np.stack(test_images, axis=0)
-    test_labels = np.stack(test_labels, axis=0)
+    test_images = np.vstack(test_images)
+    test_labels = np.concatenate(test_labels, axis=0)
     test_indx = np.arange(test_images.shape[0])
     test_ds = tf.data.Dataset.from_tensor_slices(
         (test_images, test_labels, test_indx))
@@ -99,8 +94,8 @@ def main(unused_args):
         return classifier(x, training=False, **kwargs)
 
     # load classifier
-    X_shape = tf.TensorShape([FLAGS.batch_size, 224, 224, 3])
-    y_shape = tf.TensorShape([FLAGS.batch_size, num_classes])
+    X_shape = [FLAGS.batch_size, 224, 224, 3]
+    y_shape = [FLAGS.batch_size, num_classes]
     classifier(tf.zeros(X_shape))
     load_tsipras(FLAGS.load_from, classifier.variables)
 
@@ -165,7 +160,12 @@ def main(unused_args):
     # reset metrics
     start_time = time.time()
     try:
-        is_corr0 = test_classifier(test_images)['pred'] == test_labels
+        is_corr0 = []
+        for image, label in batch_iterator(test_images,
+                                           test_labels,
+                                           batchsize=FLAGS.batch_size):
+            is_corr0.append(test_classifier(image)['pred'] == label)
+        is_corr0 = tf.concat(is_corr0, axis=0)
         for restart_number in range(FLAGS.attack_nb_restarts):
             x_adv = tf.convert_to_tensor(
                 test_images +
@@ -178,8 +178,14 @@ def main(unused_args):
                     image_adv = attack_step(image, image_adv, label)
                     x_adv = tf.tensor_scatter_nd_update(x_adv, tf.expand_dims(indx, 1),
                                                         image_adv)
-            is_adv = tf.logical_and(test_classifier(x_adv)['pred'] != test_labels,
-                                    is_corr0)
+
+            is_adv = []
+            for image_adv, label, is_corr in batch_iterator(x_adv.numpy(),
+                                                            test_labels,
+                                                            is_corr0.numpy(),
+                                                            batchsize=FLAGS.batch_size):
+                is_adv = tf.logical_and(test_classifier(image_adv)['pred'] != label,
+                                        is_corr)
             image_adv_final.scatter_update(
                 tf.IndexedSlices(x_adv[is_adv], all_indices[is_adv]))
 
