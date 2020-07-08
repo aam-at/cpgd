@@ -527,7 +527,7 @@ def sparsefool_config(seed=123):
     }
 
     existing_names = []
-    for type in models.keys():
+    for type, lambda_ in itertools.product(models.keys(), [1.0, 2.0, 3.0]):
         working_dir = f"../results_imagenet/test_{type}/{norm}/sparsefool"
         attack_args.update({
             'load_from': models[type],
