@@ -5,7 +5,6 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 
 import absl
 import numpy as np
@@ -19,10 +18,10 @@ from foolbox.models import TensorFlowModel
 
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.utils import (MetricsDictionary, import_func_annotations_as_flags,
-                       l0_metric, l0_pixel_metric, l1_metric, l2_metric,
-                       li_metric, log_metrics, make_input_pipeline,
-                       register_experiment_flags, reset_metrics, save_images,
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric)
+from lib.utils import (import_klass_annotations_as_flags, log_metrics,
+                       register_experiment_flags, reset_metrics,
                        setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
@@ -37,7 +36,6 @@ flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
-
 FLAGS = flags.FLAGS
 
 lp_attacks = {
@@ -48,9 +46,14 @@ lp_attacks = {
 }
 
 
+def import_flags(norm):
+    global lp_attacks
+    assert norm in lp_attacks
+    import_klass_annotations_as_flags(lp_attacks[norm], "attack_")
+
+
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-
     assert FLAGS.load_from is not None
     assert FLAGS.data_dir is not None
     if FLAGS.data_dir.startswith("$"):
@@ -82,18 +85,17 @@ def main(unused_args):
     load_tsipras(FLAGS.load_from, classifier.variables)
 
     lp_metrics = {
-        "l0": l0_pixel_metric,
+        "l0": l0_metric,
         "l1": l1_metric,
         "l2": l2_metric,
         "li": li_metric,
     }
-    # attacks
+    # attack arguments
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
-        if kwarg not in ["attack_l0_pixel_metric"]
     }
-    olp = lp_attacks[FLAGS.norm](**attack_kwargs)
+    b_and_b = lp_attacks[FLAGS.norm](**attack_kwargs)
     # init attacks
     a0 = LinearSearchBlendedUniformNoiseAttack()
     a0_2 = DatasetAttack()
@@ -106,55 +108,86 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
+        outs = test_classifier(image)
+        is_corr = outs['pred'] == label
+
+        # run attack on correctly classified points
+        batch_indices = tf.range(image.shape[0])
+        image_s = image[is_corr]
+        label_s = label[is_corr]
+
         # get attack starting points
-        x0 = a0.run(fclassifier, image, label)
-        is_adv = tf.argmax(fclassifier(x0), axis=-1) != label
+        x0 = a0.run(fclassifier, image_s, label_s)
+        is_adv = tf.argmax(fclassifier(x0), axis=-1) != label_s
         # run dataset attack if LinearSearchBlendedUniformNoiseAttack fails
         if not tf.reduce_all(is_adv):
             x0 = tf.where(
                 tf.reshape(
-                    tf.argmax(fclassifier(x0), axis=-1) != label,
-                    (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image, label))
-        image_lp, _, _ = olp(fclassifier,
-                             image,
-                             label,
-                             starting_points=x0,
-                             epsilons=None)
-
-        outs = test_classifier(image)
-        outs_lp = test_classifier(image_lp)
+                    tf.argmax(fclassifier(x0), axis=-1) != label_s,
+                    (-1, 1, 1, 1)), x0, a0_2.run(fclassifier, image_s,
+                                                 label_s))
+        image_adv = tf.identity(image)
+        image_adv = tf.tensor_scatter_nd_update(
+            image_adv, tf.expand_dims(batch_indices[is_corr], axis=1),
+            b_and_b(fclassifier,
+                    image_s,
+                    label_s,
+                    starting_points=x0,
+                    epsilons=None)[0])
+        # sanity check
+        assert_op = tf.Assert(
+            tf.logical_and(
+                tf.reduce_min(image_adv) >= 0,
+                tf.reduce_max(image_adv) <= 1.0), [image_adv])
+        with tf.control_dependencies([assert_op]):
+            outs_adv = test_classifier(image_adv)
+            is_adv = test_classifier(image_adv)['pred'] != label
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
-        acc_lp = acc_fn(label, outs_lp["logits"])
+        acc_adv = acc_fn(label, outs_adv["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_{FLAGS.norm}"](acc_lp)
-        test_metrics[f"conf_{FLAGS.norm}"](outs_lp["conf"])
+        test_metrics[f"acc_{FLAGS.norm}"](acc_adv)
+        test_metrics[f"conf_{FLAGS.norm}"](outs_adv["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_lp)
-        is_adv = outs_lp["pred"] != label
+        r = image - image_adv
+        lp = lp_metrics[FLAGS.norm](r)
+        l0 = l0_metric(r)
+        l0p = l0_pixel_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics["l0"](l0)
+        test_metrics["l0p"](l0p)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
+        # exclude incorrectly classified
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0p_corr"](l0p[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
+
+        # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
-        test_metrics[f"{FLAGS.norm}"](lp)
-        if FLAGS.norm == "l0":
-            test_metrics[f"{FLAGS.norm}_all"](l0_metric(image - image_lp))
-        # exclude incorrectly classified
-        is_corr = outs["pred"] == label
-        test_metrics[f"{FLAGS.norm}_corr"](lp[is_corr])
+            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
+            if FLAGS.norm == "l0":
+                is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
+                test_metrics[f"acc_l0p_%.2f" % threshold](~is_adv_at_th)
+        test_metrics["success_rate"](is_adv[is_corr])
 
-        return image_lp
+        return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         for batch_index, (image, label) in enumerate(val_ds, 1):
@@ -165,15 +198,6 @@ def main(unused_args):
                                                       time.time() -
                                                       start_time),
             )
-            save_path = os.path.join(FLAGS.samples_dir,
-                                     "epoch_orig-%d.png" % batch_index)
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_{FLAGS.norm}-%d.png" % batch_index)
-            save_images(X_lp, save_path, data_format="NHWC")
-            # save adversarial data
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
     except KeyboardInterrupt:
@@ -186,17 +210,13 @@ def main(unused_args):
             log_metrics(
                 test_metrics,
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
-                                                    batch_index),
+                                                     batch_index),
             )
-            X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-            y_all = tf.concat(y_list, axis=0).numpy()
-            np.savez(Path(FLAGS.working_dir) / "X_adv", X_adv=X_lp_all, y=y_all)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
-    assert args.norm in lp_attacks
-    import_func_annotations_as_flags(lp_attacks[args.norm].__init__, "attack_")
+    import_flags(args.norm)
     absl.app.run(main)
