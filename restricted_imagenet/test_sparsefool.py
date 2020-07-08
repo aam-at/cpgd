@@ -45,7 +45,7 @@ def main(unused_args):
     if FLAGS.data_dir.startswith("$"):
         FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
     setup_experiment(f"madry_sprasefool_test",
-                     [__file__, lib.deepfool.__file__])
+                     [__file__, lib.sparsefool.__file__])
 
     # data
     augmentors = fbresnet_augmentor(224, training=False)
