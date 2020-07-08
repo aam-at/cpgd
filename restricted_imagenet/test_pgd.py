@@ -169,7 +169,7 @@ def main(unused_args):
         # add small constant eps = 1e-6
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

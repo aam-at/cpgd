@@ -167,7 +167,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
