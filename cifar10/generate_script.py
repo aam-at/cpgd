@@ -11,7 +11,6 @@ from absl import flags
 
 from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
-from lib.fab import FABAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_log
 from lib.tf_utils import ConstantDecay, LinearDecay
@@ -360,6 +359,7 @@ def daa_config(seed=123):
 # fab attack
 def fab_config(norm, seed=123):
     import test_fab
+    from lib.fab import FABAttack
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_fab)
