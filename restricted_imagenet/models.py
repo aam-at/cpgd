@@ -1,7 +1,8 @@
 import tensorflow as tf
+import torch
 from tensorflow.python.keras import backend
+from torchvision.models.resnet import resnet50
 
-from lib.utils import add_default_end_points
 from residual_utils import make_bottleneck_layer
 
 
@@ -23,7 +24,8 @@ class TsiprasCNN(tf.keras.Model):
         super(TsiprasCNN, self).__init__()
         self.backbone = ResnetCNN()
 
-    def image_preprocess(self, image, bgr=True):
+    @staticmethod
+    def image_preprocess(image, bgr=True):
         mean = [0.485, 0.456, 0.406]  # rgb
         std = [0.229, 0.224, 0.225]
         if bgr:
@@ -35,6 +37,7 @@ class TsiprasCNN(tf.keras.Model):
         return image
 
     def call(self, inputs, training=True):
+        from lib.tf_utils import add_default_end_points
         inputs = self.image_preprocess(inputs)
         logits = self.backbone(inputs, training=training)
         num_labels = len(TsiprasCNN.LABEL_RANGES)
@@ -96,3 +99,52 @@ class ResnetCNN(tf.keras.Model):
     def call(self, inputs, training=True):
         logits = self.model(inputs, training=training)
         return logits
+
+
+class TsiprasCNNPt(torch.nn.Module):
+    LABEL_RANGES = [
+        (151, 268),
+        (281, 285),
+        (30, 32),
+        (33, 37),
+        (80, 100),
+        (365, 382),
+        (389, 397),
+        (118, 121),
+        (300, 319),
+    ]
+
+    # Imagenet robust model Tsipras et al
+    def __init__(self, wrap_outputs=True):
+        super(TsiprasCNNPt, self).__init__()
+        self.backbone = resnet50(pretrained=False)
+        self.wrap_outputs = wrap_outputs
+
+    @property
+    def device(self):
+        return next(self.parameters()).device
+
+    @staticmethod
+    def image_preprocess(image, bgr=True):
+        mean = [0.485, 0.456, 0.406]  # rgb
+        std = [0.229, 0.224, 0.225]
+        if bgr:
+            mean = mean[::-1]
+            std = std[::-1]
+        image_mean = torch.tensor(mean, dtype=torch.float32)
+        image_std = torch.tensor(std, dtype=torch.float32)
+        image = (image - image_mean) / image_std
+        return image
+
+    def forward(self, x, wrap_outputs=None):
+        from lib.pt_utils import add_default_end_points
+        if wrap_outputs is None:
+            wrap_outputs = self.wrap_outputs
+        x = self.image_preprocess(x)
+        logits = self.backbone(x)
+        num_labels = len(TsiprasCNNPt.LABEL_RANGES)
+        logits = logits[:, :num_labels]
+        if wrap_outputs:
+            return add_default_end_points({'logits': logits})
+        else:
+            return logits
