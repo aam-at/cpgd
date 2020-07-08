@@ -502,11 +502,10 @@ def deepfool_config(norm, seed=123):
     }
 
     existing_names = []
-    for model in models:
-        type = Path(model).stem.split("_")[-1]
+    for type in models.keys():
         working_dir = f"../results_imagenet/test_{type}/{norm}/df"
         attack_args.update({
-            'load_from': model,
+            'load_from': models[type],
             'working_dir': working_dir,
             'attack_overshoot': 0.02,
             'attack_max_iter': 50,

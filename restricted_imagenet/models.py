@@ -115,9 +115,10 @@ class TsiprasCNNPt(torch.nn.Module):
     ]
 
     # Imagenet robust model Tsipras et al
-    def __init__(self, wrap_outputs=True):
+    def __init__(self, data_format="NHWC", wrap_outputs=True):
         super(TsiprasCNNPt, self).__init__()
         self.backbone = resnet50(pretrained=False)
+        self.data_format = data_format
         self.wrap_outputs = wrap_outputs
 
     @property
@@ -131,8 +132,8 @@ class TsiprasCNNPt(torch.nn.Module):
         if bgr:
             mean = mean[::-1]
             std = std[::-1]
-        image_mean = torch.tensor(mean, dtype=torch.float32)
-        image_std = torch.tensor(std, dtype=torch.float32)
+        image_mean = torch.tensor(mean, dtype=torch.float32).to(image.device)
+        image_std = torch.tensor(std, dtype=torch.float32).to(image.device)
         image = (image - image_mean) / image_std
         return image
 
@@ -141,6 +142,8 @@ class TsiprasCNNPt(torch.nn.Module):
         if wrap_outputs is None:
             wrap_outputs = self.wrap_outputs
         x = self.image_preprocess(x)
+        if self.data_format == "NHWC":
+            x = x.permute(0, 3, 1, 2)
         logits = self.backbone(x)
         num_labels = len(TsiprasCNNPt.LABEL_RANGES)
         logits = logits[:, :num_labels]
