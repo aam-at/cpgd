@@ -1,3 +1,5 @@
+"""This script can be used to generate test configs for the compared attacks.
+"""
 from __future__ import absolute_import, division, print_function
 
 import ast
@@ -14,8 +16,7 @@ from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_log
 from lib.tf_utils import ConstantDecay, LinearDecay
-from lib.utils import (import_func_annotations_as_flags,
-                       import_klass_annotations_as_flags)
+from lib.utils import import_klass_annotations_as_flags
 
 models = {
     'plain': './models/train_224_nat_slim',
