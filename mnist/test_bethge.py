@@ -203,6 +203,8 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
+        else:
+            logging.info(e)
 
 
 if __name__ == "__main__":
