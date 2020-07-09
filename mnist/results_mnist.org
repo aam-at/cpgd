@@ -14,6 +14,10 @@
 
 
   model_thresholds = np.array(test_model_thresholds[type][norm])
+  if type == 'linf' and norm == 'li':
+      model_thresholds = np.ceil(model_thresholds * 100) / 100
+  else:
+      model_thresholds = np.round(model_thresholds, 2)
 
   dirs = glob.glob(f"../results_mnist/test_{type}/{norm}/{attack}/*")
   df_logs = []
@@ -22,6 +26,16 @@
                                export_test_params=["num_batches", "batch_size"]))
   df = pd.concat(df_logs, ignore_index=True)
   df = df.sort_values(f"{norm}_corr")
+  def col_sort(k):
+      if k == "name":
+          return 1000
+      elif k.startswith("acc"):
+          return 100
+      elif k.startswith(f"{norm}"):
+          return 10
+      else:
+          return 0
+  df = df[sorted(df.columns, key=col_sort, reverse=True)]
 
   if len(model_thresholds) > 0:
       for col in df.columns:
@@ -37,7 +51,7 @@
 
 #+NAME: output_results
 #+BEGIN_SRC python :noweb yes
-  df_org = org_table(df, decimals=3)
+  df_org = org_table(df, decimals=6)
 #+END_SRC
 
 * Init
