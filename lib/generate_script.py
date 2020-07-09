@@ -51,6 +51,8 @@ _N{attack_args["attack_loop_number_restarts"]}
             f"{'_adaptive' if attack_args['attack_adaptive_momentum'] else ''}"
         )
     name = f"{name}_dlr{attack_args['attack_dual_lr']}_d{attack_args['attack_dual_optimizer']}"
+    if not attack_args['attack_dual_ema']:
+        name = f"{name}_noema"
     name = f"""{name}_{attack_args['attack_loop_r0_sampling_algorithm']}_
 R{attack_args['attack_loop_r0_sampling_epsilon']}_
 C{attack_args['attack_loop_c0_initial_const']}_
