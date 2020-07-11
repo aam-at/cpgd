@@ -693,6 +693,7 @@ def one_pixel_attack_config(seed=123):
         'batch_size': batch_size,
         'seed': seed
     }
+    norm = "l0"
 
     existing_names = []
     for type, iters, es in itertools.product(models.keys(), [100], [1]):
