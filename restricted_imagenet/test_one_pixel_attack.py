@@ -15,7 +15,7 @@ from art.classifiers import TensorFlowV2Classifier
 
 from data import fbresnet_augmentor, get_imagenet_dataflow
 from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          make_input_pipeline, random_targets)
+                          l1_metric, make_input_pipeline, random_targets)
 from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
                        save_images, setup_experiment)
 from models import TsiprasCNN
