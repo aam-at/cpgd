@@ -39,7 +39,7 @@ _N{attack_args["attack_loop_number_restarts"]}
     else:
         name = f"{name}_nofinetune"
     name = f"{name}_{'sim' if attack_args['attack_simultaneous_updates'] else 'alt'}"
-    name = f"{name}_{attack_args['attack_primal_optimizer']}"
+    name = f"{name}_{attack_args['attack_primal_opt']}"
     if (
         "attack_gradient_preprocessing" in attack_args
         and attack_args["attack_gradient_preprocessing"]
@@ -50,7 +50,7 @@ _N{attack_args["attack_loop_number_restarts"]}
             f"{name}_apg_m{attack_args['attack_momentum']}"
             f"{'_adaptive' if attack_args['attack_adaptive_momentum'] else ''}"
         )
-    name = f"{name}_dlr{attack_args['attack_dual_lr']}_d{attack_args['attack_dual_optimizer']}"
+    name = f"{name}_dlr{attack_args['attack_dual_lr']}_d{attack_args['attack_dual_opt']}"
     if not attack_args['attack_dual_ema']:
         name = f"{name}_noema"
     name = f"""{name}_{attack_args['attack_loop_r0_sampling_algorithm']}_

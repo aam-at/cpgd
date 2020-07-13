@@ -75,14 +75,14 @@ def test_our_attack_config(attack, seed=123):
     attack_grid_args = {
         'num_batches': [num_images // batch_size],
         'batch_size': [batch_size],
-        'load_from': models,
         'seed': [seed],
         'attack': [attack],
         'attack_loss': ["cw"],
         'attack_iterations': [500],
         'attack_simultaneous_updates': [True, False],
         'attack_primal_lr': [1e-1],
-        'attack_dual_optimizer': ["sgd"],
+        'attack_dual_opt': ["adam"],
+        'attack_dual_opt_kwargs': ["{'beta_1': 0.9}"],
         'attack_dual_lr': [1e-1],
         'attack_dual_ema': [True, False],
         'attack_use_proxy_constraint': [False],
@@ -98,13 +98,17 @@ def test_our_attack_config(attack, seed=123):
 
     if issubclass(attack_klass, ProximalGradientOptimizerAttack):
         attack_grid_args.update({
-            'attack_primal_optimizer': ["sgd"],
+            'attack_primal_opt': ["sgd"],
+            'attack_primal_opt_kwargs': ["{}"],
             'attack_accelerated': [True, False],
             'attack_momentum': [0.9],
             'attack_adaptive_momentum': [True, False]
         })
     else:
-        attack_grid_args.update({'attack_primal_optimizer': ["adam"]})
+        attack_grid_args.update({
+            'attack_primal_opt': ["adam"],
+            'attack_primal_opt_kwargs': ["{}"],
+        })
 
     if norm == 'li':
         attack_grid_args.update({'attack_gradient_preprocessing': [True]})
@@ -112,65 +116,66 @@ def test_our_attack_config(attack, seed=123):
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
 
-    for attack_arg_value in itertools.product(*attack_grid_args.values()):
-        model = attack_arg_value[attack_arg_names.index('load_from')]
+    for model in models:
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results_mnist/test_{type}/{norm}/our_{norm}"
-        attack_args = dict(zip(attack_arg_names, attack_arg_value))
-        attack_args.update({
-            'working_dir': working_dir,
-        })
-        for lr, decay_factor, lr_decay in itertools.product([0.05, 0.1, 0.5, 1.0], [1, 0.1, 0.01], [True, False]):
-            min_lr = round(lr * decay_factor, 6)
-            if lr_decay and min_lr < lr:
-                lr_config = {
-                    'schedule': 'linear',
-                    'config': {
-                        **LinearDecay(initial_learning_rate=lr,
-                                      minimal_learning_rate=min_lr,
-                                      decay_steps=attack_args['attack_iterations']).get_config(
-                        )
-                    }
-                }
-            else:
-                lr_config = {
-                    'schedule': 'constant',
-                    'config': {
-                        **ConstantDecay(lr).get_config()
-                    }
-                }
-            if lr_decay:
-                finetune_lr_config = {
-                    'schedule': 'linear',
-                    'config': {
-                        **LinearDecay(initial_learning_rate=min_lr,
-                                      minimal_learning_rate=round(
-                                          min_lr / 10, 6),
-                                      decay_steps=attack_args['attack_iterations']).get_config(
-                        )
-                    }
-                }
-            else:
-                finetune_lr_config = {
-                    'schedule': 'constant',
-                    'config': {
-                        **ConstantDecay(learning_rate=min_lr).get_config()
-                    }
-                }
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        for attack_arg_value in itertools.product(*attack_grid_args.values()):
+            attack_args = dict(zip(attack_arg_names, attack_arg_value))
             attack_args.update({
-                'attack_loop_lr_config':
-                lr_config,
-                'attack_loop_finetune_lr_config':
-                finetune_lr_config
+                'load_from': model,
+                'working_dir': working_dir,
             })
-            base_name = f"mnist_{type}"
-            name = format_name(base_name, attack_args) + '_'
-            attack_args["name"] = name
-            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-            if name in p or name in existing_names:
-                continue
-            existing_names.append(name)
-            print(generate_test_optimizer('test_our_attack', **attack_args))
+            for lr, decay_factor, lr_decay in itertools.product([0.1], [1], [True, False]):
+                min_lr = round(lr * decay_factor, 6)
+                if lr_decay and min_lr < lr:
+                    lr_config = {
+                        'schedule': 'linear',
+                        'config': {
+                            **LinearDecay(initial_learning_rate=lr,
+                                        minimal_learning_rate=min_lr,
+                                        decay_steps=attack_args['attack_iterations']).get_config(
+                            )
+                        }
+                    }
+                else:
+                    lr_config = {
+                        'schedule': 'constant',
+                        'config': {
+                            **ConstantDecay(lr).get_config()
+                        }
+                    }
+                if lr_decay:
+                    finetune_lr_config = {
+                        'schedule': 'linear',
+                        'config': {
+                            **LinearDecay(initial_learning_rate=min_lr,
+                                        minimal_learning_rate=round(
+                                            min_lr / 10, 6),
+                                        decay_steps=attack_args['attack_iterations']).get_config(
+                            )
+                        }
+                    }
+                else:
+                    finetune_lr_config = {
+                        'schedule': 'constant',
+                        'config': {
+                            **ConstantDecay(learning_rate=min_lr).get_config()
+                        }
+                    }
+                attack_args.update({
+                    'attack_loop_lr_config':
+                    lr_config,
+                    'attack_loop_finetune_lr_config':
+                    finetune_lr_config
+                })
+                base_name = f"mnist_{type}"
+                name = format_name(base_name, attack_args) + '_'
+                attack_args["name"] = name
+                if name in p or name in existing_names:
+                    continue
+                existing_names.append(name)
+                print(generate_test_optimizer('test_our_attack', **attack_args))
 
 
 def test_our_attack_config_custom(attack, topk=1, runs=1, master_seed=1):
