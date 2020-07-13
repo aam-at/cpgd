@@ -1,12 +1,15 @@
 from __future__ import absolute_import, division, print_function
 
+import ast
 from abc import ABC, abstractmethod
+from typing import Union
 
 import tensorflow as tf
 
 from .attack_utils import (margin, project_box,
                            project_log_distribution_wrt_kl_divergence)
-from .tf_utils import create_optimizer, reset_optimizer, prediction, to_indexed_slices
+from .tf_utils import (create_optimizer, prediction, reset_optimizer,
+                       to_indexed_slices)
 
 
 def compute_lambda(state):
@@ -29,18 +32,21 @@ class GradientOptimizerAttack(ABC):
     multiplicative updates).
 
     """
+
     def __init__(
         self,
         model,
         # parameters for the optimizer
         loss: str = "cw",
         iterations: int = 100,
-        primal_optimizer: str = "sgd",
+        primal_opt: str = "sgd",
         primal_lr: float = 1e-1,
+        primal_opt_kwargs: Union[dict, str] = "",
         gradient_preprocessing: bool = False,
-        dual_optimizer: str = "sgd",
+        dual_opt: str = "sgd",
         dual_lr: float = 1e-1,
         dual_ema: bool = True,
+        dual_opt_kwargs: Union[dict, str] = "",
         simultaneous_updates: bool = False,
         # attack parameters
         targeted: bool = False,
@@ -57,10 +63,10 @@ class GradientOptimizerAttack(ABC):
             loss: classification loss to optimize (e.g. margin loss,
             cross-entropy loss).
             iterations: number of the iteration for the attack.
-            primal_optimizer: optimizer for the primal variables.
+            primal_opt: optimizer for the primal variables.
             primal_lr: learning rate for the primal optimizer.
             gradient_preprocessing: if to apply some preprocessing to the gradient (e.g. l2-normalize the gradient).
-            dual_optimizer: optimizer for the dual variables.
+            dual_opt: optimizer for the dual variables.
             dual_lr: learning for the dual optimizer.
             dual_ema: if to use exponential moving average for the dual variables.
             targeted: if the attack is targeted.
@@ -77,11 +83,18 @@ class GradientOptimizerAttack(ABC):
         assert loss in ["logit_diff", "cw", "ce"]
         self.loss = loss
         self.iterations = iterations
-        self.primal_opt = create_optimizer(primal_optimizer, primal_lr)
+        if not isinstance(primal_opt_kwargs, dict):
+            assert isinstance(primal_opt_kwargs, str)
+            primal_opt_kwargs = ast.literal_eval(primal_opt_kwargs)
+        self.primal_opt = create_optimizer(primal_opt, primal_lr,
+                                           **primal_opt_kwargs)
         self.gradient_preprocessing = gradient_preprocessing
-        self.dual_opt = create_optimizer(dual_optimizer, dual_lr)
         self.dual_ema = dual_ema
         self.ema = tf.train.ExponentialMovingAverage(decay=0.9)
+        if not isinstance(dual_opt_kwargs, dict):
+            assert isinstance(dual_opt_kwargs, str)
+            dual_opt_kwargs = ast.literal_eval(dual_opt_kwargs)
+        self.dual_opt = create_optimizer(dual_opt, dual_lr, **dual_opt_kwargs)
         self.simultaneous_updates = simultaneous_updates
         self.targeted = targeted
         self.confidence = confidence
