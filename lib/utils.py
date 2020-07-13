@@ -63,13 +63,9 @@ def import_func_annotations_as_flags(f,
     spec = inspect.getfullargspec(f)
     flag_defines = {
         str: flags.DEFINE_string,
-        typing.Optional[str]: flags.DEFINE_string,
         bool: flags.DEFINE_bool,
-        typing.Optional[bool]: flags.DEFINE_bool,
         int: flags.DEFINE_integer,
-        typing.Optional[int]: flags.DEFINE_integer,
         float: flags.DEFINE_float,
-        typing.Optional[float]: flags.DEFINE_float,
     }
     imported = []
     for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
@@ -79,15 +75,27 @@ def import_func_annotations_as_flags(f,
             kwarg_default = spec.defaults[index]
         except:
             kwarg_default = spec.kwonlydefaults[kwarg]
-        if kwarg_type not in flag_defines:
-            logging.debug(f"Uknown {kwarg} type {kwarg_type}")
+        is_known_type = False
+        arg_type = kwarg_type
+        # generic type
+        if hasattr(kwarg_type, "__args__"):
+            kwarg_types = kwarg_type.__args__
+            for type in kwarg_types:
+                if type in flag_defines:
+                    is_known_type = True
+                    arg_type = type
+                    break
         else:
-            arg_name = f"{prefix}{kwarg}"
-            try:
-                flag_defines[kwarg_type](arg_name, kwarg_default, f"{kwarg}")
-                imported.append(kwarg)
-            except DuplicateFlagError as e:
-                logging.debug(e)
+            if kwarg_type in flag_defines:
+                is_known_type = True
+        if not is_known_type:
+            logging.debug(f"Uknown {kwarg} type {kwarg_type}")
+        arg_name = f"{prefix}{kwarg}"
+        try:
+            flag_defines[arg_type](arg_name, kwarg_default, f"{kwarg}")
+            imported.append(kwarg)
+        except DuplicateFlagError as e:
+            logging.debug(e)
     if include_kwargs_with_defaults and spec.defaults is not None:
         total_kwargs_with_defaults = len(spec.defaults)
         for index, kwarg in enumerate(spec.args[-total_kwargs_with_defaults:]):
