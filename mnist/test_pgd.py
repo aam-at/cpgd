@@ -13,14 +13,14 @@ import tensorflow as tf
 from absl import flags
 from cleverhans.attacks import ProjectedGradientDescent, SparseL1Descent
 from cleverhans.model import Model
+from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
+                          make_input_pipeline)
+from lib.utils import (format_float, import_func_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 
 from config import test_thresholds
 from data import load_mnist
-from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
-                          make_input_pipeline)
-from lib.utils import (import_func_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
-                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 
@@ -166,7 +166,7 @@ def main(unused_args):
         # add small constant eps = 1e-6
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" % format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
