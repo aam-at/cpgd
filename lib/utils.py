@@ -252,6 +252,11 @@ def reset_metrics(metrics):
         metric.reset_states()
 
 
+def format_float(v):
+    v_fmt = ("%f" % v).rstrip('0').rstrip('.')
+    return v_fmt
+
+
 # git utils
 def get_sha(repo='.'):
     """

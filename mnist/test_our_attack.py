@@ -5,13 +5,9 @@ import logging
 import time
 
 import absl
+import lib
 import tensorflow as tf
 from absl import flags
-from tensorboard.plugins.hparams import api as hp
-
-import lib
-from config import test_thresholds
-from data import load_mnist
 from lib.attack_l0 import ProximalL0Attack
 from lib.attack_l1 import GradientL1Attack, ProximalL1Attack
 from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
@@ -19,9 +15,13 @@ from lib.attack_li import ProximalLiAttack
 from lib.attack_utils import AttackOptimizationLoop
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, make_input_pipeline)
-from lib.utils import (import_klass_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
+from lib.utils import (format_float, import_klass_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
+from tensorboard.plugins.hparams import api as hp
+
+from config import test_thresholds
+from data import load_mnist
 from models import MadryCNNTf
 from utils import load_madry
 
@@ -78,7 +78,8 @@ def main(unused_args):
         FLAGS.validation_size, data_format="NHWC", seed=FLAGS.data_seed
     )
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(test_ds, shuffle=False, batch_size=FLAGS.batch_size)
+    test_ds = make_input_pipeline(
+        test_ds, shuffle=False, batch_size=FLAGS.batch_size)
 
     # models
     num_classes = 10
@@ -157,7 +158,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{norm}_%.2f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{norm}_%s" %
+                         format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
@@ -211,7 +213,8 @@ def main(unused_args):
     finally:
         log_metrics(
             test_metrics,
-            "Test results [{:.2f}s, {}]:".format(time.time() - start_time, batch_index),
+            "Test results [{:.2f}s, {}]:".format(
+                time.time() - start_time, batch_index),
         )
 
 
