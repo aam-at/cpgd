@@ -3,9 +3,11 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import logging
 import time
+from pathlib import Path
 
 import absl
 import lib
+import numpy as np
 import tensorflow as tf
 from absl import flags
 from lib.attack_l0 import ProximalL0Attack
@@ -30,6 +32,7 @@ register_experiment_flags(working_dir="../results/mnist/test_lp")
 flags.DEFINE_string(
     "attack", None, "choice of the attack ('l0', 'l1', 'l2', 'l2g', 'li')"
 )
+flags.DEFINE_bool("attack_save", False, "True if save results of the attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -104,6 +107,7 @@ def main(unused_args):
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS)
         if kwarg.startswith("attack_") and not kwarg.startswith("attack_loop_")
+        and kwarg not in ["attack_save"]
     }
     alp = attack_klass(lambda x: test_classifier(x)["logits"], **attack_kwargs)
     alp.build([X_shape, y_shape])
@@ -169,8 +173,11 @@ def main(unused_args):
     start_time = time.time()
     try:
         is_completed = False
+        X_adv = []
         for batch_index, (image, label) in enumerate(test_ds, 1):
-            X_lp = test_step(image, label)
+            X_adv_b = test_step(image, label)
+            X_adv_b = np.reshape(X_adv_b, (X_adv_b.shape[0], -1))
+            X_adv.append(X_adv_b)
             log_metrics(
                 test_metrics,
                 "Batch results [{}, {:.2f}s]:".format(
@@ -182,7 +189,10 @@ def main(unused_args):
                 break
         else:
             is_completed = True
+        X_adv = np.concatenate(X_adv, axis=0)
         if is_completed:
+            if FLAGS.attack_save:
+                np.save(Path(FLAGS.working_dir) / "attack.npy", X_adv)
             # hyperparameter tuning
             with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
                 # hyperparameters
