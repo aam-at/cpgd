@@ -80,10 +80,10 @@ def import_func_annotations_as_flags(f,
         # generic type
         if hasattr(kwarg_type, "__args__"):
             kwarg_types = kwarg_type.__args__
-            for type in kwarg_types:
-                if type in flag_defines:
+            for kwarg_type in kwarg_types:
+                if kwarg_type in flag_defines:
                     is_known_type = True
-                    arg_type = type
+                    arg_type = kwarg_type
                     break
         else:
             if kwarg_type in flag_defines:
