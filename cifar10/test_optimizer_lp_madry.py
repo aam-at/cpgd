@@ -7,14 +7,10 @@ import time
 from pathlib import Path
 
 import absl
+import lib
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from tensorboard.plugins.hparams import api as hp
-
-import lib
-from config import test_thresholds
-from data import load_cifar10
 from lib.attack_l0 import ProximalL0Attack
 from lib.attack_l1 import GradientL1Attack, ProximalL1Attack
 from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
@@ -24,6 +20,10 @@ from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
                        import_klass_annotations_as_flags, log_metrics,
                        make_input_pipeline, register_experiment_flags,
                        reset_metrics, save_images, setup_experiment)
+from tensorboard.plugins.hparams import api as hp
+
+from config import test_thresholds
+from data import load_cifar10
 from models import MadryCNN
 from utils import load_madry
 
