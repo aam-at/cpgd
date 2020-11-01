@@ -12,8 +12,8 @@ import tensorflow as tf
 from absl import flags
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, make_input_pipeline)
-from lib.utils import (format_float, log_metrics,
-                       register_experiment_flags, reset_metrics, setup_experiment)
+from lib.utils import (format_float, log_metrics, register_experiment_flags,
+                       reset_metrics, setup_experiment)
 
 from config import test_thresholds
 from data import load_mnist
@@ -22,12 +22,12 @@ from utils import load_madry
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/mnist/test_combined")
-flags.DEFINE_string("norm", "lp", "lp-norm attack")
+flags.DEFINE_string("norm", None, "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 flags.DEFINE_list("load_list", None, "List of directories to load saved attack from")
 # test params
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
-flags.DEFINE_integer("batch_size", 100, "batch size")
+flags.DEFINE_integer("batch_size", 500, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 FLAGS = flags.FLAGS
@@ -36,14 +36,14 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
+    assert FLAGS.norm is not None
     setup_experiment(f"madry_pgd_{FLAGS.norm}_test", [__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
                                data_format="NHWC",
                                seed=FLAGS.data_seed)
-    X = test_ds.images
-    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
+    X = test_ds[0]
 
     # models
     num_classes = 10
@@ -117,25 +117,28 @@ def main(unused_args):
     start_time = time.time()
     try:
         # select minimum perturbation from multiple saved attacks
-        X_adv = None
-        rnorm = None
-        for load_dir_rg in FLAGS.load_list:
-            for load_dir in glob.glob(load_dir_rg):
-                X_adv_l = np.load(Path(load_dir) / "attack.npy")
+        X_adv = X.copy()
+        rnorm = np.inf * np.ones(X.shape[0])
+        for load_regexp in FLAGS.load_list:
+            for load_file in Path(load_regexp).rglob("*.npy"):
+                X_adv_l = np.load(load_file).reshape(X.shape)
+                rnorm2 = lp_metrics[FLAGS.norm](tf.convert_to_tensor(X - X_adv_l)).numpy()
+                with tf.device("/cpu"):
+                    is_adv = test_classifier(X_adv_l)['pred'] != test_ds[1]
+                    assert tf.reduce_all(is_adv)
                 if X_adv is None:
                     X_adv = X_adv_l
-                    rnorm = lp_metrics[FLAGS.norm](X - X_adv)
+                    rnorm = rnorm2
                 else:
-                    rnorm2 = lp_metrics[FLAGS.norm](X - X_adv_l)
                     X_adv[rnorm2 < rnorm] = X_adv_l[rnorm2 < rnorm]
+                    rnorm = np.minimum(rnorm, rnorm2)
 
         # combine datasets
-        test_ds2 = tf.data.Dataset.from_tensor_slices(X_adv)
-        test_ds = tf.data.Dataset.zip((test_ds, test_ds2))
+        test_ds = tf.data.Dataset.from_tensor_slices((test_ds[0], X_adv, test_ds[1]))
         test_ds = make_input_pipeline(test_ds,
                                       shuffle=False,
                                       batch_size=FLAGS.batch_size)
-        for batch_index, (image, label, image_adv) in enumerate(test_ds, 1):
+        for batch_index, (image, image_adv, label) in enumerate(test_ds, 1):
             X_lp = test_step(image, image_adv, label)
             log_metrics(
                 test_metrics,
