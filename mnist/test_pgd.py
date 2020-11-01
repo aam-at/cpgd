@@ -28,7 +28,7 @@ from utils import load_madry
 register_experiment_flags(working_dir="../results/mnist/test_pgd")
 flags.DEFINE_string("norm", "lp", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
-# test paramrs
+# test params
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
