@@ -32,7 +32,6 @@ class GradientOptimizerAttack(ABC):
     multiplicative updates).
 
     """
-
     def __init__(
         self,
         model,
@@ -247,8 +246,7 @@ class GradientOptimizerAttack(ABC):
             # Part 1: lp loss
             lp_loss = self.lp_metric(self.rx)
             # Part 2: classification loss
-            cls_constraint, cls_loss = self.cls_constraint_and_loss(
-                X_hat, y_onehot)
+            _, cls_loss = self.cls_constraint_and_loss(X_hat, y_onehot)
             loss = cls_loss + self.lambd * lp_loss
 
         # compute gradient for primal variables
