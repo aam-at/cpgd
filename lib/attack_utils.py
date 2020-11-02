@@ -5,7 +5,7 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 
-from .tf_utils import create_lr_schedule, l2_metric
+from .tf_utils import create_lr_schedule, l2_metric, random_targets
 
 
 def margin(logits, y_onehot, delta=0.0, targeted=False):
@@ -204,16 +204,22 @@ class AttackOptimizationLoop(object):
                  number_restarts: int = 1,
                  r0_sampling_algorithm: str = 'uniform',
                  r0_sampling_epsilon: float = 0.1,
+                 r0_ods_init: bool = False,
+                 r0_ods_steps: int = 50,
                  c0_initial_const: float = 0.01,
+                 multitargeted: bool = False,
                  lr: float = 0.01,
                  lr_config: str = None,
                  finetune: bool = True,
                  finetune_lr: float = 0.01,
                  finetune_lr_config: str = None):
+        assert not (r0_ods_init and multitargeted)
         self.attack = attack
         self.number_restarts = number_restarts
         self.r0_sampling_algorithm = r0_sampling_algorithm
         self.r0_sampling_epsilon = r0_sampling_epsilon
+        self.r0_ods_init = r0_ods_init
+        self.r0_ods_steps = r0_ods_steps
         self.c0_initial_const = c0_initial_const
         if lr_config is not None:
             if isinstance(lr_config, str):
@@ -240,7 +246,21 @@ class AttackOptimizationLoop(object):
             r0 = self.attack.project_box(X, r0)
             c0 = self.c0_initial_const
             self.attack.reset_attack(r0, c0)
-            self.attack.run(X, y_onehot)
+            # output diversified initialization
+            if self.r0_ods_init:
+                with ods_init(self.attack, self.r0_ods_steps) as attack:
+                    attack.run(X, y_onehot)
+                    r0_ods = self.attack.rx.read_value()
+                self.attack.reset_attack(r0_ods, c0)
+            # multitargeted attack
+            if self.multitargeted:
+                y_t = random_targets(y_onehot.shape[0], y_onehot)
+                y_t_onehot = tf.one_hot(y_t, y_onehot.shape[1])
+                self.attack.targeted = True
+                self.attack.run(X, y_t_onehot)
+            else:
+                self.attack.targeted = False
+                self.attack.run(X, y_onehot)
         if self.finetune:
             self.attack.primal_lr = self.finetune_lr
             rbest = self.attack.attack.read_value() - X
@@ -272,7 +292,8 @@ def ods_init(attack, ods_iterations=50):
         logits = attack.model(X)
         if rand_vector is None:
             rand_vector = tf.random.uniform(logits.shape, -1.0, 1.0)
-        return tf.ones(X.shape[0]), tf.reduce_sum(rand_vector * logits, axis=-1)
+        return tf.ones(X.shape[0]), tf.reduce_sum(rand_vector * logits,
+                                                  axis=-1)
 
     @tf.function
     def ods_optim_step(X, y_onehot):
@@ -287,34 +308,3 @@ def ods_init(attack, ods_iterations=50):
         attack.iterations = old_iterations
         attack.cls_constraint_and_loss = old_loss
         attack.optim_step = old_optim_step
-
-
-class AttackOptimizationODSLoop(AttackOptimizationLoop):
-    def __init__(self,
-                 attack,
-                 number_ods_steps: int = 50,
-                 **kwargs):
-        super(AttackOptimizationODSLoop, self).__init__(attack, **kwargs)
-        self.number_ods_steps = number_ods_steps
-
-    def _run_loop(self, X, y_onehot):
-        self.attack.restart_attack(X, y_onehot)
-        self.attack.primal_lr = self.lr
-        for i in range(self.number_restarts):
-            r0 = init_r0(X.shape, self.r0_sampling_epsilon, self.attack.ord,
-                         self.r0_sampling_algorithm)
-            r0 = self.attack.project_box(X, r0)
-            c0 = self.c0_initial_const
-            self.attack.reset_attack(r0, c0)
-            # output diversified initialization
-            with ods_init(self.attack, self.number_ods_steps) as attack:
-                attack.run(X, y_onehot)
-                r0_ods = self.attack.rx.read_value()
-            self.attack.reset_attack(r0_ods, c0)
-            self.attack.run(X, y_onehot)
-        if self.finetune:
-            self.attack.primal_lr = self.finetune_lr
-            rbest = self.attack.attack.read_value() - X
-            cbest = self.attack.bestlambd.read_value()
-            self.attack.reset_attack(rbest, cbest)
-            self.attack.run(X, y_onehot)
