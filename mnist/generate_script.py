@@ -10,14 +10,14 @@ from pathlib import Path
 
 import numpy as np
 from absl import flags
-
-from config import test_model_thresholds
 from lib.attack_lp import ProximalGradientOptimizerAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_log
 from lib.tf_utils import ConstantDecay, LinearDecay
 from lib.utils import (import_func_annotations_as_flags,
                        import_klass_annotations_as_flags)
+
+from config import test_model_thresholds
 
 models = [
     './models/mnist_weights_plain.mat', './models/mnist_weights_linf.mat',
@@ -90,7 +90,10 @@ def test_our_attack_config(attack, seed=123):
         'attack_loop_finetune': [False],
         'attack_loop_r0_sampling_algorithm': ['uniform'],
         'attack_loop_r0_sampling_epsilon': [0.5],
+        'attack_loop_r0_ods_init': [True, False],
+        'attack_loop_multitargeted': [True, False],
         'attack_loop_c0_initial_const': [1.0, 0.1, 0.01],
+        'attack_save': [False]
     }
 
     if attack == 'l1g':
@@ -126,6 +129,8 @@ def test_our_attack_config(attack, seed=123):
                 'load_from': model,
                 'working_dir': working_dir,
             })
+            if attack_args['attack_loop_r0_ods'] and attack_args['attack_loop_multitargeted']:
+                continue
             for lr, decay_factor, lr_decay in itertools.product([0.1], [1], [True, False]):
                 min_lr = round(lr * decay_factor, 6)
                 if lr_decay and min_lr < lr:
