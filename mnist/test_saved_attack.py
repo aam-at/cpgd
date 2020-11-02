@@ -44,6 +44,7 @@ def main(unused_args):
                                data_format="NHWC",
                                seed=FLAGS.data_seed)
     X = test_ds[0]
+    y = test_ds[1]
 
     # models
     num_classes = 10
@@ -116,23 +117,30 @@ def main(unused_args):
     start_time = time.time()
     try:
         # select minimum perturbation from multiple saved attacks
-        X_adv = None
-        rnorm = None
+        X_adv = X.copy()
+        rnorm = np.inf * np.ones(X.shape[0])
+        i = 0
         for load_regexp in FLAGS.load_list:
             for load_file in Path(load_regexp).rglob("*.npy"):
                 X_adv_l = np.load(load_file).reshape(X.shape)
                 rnorm2 = lp_metrics[FLAGS.norm](tf.convert_to_tensor(X - X_adv_l)).numpy()
-                if X_adv is None:
-                    X_adv = X_adv_l
-                    rnorm = rnorm2
-                else:
-                    X_adv[rnorm2 < rnorm] = X_adv_l[rnorm2 < rnorm]
-                    rnorm = np.minimum(rnorm, rnorm2)
+                # check if it's adversarial
+                test_ds = tf.data.Dataset.from_tensor_slices((X_adv_l, y))
+                test_ds = make_input_pipeline(test_ds,
+                                              shuffle=False,
+                                              batch_size=FLAGS.batch_size)
+                is_adv = []
+                for image_adv, label in test_ds:
+                    is_adv.append(test_classifier(image_adv)['pred'] != label)
+                is_adv = tf.concat(is_adv, axis=0).numpy()
+                rnorm2[~is_adv] = np.inf
+                X_adv[rnorm2 < rnorm] = X_adv_l[rnorm2 < rnorm]
+                rnorm = np.minimum(rnorm, rnorm2)
 
         # combine datasets
-        X_adv[rnorm > 0.3 + 1e-4] = test_ds[0][rnorm > 0.3 + 1e-4]
+        X_adv[rnorm > 0.3 + 1e-4] = X[rnorm > 0.3 + 1e-4]
         np.save(Path(FLAGS.working_dir) / "attack.npy", X_adv.reshape((-1, 784)))
-        test_ds = tf.data.Dataset.from_tensor_slices((test_ds[0], X_adv, test_ds[1]))
+        test_ds = tf.data.Dataset.from_tensor_slices((X, X_adv, y))
         test_ds = make_input_pipeline(test_ds,
                                       shuffle=False,
                                       batch_size=FLAGS.batch_size)
