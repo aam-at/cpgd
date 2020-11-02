@@ -219,6 +219,7 @@ class AttackOptimizationLoop(object):
         self.r0_sampling_algorithm = r0_sampling_algorithm
         self.r0_sampling_epsilon = r0_sampling_epsilon
         self.r0_ods_init = r0_ods_init
+        self.multitargeted = multitargeted
         self.r0_ods_steps = r0_ods_steps
         self.c0_initial_const = c0_initial_const
         if lr_config is not None:

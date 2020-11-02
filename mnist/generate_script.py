@@ -129,7 +129,7 @@ def test_our_attack_config(attack, seed=123):
                 'load_from': model,
                 'working_dir': working_dir,
             })
-            if attack_args['attack_loop_r0_ods'] and attack_args['attack_loop_multitargeted']:
+            if attack_args['attack_loop_r0_ods_init'] and attack_args['attack_loop_multitargeted']:
                 continue
             for lr, decay_factor, lr_decay in itertools.product([0.1], [1], [True, False]):
                 min_lr = round(lr * decay_factor, 6)
