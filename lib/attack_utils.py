@@ -1,4 +1,5 @@
 import ast
+from contextlib import contextmanager
 
 import numpy as np
 import tensorflow as tf
@@ -257,3 +258,63 @@ class AttackOptimizationLoop(object):
             with tf.control_dependencies(
                 [tf.py_function(self._run_loop, [X, y_onehot], [])]):
                 return self.attack.attack.read_value()
+
+
+@contextmanager
+def ods_init(attack, ods_iterations=50):
+    old_iterations = attack.iterations
+    old_loss = attack.cls_constraint_and_loss
+    old_optim_step = attack.optim_step
+    rand_vector = None
+
+    def ods_loss(X, y_onehot):
+        nonlocal rand_vector
+        logits = attack.model(X)
+        if rand_vector is None:
+            rand_vector = tf.random.uniform(logits.shape, -1.0, 1.0)
+        return tf.ones(X.shape[0]), tf.reduce_sum(rand_vector * logits, axis=-1)
+
+    @tf.function
+    def ods_optim_step(X, y_onehot):
+        attack._primal_optim_step(X, y_onehot)
+
+    attack.iterations = ods_iterations
+    attack.cls_constraint_and_loss = ods_loss
+    attack.optim_step = ods_optim_step
+    try:
+        yield attack
+    finally:
+        attack.iterations = old_iterations
+        attack.cls_constraint_and_loss = old_loss
+        attack.optim_step = old_optim_step
+
+
+class AttackOptimizationODSLoop(AttackOptimizationLoop):
+    def __init__(self,
+                 attack,
+                 number_ods_steps: int = 50,
+                 **kwargs):
+        super(AttackOptimizationODSLoop, self).__init__(attack, **kwargs)
+        self.number_ods_steps = number_ods_steps
+
+    def _run_loop(self, X, y_onehot):
+        self.attack.restart_attack(X, y_onehot)
+        self.attack.primal_lr = self.lr
+        for i in range(self.number_restarts):
+            r0 = init_r0(X.shape, self.r0_sampling_epsilon, self.attack.ord,
+                         self.r0_sampling_algorithm)
+            r0 = self.attack.project_box(X, r0)
+            c0 = self.c0_initial_const
+            self.attack.reset_attack(r0, c0)
+            # output diversified initialization
+            with ods_init(self.attack, self.number_ods_steps) as attack:
+                attack.run(X, y_onehot)
+                r0_ods = self.attack.rx.read_value()
+            self.attack.reset_attack(r0_ods, c0)
+            self.attack.run(X, y_onehot)
+        if self.finetune:
+            self.attack.primal_lr = self.finetune_lr
+            rbest = self.attack.attack.read_value() - X
+            cbest = self.attack.bestlambd.read_value()
+            self.attack.reset_attack(rbest, cbest)
+            self.attack.run(X, y_onehot)
