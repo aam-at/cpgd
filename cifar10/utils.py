@@ -54,6 +54,24 @@ def load_madry(load_dir, model_vars, model_type="plain", sess=None):
             model_var[0].assign(var)
 
 
+def load_madry_official(load_from, model_vars, sess=None):
+    w = scipy.io.loadmat(load_from)
+    initialized_vars = {var.name: False for var in model_vars}
+    for var_name in w.keys():
+        var = w[var_name]
+        if var.ndim == 2:
+            var = var.squeeze()
+        model_var = [v for v in model_vars if v.name == var_name]
+        assert len(model_var) == 1
+        if sess:
+            sess.run(model_var[0].assign(var))
+        else:
+            model_var[0].assign(var)
+        initialized_vars[model_var.name] = True
+    print("Failed to find a matching variable .mat -> model: {}".format(
+        [name for name, v in initialized_vars.items() if not v]))
+
+
 def load_madry_pt(load_from, model_params, model_type="plain"):
     w = scipy.io.loadmat(load_from)
     if model_type != "plain":
