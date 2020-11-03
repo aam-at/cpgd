@@ -7,8 +7,11 @@ class BottleNeck(tf.keras.layers.Layer):
                  stride=1,
                  conv_shortcut=True,
                  use_bias=True,
+                 activation=tf.nn.relu,
                  name=None):
         super(BottleNeck, self).__init__(name=name)
+        assert callable(activation)
+        self.act = activation
         self.conv1 = tf.keras.layers.Conv2D(
             filters=filter_num,
             kernel_size=(1, 1),
@@ -56,14 +59,14 @@ class BottleNeck(tf.keras.layers.Layer):
 
         x = self.conv1(inputs)
         x = self.bn1(x, training=training)
-        x = tf.nn.relu(x)
+        x = self.act(x)
         x = self.conv2(x)
         x = self.bn2(x, training=training)
-        x = tf.nn.relu(x)
+        x = self.act(x)
         x = self.conv3(x)
         x = self.bn3(x, training=training)
 
-        output = tf.nn.relu(tf.keras.layers.add([residual, x]))
+        output = self.act(tf.keras.layers.add([residual, x]))
 
         return output
 
@@ -72,6 +75,7 @@ def make_bottleneck_layer(filter_num,
                           blocks,
                           stride=1,
                           use_bias=True,
+                          activation=tf.nn.relu,
                           name=None):
     res_block = tf.keras.Sequential(name=name)
     res_block.add(
@@ -80,6 +84,7 @@ def make_bottleneck_layer(filter_num,
             stride=stride,
             conv_shortcut=True,
             use_bias=use_bias,
+            activation=activation,
             name="block0",
         ))
 
@@ -90,6 +95,7 @@ def make_bottleneck_layer(filter_num,
                 stride=1,
                 conv_shortcut=False,
                 use_bias=use_bias,
+                activation=activation,
                 name=f"block{i}",
             ))
 

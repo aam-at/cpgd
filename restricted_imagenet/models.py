@@ -1,9 +1,8 @@
 import tensorflow as tf
 import torch
+from lib.residual_utils import make_bottleneck_layer
 from tensorflow.python.keras import backend
 from torchvision.models.resnet import resnet50
-
-from residual_utils import make_bottleneck_layer
 
 
 class TsiprasCNN(tf.keras.Model):
