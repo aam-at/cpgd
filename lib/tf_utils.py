@@ -120,12 +120,12 @@ def compute_margin(onehot_labels, logits, delta=0.0):
         tf.where(tf.equal(onehot_labels, 1), logits, negative_inf), 1)
     rest = tf.reduce_max(
         tf.where(tf.equal(onehot_labels, 0), logits, negative_inf), 1)
-    loss = tf.nn.relu(rest - corrects + delta)
+    return corrects - rest
 
 
-def multiclass_margin(onehot_labels, logits, delta=1.0):
-    margin = compute_margin(onehot_labels, logits)
-    loss = tf.nn.relu(delta - margin)
+def multiclass_margin(labels=None, logits=None, delta=0.0):
+    margin = compute_margin(labels, logits)
+    loss = tf.nn.relu(margin)
     return loss
 
 
