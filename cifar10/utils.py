@@ -1,5 +1,7 @@
 import scipy.io
+import tensorflow as tf
 import torch
+from tensorflow.python.training import py_checkpoint_reader
 
 
 def load_madry(load_dir, model_vars, model_type="plain", sess=None):
@@ -70,6 +72,23 @@ def load_madry_official(load_from, model_vars, sess=None):
         initialized_vars[model_var.name] = True
     print("Failed to find a matching variable .mat -> model: {}".format(
         [name for name, v in initialized_vars.items() if not v]))
+
+
+def convert_madry_official_to_mat(load_from, save_to):
+    ckpt_manager = tf.train.CheckpointManager(tf.train.Checkpoint(),
+                                              load_from,
+                                              max_to_keep=3)
+    ckpt_reader = py_checkpoint_reader.NewCheckpointReader(
+        ckpt_manager.latest_checkpoint)
+    all_ckpt_tensors = ckpt_reader.get_variable_to_shape_map()
+    all_ckpt_tensors = [name for name in all_ckpt_tensors
+                        if not name.endswith("Momentum")]
+    all_ckpt_tensors = sorted(all_ckpt_tensors)
+    mdict = {}
+    for var_name in all_ckpt_tensors:
+        var_loaded_value = ckpt_reader.get_tensor(var_name)
+        mdict[var_name] = var_loaded_value
+    scipy.io.savemat(save_to, mdict)
 
 
 def load_madry_pt(load_from, model_params, model_type="plain"):
