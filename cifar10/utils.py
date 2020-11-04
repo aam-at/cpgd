@@ -56,20 +56,30 @@ def load_madry(load_dir, model_vars, model_type="plain", sess=None):
             model_var[0].assign(var)
 
 
-def load_madry_official(load_from, model_vars, sess=None):
-    w = scipy.io.loadmat(load_from)
+def map_var_name(var_name):
+    if var_name.endswith("kernel:0"):
+        var_name = var_name.replace("kernel:0", "DW")
+    if var_name.endswith("bias:0"):
+        var_name = var_name.replace("kernel:0", "biases")
+    if "dense" in var_name:
+        import pudb; pudb.set_trace()
+        var_name = var_name.replace("dense", "logit")
+    return var_name
+
+
+def load_madry_official(load_dir, model_vars, sess=None):
+    import pudb; pudb.set_trace()
+    w = scipy.io.loadmat(load_dir)
     initialized_vars = {var.name: False for var in model_vars}
-    for var_name in w.keys():
-        var = w[var_name]
-        if var.ndim == 2:
-            var = var.squeeze()
-        model_var = [v for v in model_vars if v.name == var_name]
-        assert len(model_var) == 1
-        if sess:
-            sess.run(model_var[0].assign(var))
-        else:
-            model_var[0].assign(var)
-        initialized_vars[model_var.name] = True
+    for var in model_vars:
+        var_name = var.name
+        mapped_var_name = map_var_name(var_name)
+        try:
+            var_loaded_value = w[mapped_var_name]
+            var.assign(var_loaded_value)
+            initialized_vars[var_name] = True
+        except:
+            print("Failed to find: {}".format(mapped_var_name))
     print("Failed to find a matching variable .mat -> model: {}".format(
         [name for name, v in initialized_vars.items() if not v]))
 
