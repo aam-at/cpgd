@@ -120,7 +120,13 @@ def main(unused_args):
         X_adv = X.copy()
         rnorm = np.inf * np.ones(X.shape[0])
         i = 0
-        for load_regexp in FLAGS.load_list:
+        load_list = []
+        for load_dir in FLAGS.load_list:
+            if load_dir.endswith("*"):
+                load_list.extend(glob.glob(load_dir))
+            else:
+                load_list.append(load_dir)
+        for load_regexp in load_list:
             for load_file in Path(load_regexp).rglob("*.npy"):
                 X_adv_l = np.load(load_file).reshape(X.shape)
                 rnorm2 = lp_metrics[FLAGS.norm](tf.convert_to_tensor(X - X_adv_l)).numpy()
