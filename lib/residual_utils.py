@@ -27,7 +27,7 @@ class WideBottleNeck(tf.keras.layers.Layer):
         self.conv2 = tf.keras.layers.Conv2D(
             filters=filter_num,
             kernel_size=(3, 3),
-            strides=stride,
+            strides=1,
             padding="same",
             use_bias=use_bias,
             name="conv2",
