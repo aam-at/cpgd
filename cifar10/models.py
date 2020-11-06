@@ -1,7 +1,6 @@
 import tensorflow as tf
 import torch
 from lib.residual_utils import make_wide_bottleneck_layer
-from tensorflow.python.keras import backend
 from torch import nn
 from torch.nn import functional as F
 
@@ -117,7 +116,6 @@ class MadryWideResnetTf(tf.keras.Model):
         # configure inputs
         x_shape = inputs_shape
         x = tf.keras.layers.Input(shape=x_shape[1:], name="x")
-        bn_axis = 3 if backend.image_data_format() == "channels_last" else 1
 
         # define functional computation graph
         with tf.init_scope():
@@ -127,25 +125,25 @@ class MadryWideResnetTf(tf.keras.Model):
                                        padding="SAME",
                                        use_bias=False,
                                        name="conv0")(x)
-            z = tf.keras.layers.BatchNormalization(axis=bn_axis,
-                                                   name="conv0/bn")(z)
-            z = tf.keras.layers.ReLU()(z)
             block1 = make_wide_bottleneck_layer(160,
                                                 5,
                                                 use_bias=False,
                                                 stride=1,
+                                                activate_before_residual=True,
                                                 name="group0")
             z = block1(z)
             block2 = make_wide_bottleneck_layer(320,
                                                 5,
                                                 use_bias=False,
                                                 stride=2,
+                                                activate_before_residual=False,
                                                 name="group1")
             z = block2(z)
             block3 = make_wide_bottleneck_layer(640,
                                                 5,
                                                 use_bias=False,
                                                 stride=2,
+                                                activate_before_residual=False,
                                                 name="group2")
             z = block3(z)
             z = tf.keras.layers.GlobalAveragePooling2D()(z)
