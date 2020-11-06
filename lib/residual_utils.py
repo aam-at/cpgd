@@ -72,6 +72,7 @@ class WideBottleNeck(tf.keras.layers.Layer):
 def make_wide_bottleneck_layer(filter_num,
                                blocks,
                                stride=1,
+                               activate_before_residual=False,
                                use_bias=True,
                                activation=tf.nn.relu,
                                name=None):
@@ -80,6 +81,7 @@ def make_wide_bottleneck_layer(filter_num,
         WideBottleNeck(
             filter_num,
             stride=stride,
+            activate_before_residual=activate_before_residual,
             pool_shortcut=True,
             use_bias=use_bias,
             activation=activation,
