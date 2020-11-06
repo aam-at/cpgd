@@ -1,3 +1,4 @@
+import numpy as np
 import scipy.io
 import tensorflow as tf
 import torch
@@ -56,34 +57,6 @@ def load_madry(load_dir, model_vars, model_type="plain", sess=None):
             model_var[0].assign(var)
 
 
-def map_var_name(var_name):
-    if var_name.endswith("kernel:0"):
-        var_name = var_name.replace("kernel:0", "DW")
-    if var_name.endswith("bias:0"):
-        var_name = var_name.replace("kernel:0", "biases")
-    if "dense" in var_name:
-        import pudb; pudb.set_trace()
-        var_name = var_name.replace("dense", "logit")
-    return var_name
-
-
-def load_madry_official(load_dir, model_vars, sess=None):
-    import pudb; pudb.set_trace()
-    w = scipy.io.loadmat(load_dir)
-    initialized_vars = {var.name: False for var in model_vars}
-    for var in model_vars:
-        var_name = var.name
-        mapped_var_name = map_var_name(var_name)
-        try:
-            var_loaded_value = w[mapped_var_name]
-            var.assign(var_loaded_value)
-            initialized_vars[var_name] = True
-        except:
-            print("Failed to find: {}".format(mapped_var_name))
-    print("Failed to find a matching variable .mat -> model: {}".format(
-        [name for name, v in initialized_vars.items() if not v]))
-
-
 def convert_madry_official_to_mat(load_from, save_to):
     ckpt_manager = tf.train.CheckpointManager(tf.train.Checkpoint(),
                                               load_from,
@@ -99,6 +72,62 @@ def convert_madry_official_to_mat(load_from, save_to):
         var_loaded_value = ckpt_reader.get_tensor(var_name)
         mdict[var_name] = var_loaded_value
     scipy.io.savemat(save_to, mdict)
+
+
+def map_var_name(var_name):
+    var_name = var_name.replace(":0", "")
+    if var_name.endswith("kernel"):
+        var_name = var_name.replace("kernel", "DW")
+    if var_name.endswith("bias"):
+        var_name = var_name.replace("bias", "biases")
+    if "dense" in var_name:
+        var_name = var_name.replace("dense", "logit")
+    if var_name.startswith("conv0"):
+        var_name = var_name.replace("conv0", "input/init_conv")
+    if var_name.startswith("group"):
+        group_index = index = int(var_name[5])
+        var_name = var_name.replace("group%d/" % index, "unit_%d_" % (index + 1))
+    else:
+        group_index = -1
+    if "block" in var_name:
+        block_index = index = int(var_name[var_name.find("block") + 5])
+        var_name = var_name.replace("block%d" % index, "%d" % (index))
+    if "conv1/bn" in var_name:
+        if group_index == 0 and block_index == 0:
+            var_name = var_name.replace("conv1", "shared_activation")
+        else:
+            var_name = var_name.replace("conv1", "residual_only_activation")
+    if "conv" in var_name and group_index != -1:
+        conv_index = index = int(var_name[var_name.find("conv") + 4])
+        var_name = var_name.replace("conv%d" % index, "sub%d/conv%d" % (index, index))
+    else:
+        conv_index = -1
+    if "bn" in var_name:
+        var_name = var_name.replace("bn", "BatchNorm")
+        if conv_index > 1:
+            var_name = var_name.replace("conv%d/" % index, "")
+
+    return var_name
+
+
+def load_madry_official(load_dir, model_vars, sess=None):
+    w = scipy.io.loadmat(load_dir)
+    initialized_vars = {var.name: False for var in model_vars}
+    for var in model_vars:
+        var_name = var.name
+        mapped_var_name = map_var_name(var_name)
+        try:
+            var_loaded_value = w[mapped_var_name]
+            var_loaded_value = np.squeeze(var_loaded_value)
+            if sess:
+                sess.run(var.assign(var_loaded_value))
+            else:
+                var.assign(var_loaded_value)
+            initialized_vars[var_name] = True
+        except:
+            print("Failed to find: {}".format(mapped_var_name))
+    print("Failed to find a matching variable .mat -> model: {}".format(
+        [map_var_name(name) for name, v in initialized_vars.items() if not v]))
 
 
 def load_madry_pt(load_from, model_params, model_type="plain"):
