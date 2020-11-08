@@ -397,6 +397,7 @@ class NormConstrainedAttack(PrimalDualGradientAttack):
     def __init__(self, model, epsilon=None, **kwargs):
         super(NormConstrainedAttack,
               self).__init__(model=model, **kwargs)
+        assert epsilon is not None and epsilon > 0
         self.epsilon = epsilon
 
     def objective(self, X, r, y_onehot):
