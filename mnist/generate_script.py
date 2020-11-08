@@ -10,7 +10,7 @@ from pathlib import Path
 
 import numpy as np
 from absl import flags
-from lib.attack_lp import ProximalGradientOptimizerAttack
+from lib.attack_lp import ProximalPrimalDualGradientAttack
 from lib.generate_script import format_name, generate_test_optimizer
 from lib.parse_logs import parse_log
 from lib.tf_utils import ConstantDecay, LinearDecay
@@ -61,12 +61,17 @@ def test_random(runs=1, master_seed=1):
             print(generate_test_optimizer('test_random', **attack_args))
 
 
-def test_our_attack_config(attack, seed=123):
-    import test_our_attack
-    from test_our_attack import import_flags, lp_attacks
-
+def test_our_attack_config(attack, epsilon=None, seed=123):
     flags.FLAGS._flags().clear()
-    importlib.reload(test_our_attack)
+    if epsilon is not None:
+        import test_our_eps_attack
+        from test_our_eps_attack import import_flags, lp_attacks
+        importlib.reload(test_our_eps_attack)
+    else:
+        import test_our_attack
+        from test_our_attack import import_flags, lp_attacks
+        importlib.reload(test_our_attack)
+
     import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
 
@@ -95,11 +100,13 @@ def test_our_attack_config(attack, seed=123):
         'attack_loop_c0_initial_const': [1.0, 0.1, 0.01],
         'attack_save': [False]
     }
+    if epsilon is not None:
+        attack_grid_args['attack_epsilon'] = epsilon
 
     if attack == 'l1g':
         attack_grid_args.update({'attack_hard_threshold': [True, False]})
 
-    if issubclass(attack_klass, ProximalGradientOptimizerAttack):
+    if issubclass(attack_klass, ProximalPrimalDualGradientAttack):
         attack_grid_args.update({
             'attack_primal_opt': ["sgd"],
             'attack_primal_opt_kwargs': ["{}"],
@@ -225,7 +232,7 @@ def test_our_attack_config_custom(attack, topk=1, runs=1, master_seed=1):
                 {col: df[col]
                  for col in df.keys() if col in test_params})
             # check args
-            if issubclass(attack_klass, ProximalGradientOptimizerAttack):
+            if issubclass(attack_klass, ProximalPrimalDualGradientAttack):
                 if attack_args['attack_accelerated']:
                     continue
             if attack_args['attack_loop_c0_initial_const'] != 0.01:
