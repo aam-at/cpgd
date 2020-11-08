@@ -264,7 +264,7 @@ class AttackOptimizationLoop(object):
                 self.attack.run(X, y_onehot)
         if self.finetune:
             self.attack.primal_lr = self.finetune_lr
-            rbest = self.attack.attack.read_value() - X
+            rbest = self.attack.bestsol.read_value() - X
             cbest = self.attack.bestlambd.read_value()
             self.attack.reset_attack(rbest, cbest)
             self.attack.run(X, y_onehot)
@@ -273,18 +273,18 @@ class AttackOptimizationLoop(object):
         if tf.executing_eagerly():
             # eager mode
             self._run_loop(X, y_onehot)
-            return self.attack.attack.read_value()
+            return self.attack.bestsol.read_value()
         else:
             # graph mode
             with tf.control_dependencies(
                 [tf.py_function(self._run_loop, [X, y_onehot], [])]):
-                return self.attack.attack.read_value()
+                return self.attack.bestsol.read_value()
 
 
 @contextmanager
 def ods_init(attack, ods_iterations=50):
     old_iterations = attack.iterations
-    old_loss = attack.cls_constraint_and_loss
+    old_loss = attack.classification_loss
     old_optim_step = attack.optim_step
     rand_vector = None
 
@@ -293,19 +293,18 @@ def ods_init(attack, ods_iterations=50):
         logits = attack.model(X)
         if rand_vector is None:
             rand_vector = tf.random.uniform(logits.shape, -1.0, 1.0)
-        return tf.ones(X.shape[0]), tf.reduce_sum(rand_vector * logits,
-                                                  axis=-1)
+        return tf.reduce_sum(rand_vector * logits, axis=-1)
 
     @tf.function
     def ods_optim_step(X, y_onehot):
         attack._primal_optim_step(X, y_onehot)
 
     attack.iterations = ods_iterations
-    attack.cls_constraint_and_loss = ods_loss
+    attack.classification_loss = ods_loss
     attack.optim_step = ods_optim_step
     try:
         yield attack
     finally:
         attack.iterations = old_iterations
-        attack.cls_constraint_and_loss = old_loss
+        attack.classification_loss = old_loss
         attack.optim_step = old_optim_step
