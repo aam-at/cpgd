@@ -28,8 +28,8 @@ def init_state(ratio):
 
 
 class GradientOptimizerAttack(ABC):
-    """The L_p optimization attack (external regret minimization with
-    multiplicative updates).
+    """Optimization attack (external regret minimization with multiplicative
+    updates).
 
     """
     def __init__(
@@ -79,7 +79,7 @@ class GradientOptimizerAttack(ABC):
         """
         super(GradientOptimizerAttack, self).__init__()
         self.model = model
-        assert loss in ["logit_diff", "cw", "ce"]
+        assert loss in ["cw", "ce"]
         self.loss = loss
         self.iterations = iterations
         if not isinstance(primal_opt_kwargs, dict):
@@ -147,15 +147,15 @@ class GradientOptimizerAttack(ABC):
         self.dual_opt.apply_gradients([(tf.zeros_like(self.state), self.state)
                                        ])
         # create other attack variables to store the best attack between optimization iteration
-        self.attack = tf.Variable(tf.zeros(X_shape),
-                                  trainable=False,
-                                  name="x_hat")
+        self.bestsol = tf.Variable(tf.zeros(X_shape),
+                                   trainable=False,
+                                   name="x_hat")
         self.bestlambd = tf.Variable(tf.zeros(batch_size),
                                      trainable=False,
                                      name="best_lambd")
-        self.bestlp = tf.Variable(tf.zeros(batch_size),
-                                  trainable=False,
-                                  name="best_lp")
+        self.bestobj = tf.Variable(tf.zeros(batch_size),
+                                   trainable=False,
+                                   name="best_obj")
         self.built = True
 
     def project_state(self, u):
@@ -186,22 +186,23 @@ class GradientOptimizerAttack(ABC):
         """
         return project_box(X, u, self.boxmin, self.boxmax)
 
-    def cls_constraint_and_loss(self, X, y_onehot):
+    def classification_loss(self, X, y_onehot):
         """Return classification constraints and classification loss.
 
         Args:
             X: images.
-            y_onehot: original labels.
+            y_onehot: original or target labels.
 
         Returns:
             Classification constraints and classification loss.
         """
         logits = self.model(X)
-        cls_constraint = margin(logits, y_onehot, targeted=self.targeted)
-        if self.loss == "logit_diff":
-            cls_loss = cls_constraint
-        elif self.loss == "cw":
-            cls_loss = tf.nn.relu(cls_constraint)
+        if self.loss == "cw":
+            m = margin(logits, y_onehot, targeted=self.targeted)
+            if self.targeted:
+                cls_loss = tf.nn.relu(-m)
+            else:
+                cls_loss = tf.nn.relu(m)
         elif self.loss == "ce":
             if self.targeted:
                 cls_loss = tf.nn.sigmoid_cross_entropy_with_logits(
@@ -209,22 +210,39 @@ class GradientOptimizerAttack(ABC):
             else:
                 cls_loss = -tf.nn.sigmoid_cross_entropy_with_logits(
                     y_onehot, logits)
-        return cls_constraint, cls_loss
+        return cls_loss
 
-    def total_loss(self, X, y_onehot, r, lambd):
-        """Returns total loss (classification loss + perturbation norm constraint loss).
+    @abstractmethod
+    def objective(self, X, r, y_onehot):
+        pass
+
+    @abstractmethod
+    def constraints(self, X, r, y_onehot):
+        pass
+
+    def proxy_constraints(self, X, r, y_onehot):
+        """Proxy constraints which by default to use original constraints.
+        """
+        return self.constraints(X, r, y_onehot)
+
+    @abstractmethod
+    def state_gradient(self, constraints_gradients):
+        pass
+
+    def total_loss(self, X, r, y_onehot, lambd):
+        """Returns total loss (objective + constraints loss).
         Args:
             X: original images.
-            y_onehot: original labels.
             r: perturbation to the original images X.
-            lambd: trade-off between the classification loss and the L_p norm loss.
+            y_onehot: original labels.
+            lambd: trade-off between the objective and the constraints.
 
         Returns:
             Total cost.
         """
-        _, cls_loss = self.cls_constraint_and_loss(X + r, y_onehot)
-        lp_loss = self.lp_metric(r)
-        return cls_loss + lambd * lp_loss
+        objective = self.objective(X, r, y_onehot)
+        proxy_constraints = self.proxy_constraints(X, r, y_onehot)
+        return objective + lambd * proxy_constraints
 
     @property
     def lambd(self):
@@ -242,12 +260,7 @@ class GradientOptimizerAttack(ABC):
     def _primal_optim_step(self, X, y_onehot):
         # gradient descent on primal variables
         with tf.GradientTape() as find_r_tape:
-            X_hat = X + self.rx
-            # Part 1: lp loss
-            lp_loss = self.lp_metric(self.rx)
-            # Part 2: classification loss
-            _, cls_loss = self.cls_constraint_and_loss(X_hat, y_onehot)
-            loss = cls_loss + self.lambd * lp_loss
+            loss = self.total_loss(X, self.rx, y_onehot)
 
         # compute gradient for primal variables
         fg = find_r_tape.gradient(loss, self.rx)
@@ -259,17 +272,12 @@ class GradientOptimizerAttack(ABC):
 
     def _dual_optim_step(self, X, y_onehot):
         # gradient ascent on dual variables
-        X_hat = X + self.rx
-        cls_constraint, _ = self.cls_constraint_and_loss(X_hat, y_onehot)
-
         if self.use_proxy_constraint:
-            constraint_gradients = cls_constraint
+            constraint_gradients = self.proxy_constraints(X, self.rx, y_onehot)
         else:
-            constraint_gradients = tf.sign(cls_constraint)
-        multipliers_gradients = -tf.stack(
-            (tf.zeros_like(constraint_gradients), constraint_gradients),
-            axis=1)
-        self.dual_opt.apply_gradients([(multipliers_gradients, self.state)])
+            constraint_gradients = self.constraints(X, self.rx, y_onehot)
+        state_gradient = self.state_gradient(constraint_gradients)
+        self.dual_opt.apply_gradients([(state_gradient, self.state)])
 
         if self.dual_ema:
             lambd_new = compute_lambda(self.state)
@@ -277,21 +285,17 @@ class GradientOptimizerAttack(ABC):
                 self.ema.apply([self.lambd_ema])
 
     def _update_attack_state(self, X, y_onehot):
-        # correct prediction
         batch_indices = tf.range(X.shape[0])
-        X_hat = X + self.rx
-        logits_hat = self.model(X_hat)
-        lp_loss = self.lp_metric(self.rx)
-        y = tf.argmax(y_onehot, axis=-1)
+        objective = self.objective(X, self.rx, y_onehot)
+        is_feasible = self.constraints(X, self.rx, y_onehot) <= 0
         # check if it is the best perturbation
-        is_mistake = y != tf.argmax(logits_hat, axis=-1)
-        is_best_attack = tf.logical_and(is_mistake, lp_loss < self.bestlp)
-        self.attack.scatter_update(
-            to_indexed_slices(X_hat, batch_indices, is_best_attack))
+        is_best_sol = tf.logical_and(objective < self.bestobj, is_feasible)
+        self.bestsol.scatter_update(
+            to_indexed_slices(X + self.rx, batch_indices, is_best_sol))
         self.bestlambd.scatter_update(
-            to_indexed_slices(self.lambd, batch_indices, is_best_attack))
-        self.bestlp.scatter_update(
-            to_indexed_slices(lp_loss, batch_indices, is_best_attack))
+            to_indexed_slices(self.lambd, batch_indices, is_best_sol))
+        self.bestobj.scatter_update(
+            to_indexed_slices(objective, batch_indices, is_best_sol))
 
     @tf.function
     def restart_attack(self, X, y_onehot):
@@ -305,15 +309,16 @@ class GradientOptimizerAttack(ABC):
         """
         batch_size = X.shape[0]
         batch_indices = tf.range(batch_size)
-        self.attack.assign(X)
+        self.bestsol.assign(X)
         self.bestlambd.assign(1e10 * tf.ones(batch_size))
-        self.bestlp.assign(1e10 * tf.ones(batch_size))
+        self.bestobj.assign(1e10 * tf.ones(batch_size))
         # only compute perturbation for correctly classified inputs
         with tf.control_dependencies([tf.assert_rank(y_onehot, 2)]):
             y = tf.argmax(y_onehot, axis=-1)
             corr = prediction(self.model(X)) != y
-        self.bestlp.scatter_update(
-            to_indexed_slices(tf.zeros_like(self.bestlp), batch_indices, corr))
+        self.bestobj.scatter_update(
+            to_indexed_slices(tf.zeros_like(self.bestobj), batch_indices,
+                              corr))
 
     @tf.function
     def reset_attack(self, r0, C0):
@@ -368,7 +373,43 @@ class GradientOptimizerAttack(ABC):
 
     def call(self, X, y_onehot):
         self.run(X, y_onehot)
-        return self.attack.read_value()
+        return self.bestsol.read_value()
+
+
+class ClassConstrainedGradientOptimizerAttack(GradientOptimizerAttack):
+    def objective(self, X, r, y_onehot):
+        return self.lp_metric(r)
+
+    def constraints(self, X, r, y_onehot):
+        return tf.sign(self.proxy_constraints(X, r, y_onehot))
+
+    def proxy_constraints(self, X, r, y_onehot):
+        logits = self.model(X + r)
+        m = margin(logits, y_onehot, targeted=self.targeted)
+        return m
+
+    def state_gradient(self, constraint_gradients):
+        return -tf.stack(
+            (tf.zeros_like(constraint_gradients), constraint_gradients),
+            axis=1)
+
+
+class NormConstrainedGradientOptimizerAttack(GradientOptimizerAttack):
+    def __init__(self, model, epsilon=None, **kwargs):
+        super(NormConstrainedGradientOptimizerAttack,
+              self).__init__(model=model, **kwargs)
+        self.epsilon = epsilon
+
+    def objective(self, X, r, y_onehot):
+        return self.classification_loss(X + r, y_onehot)
+
+    def constraints(self, X, r, y_onehot):
+        return self.lp_metric(r) - self.epsilon
+
+    def state_gradient(self, constraint_gradients):
+        return -tf.stack(
+            (constraint_gradients, tf.zeros_like(constraint_gradients)),
+            axis=1)
 
 
 class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
@@ -409,35 +450,30 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
         # proximal gradient descent on primal variables
         with tf.GradientTape() as find_r_tape:
             X_hat = X + rx
-            # Part 1: lp loss
+            # Part 1: lp loss (unused, updated using proximal gradient step)
             lp_loss = self.lp_metric(rx)
             # Part 2: classification loss
-            cls_constraint, cls_loss = self.cls_constraint_and_loss(
-                X_hat, y_onehot)
+            cls_loss = self.classification_loss(X_hat, y_onehot)
 
         # select only active indices among all examples in the batch
-        update_indxs = batch_indices[cls_constraint > 0]
         # compute gradient for primal variables
         fg = find_r_tape.gradient(cls_loss, rx)
-        fg = tf.gather_nd(fg, tf.expand_dims(update_indxs, axis=1))
         if self.gradient_preprocessing:
             fg = self.gradient_preprocess(fg)
 
         # proximal or accelerated proximal gradient
         lr = self.primal_lr
         ry_v = ry.read_value()
-        sparse_fg = tf.IndexedSlices(fg, update_indxs)
-        # sparse updates does not work correctly and stil update all the statistics for some optimizer
-        # FIXME: consider using LazyAdam from tf.addons
+        # FIXME: consider using LazyAdam from tf.addons to do sparse updates
         with tf.control_dependencies(
-            [self.primal_opt.apply_gradients([(sparse_fg, rx)])]):
+            [self.primal_opt.apply_gradients([(fg, rx)])]):
             mu = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
             ry.assign(self.project_box(X, self.proximity_operator(rx, mu)))
         if self.accelerated:
             rv = self.project_box(
                 X, ry + tf.reshape(self.beta, (-1, 1, 1, 1)) * (ry - ry_v))
-            F_y = self.total_loss(X, y_onehot, ry, self.lambd)
-            F_v = self.total_loss(X, y_onehot, rv, self.lambd)
+            F_y = self.total_loss(X, ry, y_onehot, self.lambd)
+            F_v = self.total_loss(X, rv, y_onehot, self.lambd)
             rx.assign(tf.where(tf.reshape(F_y <= F_v, (-1, 1, 1, 1)), ry, rv))
             if self.adaptive_momentum:
                 self.beta.scatter_mul(
@@ -455,3 +491,15 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
     @abstractmethod
     def proximity_operator(self, u, l):
         pass
+
+
+class ProximalClassConstrainedGradientOptimizerAttack(
+        ProximalGradientOptimizerAttack,
+        ClassConstrainedGradientOptimizerAttack):
+    pass
+
+
+class ProximalNormConstrainedGradientOptimizerAttack(
+        ProximalGradientOptimizerAttack,
+        NormConstrainedGradientOptimizerAttack):
+    pass
