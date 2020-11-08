@@ -394,9 +394,8 @@ class ClassConstrainedAttack(PrimalDualGradientAttack):
 
 
 class NormConstrainedAttack(PrimalDualGradientAttack):
-    def __init__(self, model, epsilon=None, **kwargs):
-        super(NormConstrainedAttack,
-              self).__init__(model=model, **kwargs)
+    def __init__(self, model, epsilon: float = None, **kwargs):
+        super(NormConstrainedAttack, self).__init__(model=model, **kwargs)
         assert epsilon is not None and epsilon > 0
         self.epsilon = epsilon
 

@@ -62,15 +62,18 @@ def test_random(runs=1, master_seed=1):
 
 
 def test_our_attack_config(attack, epsilon=None, seed=123):
-    flags.FLAGS._flags().clear()
     if epsilon is not None:
         import test_our_eps_attack
         from test_our_eps_attack import import_flags, lp_attacks
+        flags.FLAGS._flags().clear()
         importlib.reload(test_our_eps_attack)
+        script_name = 'test_our_eps_attack'
     else:
         import test_our_attack
         from test_our_attack import import_flags, lp_attacks
+        flags.FLAGS._flags().clear()
         importlib.reload(test_our_attack)
+        script_name = 'test_our_attack'
 
     import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
@@ -101,7 +104,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         'attack_save': [False]
     }
     if epsilon is not None:
-        attack_grid_args['attack_epsilon'] = epsilon
+        attack_grid_args['attack_epsilon'] = [epsilon]
 
     if attack == 'l1g':
         attack_grid_args.update({'attack_hard_threshold': [True, False]})
@@ -187,7 +190,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                 if name in p or name in existing_names:
                     continue
                 existing_names.append(name)
-                print(generate_test_optimizer('test_our_attack', **attack_args))
+                print(generate_test_optimizer(script_name, **attack_args))
 
 
 def test_our_attack_config_custom(attack, topk=1, runs=1, master_seed=1):
