@@ -205,10 +205,10 @@ class PrimalDualGradientAttack(ABC):
                 cls_loss = tf.nn.relu(m)
         elif self.loss == "ce":
             if self.targeted:
-                cls_loss = tf.nn.sigmoid_cross_entropy_with_logits(
+                cls_loss = tf.nn.softmax_cross_entropy_with_logits(
                     y_onehot, logits)
             else:
-                cls_loss = -tf.nn.sigmoid_cross_entropy_with_logits(
+                cls_loss = -tf.nn.softmax_cross_entropy_with_logits(
                     y_onehot, logits)
         return cls_loss
 
