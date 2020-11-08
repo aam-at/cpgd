@@ -146,10 +146,12 @@ def main(unused_args):
         # measure norm
         r = image - image_adv
         lp = alp.lp_metric(r)
+        obj = alp.objective(image, r, label_onehot)
         l0 = l0_metric(r)
         l1 = l1_metric(r)
         l2 = l2_metric(r)
         li = li_metric(r)
+        test_metrics["objective"](obj)
         test_metrics["l0"](l0)
         test_metrics["l1"](l1)
         test_metrics["l2"](l2)
