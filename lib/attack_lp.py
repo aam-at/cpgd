@@ -230,7 +230,7 @@ class GradientOptimizerAttack(ABC):
         pass
 
     def total_loss(self, X, r, y_onehot, lambd):
-        """Returns total loss (objective + constraints loss).
+        """Returns total loss (classification + lp_metric).
         Args:
             X: original images.
             r: perturbation to the original images X.
@@ -240,18 +240,17 @@ class GradientOptimizerAttack(ABC):
         Returns:
             Total cost.
         """
-        objective = self.objective(X, r, y_onehot)
-        proxy_constraints = self.proxy_constraints(X, r, y_onehot)
-        return objective + lambd * proxy_constraints
+        cls_loss = self.classification_loss(X + r, y_onehot)
+        lp_loss = self.lp_metric(r)
+        return cls_loss + lambd * lp_loss
 
     @property
     def lambd(self):
         return (self.ema.average(self.lambd_ema)
                 if self.dual_ema else compute_lambda(self.state))
 
-    @abstractmethod
     def gradient_preprocess(self, g):
-        pass
+        return g
 
     @abstractmethod
     def lp_metric(self, u, keepdims=False):
