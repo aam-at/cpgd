@@ -2,17 +2,14 @@ from __future__ import absolute_import, division, print_function
 
 import tensorflow as tf
 
-from .attack_lp import (ClassConstrainedGradientOptimizerAttack,
-                        GradientOptimizerAttack,
-                        NormConstrainedGradientOptimizerAttack,
-                        ProximalClassConstrainedGradientOptimizerAttack,
-                        ProximalGradientOptimizerAttack,
-                        ProximalNormConstrainedGradientOptimizerAttack)
+from .attack_lp import (ClassConstrainedAttack, NormConstrainedAttack,
+                        PrimalDualGradientAttack,
+                        ProximalPrimalDualGradientAttack)
 from .attack_utils import hard_threshold, proximal_l1
 from .tf_utils import l1_metric
 
 
-class BaseL1Attack(GradientOptimizerAttack):
+class BaseL1Attack(PrimalDualGradientAttack):
     def __init__(self, model, **kwargs):
         super(BaseL1Attack, self).__init__(model=model, **kwargs)
         self.ord = 1
@@ -21,10 +18,10 @@ class BaseL1Attack(GradientOptimizerAttack):
         return l1_metric(u, keepdims=keepdims)
 
 
-class GradientL1Attack(BaseL1Attack):
+class L1Attack(BaseL1Attack):
     # TODO: add hard thresholding before projection to improve performance
     def __init__(self, model, hard_threshold: bool = True, **kwargs):
-        super(GradientL1Attack, self).__init__(model=model, **kwargs)
+        super(L1Attack, self).__init__(model=model, **kwargs)
         self.hard_threshold = hard_threshold
 
     def _primal_optim_step(self, X, y_onehot):
@@ -36,24 +33,24 @@ class GradientL1Attack(BaseL1Attack):
             self.rx.assign(hard_threshold(self.rx, th))
 
 
-class ClassConstrainedGradientOptimizerL1Attack(ClassConstrainedGradientOptimizerAttack, BaseL1Attack):
+class ClassConstrainedL1Attack(ClassConstrainedAttack, L1Attack):
     pass
 
 
-class NormConstrainedGradientOptimizerL1Attack(NormConstrainedGradientOptimizerAttack, BaseL1Attack):
+class NormConstrainedL1Attack(NormConstrainedAttack, L1Attack):
     pass
 
 
-class ProximalL1Attack(BaseL1Attack, ProximalGradientOptimizerAttack):
+class ProximalL1Attack(BaseL1Attack, ProximalPrimalDualGradientAttack):
     def proximity_operator(self, u, l):
         return proximal_l1(u, l)
 
 
-class ClassConstrainedProximalGradientOptimizerL1Attack(ProximalClassConstrainedGradientOptimizerAttack,
-                                                        ProximalL1Attack):
+class ClassConstrainedProximalL1Attack(ClassConstrainedAttack,
+                                       ProximalL1Attack):
     pass
 
 
-class NormConstrainedProximalGradientOptimizerL1Attack(ProximalNormConstrainedGradientOptimizerAttack,
-                                                       ProximalL1Attack):
+class NormConstrainedProximalL1Attack(NormConstrainedAttack,
+                                      ProximalL1Attack):
     pass
