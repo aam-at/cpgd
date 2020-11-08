@@ -27,7 +27,7 @@ def init_state(ratio):
     return state
 
 
-class GradientOptimizerAttack(ABC):
+class PrimalDualGradientAttack(ABC):
     """Optimization attack (external regret minimization with multiplicative
     updates).
 
@@ -77,7 +77,7 @@ class GradientOptimizerAttack(ABC):
             min_dual_ratio: minimal ratio C after dual state projection
 
         """
-        super(GradientOptimizerAttack, self).__init__()
+        super(PrimalDualGradientAttack, self).__init__()
         self.model = model
         assert loss in ["cw", "ce"]
         self.loss = loss
@@ -375,7 +375,7 @@ class GradientOptimizerAttack(ABC):
         return self.bestsol.read_value()
 
 
-class ClassConstrainedGradientOptimizerAttack(GradientOptimizerAttack):
+class ClassConstrainedAttack(PrimalDualGradientAttack):
     def objective(self, X, r, y_onehot):
         return self.lp_metric(r)
 
@@ -393,9 +393,9 @@ class ClassConstrainedGradientOptimizerAttack(GradientOptimizerAttack):
             axis=1)
 
 
-class NormConstrainedGradientOptimizerAttack(GradientOptimizerAttack):
+class NormConstrainedAttack(PrimalDualGradientAttack):
     def __init__(self, model, epsilon=None, **kwargs):
-        super(NormConstrainedGradientOptimizerAttack,
+        super(NormConstrainedAttack,
               self).__init__(model=model, **kwargs)
         self.epsilon = epsilon
 
@@ -411,7 +411,7 @@ class NormConstrainedGradientOptimizerAttack(GradientOptimizerAttack):
             axis=1)
 
 
-class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
+class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
     def __init__(self,
                  model,
                  accelerated: bool = False,
@@ -425,14 +425,14 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
             adaptive_momentum: if to use adaptive momentum accelerated gradient
             **kwargs:
         """
-        super(ProximalGradientOptimizerAttack, self).__init__(model=model,
-                                                              **kwargs)
+        super(ProximalPrimalDualGradientAttack, self).__init__(model=model,
+                                                               **kwargs)
         self.accelerated = accelerated
         self.momentum = momentum
         self.adaptive_momentum = adaptive_momentum
 
     def build(self, inputs_shape):
-        super(ProximalGradientOptimizerAttack, self).build(inputs_shape)
+        super(ProximalPrimalDualGradientAttack, self).build(inputs_shape)
         X_shape, _ = inputs_shape
         batch_size = X_shape[0]
         # variable to update so we track momentum for accelerated gradient
@@ -484,21 +484,9 @@ class ProximalGradientOptimizerAttack(GradientOptimizerAttack, ABC):
 
     @tf.function
     def reset_attack(self, r0, C0):
-        super(ProximalGradientOptimizerAttack, self).reset_attack(r0, C0)
+        super(ProximalPrimalDualGradientAttack, self).reset_attack(r0, C0)
         self.ry.assign(self.rx)
 
     @abstractmethod
     def proximity_operator(self, u, l):
         pass
-
-
-class ProximalClassConstrainedGradientOptimizerAttack(
-        ProximalGradientOptimizerAttack,
-        ClassConstrainedGradientOptimizerAttack):
-    pass
-
-
-class ProximalNormConstrainedGradientOptimizerAttack(
-        ProximalGradientOptimizerAttack,
-        NormConstrainedGradientOptimizerAttack):
-    pass
