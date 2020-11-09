@@ -169,7 +169,10 @@ def main(unused_args):
                          format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
-        return image_adv
+        assert_op = tf.Assert(tf.reduce_all(lp <= FLAGS.attack_epsilon),
+                              [image_adv])
+        with tf.control_dependencies([assert_op]):
+            return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
