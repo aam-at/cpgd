@@ -177,7 +177,6 @@ def main(unused_args):
         X_adv = []
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_adv_b = test_step(image, label)
-            X_adv_b = np.reshape(X_adv_b, (X_adv_b.shape[0], -1))
             X_adv.append(X_adv_b)
             log_metrics(
                 test_metrics,
@@ -193,7 +192,9 @@ def main(unused_args):
         X_adv = np.concatenate(X_adv, axis=0)
         if is_completed:
             if FLAGS.attack_save:
-                np.save(Path(FLAGS.working_dir) / "attack.npy", X_adv)
+                np.save(
+                    Path(FLAGS.working_dir) / "attack.npy",
+                    X_adv.reshape(X_adv.shape[0], -1))
             # hyperparameter tuning
             with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
                 # hyperparameters
