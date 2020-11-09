@@ -10,6 +10,7 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
+from lib.attack_utils import margin
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, make_input_pipeline)
 from lib.utils import (format_float, log_metrics, register_experiment_flags,
@@ -72,6 +73,7 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, image_adv, label):
+        label_onehot = tf.one_hot(label, num_classes)
         outs = test_classifier(image)
         is_corr = test_classifier(image)['pred'] == label
 
@@ -87,12 +89,17 @@ def main(unused_args):
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
         acc = acc_fn(label, outs["logits"])
+        nll_adv_loss = tf.keras.metrics.sparse_categorical_crossentropy(
+            label, outs_adv["logits"])
+        margin_adv_loss = tf.nn.relu(-margin(label_onehot, outs_adv["logits"]))
         acc_adv = acc_fn(label, outs_adv["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
+        test_metrics["nll_adv_loss"](nll_adv_loss)
+        test_metrics["margin_adv_loss"](margin_adv_loss)
         test_metrics["acc_adv"](acc_adv)
         test_metrics["conf_adv"](outs_adv["conf"])
 

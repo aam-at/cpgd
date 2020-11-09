@@ -146,7 +146,7 @@ def main(unused_args):
         # adversarial metrics
         nll_adv_loss = tf.keras.metrics.sparse_categorical_crossentropy(
             label, outs_adv["logits"])
-        margin_adv_loss = tf.nn.relu(margin(label_onehot, outs_adv["logits"]))
+        margin_adv_loss = tf.nn.relu(-margin(label_onehot, outs_adv["logits"]))
         test_metrics["nll_adv_loss"](nll_adv_loss)
         test_metrics["margin_adv_loss"](margin_adv_loss)
 
@@ -199,7 +199,10 @@ def main(unused_args):
                 break
         else:
             is_completed = True
-        X_adv = np.concatenate(X_adv, axis=0)
+        if len(X_adv) > 1:
+            X_adv = np.concatenate(X_adv, axis=0)
+        else:
+            X_adv = np.array(X_adv[0])
         if is_completed:
             if FLAGS.attack_save:
                 np.save(
