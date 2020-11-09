@@ -16,7 +16,7 @@ from lib.attack_l1 import (NormConstrainedL1Attack,
 from lib.attack_l2 import (NormConstrainedL2Attack,
                            NormConstrainedProximalL2Attack)
 from lib.attack_li import NormConstrainedProximalLiAttack
-from lib.attack_utils import AttackOptimizationLoop
+from lib.attack_utils import AttackOptimizationLoop, margin
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, make_input_pipeline)
 from lib.utils import (format_float, import_klass_annotations_as_flags,
@@ -143,15 +143,20 @@ def main(unused_args):
         test_metrics[f"acc_{norm}"](acc_adv)
         test_metrics[f"conf_{norm}"](outs_adv["conf"])
 
+        # adversarial metrics
+        nll_adv_loss = tf.keras.metrics.sparse_categorical_crossentropy(
+            label, outs_adv["logits"])
+        margin_adv_loss = tf.nn.relu(margin(label_onehot, outs_adv["logits"]))
+        test_metrics["nll_adv_loss"](nll_adv_loss)
+        test_metrics["margin_adv_loss"](margin_adv_loss)
+
         # measure norm
         r = image - image_adv
         lp = alp.lp_metric(r)
-        obj = alp.objective(image, r, label_onehot)
         l0 = l0_metric(r)
         l1 = l1_metric(r)
         l2 = l2_metric(r)
         li = li_metric(r)
-        test_metrics["objective"](obj)
         test_metrics["l0"](l0)
         test_metrics["l1"](l1)
         test_metrics["l2"](l2)
