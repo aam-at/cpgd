@@ -193,7 +193,8 @@ class CSattack():
                  kappa: float = -1,
                  epsilon: float = -1,
                  sparsity: int = 100,
-                 size_incr: int = 1):
+                 size_incr: int = 1,
+                 verbose: bool = False):
         self.model = model
         self.type_attack = type_  # 'L0', 'L0+Linf', 'L0+sigma'
         self.n_iter = n_iter  # number of iterations (N_iter in the paper)
@@ -202,6 +203,7 @@ class CSattack():
         self.kappa = kappa  # for L0+sigma (see kappa in the paper), larger kappa means easier and more visible attacks
         self.k = sparsity  # maximum number of pixels that can be modified (k_max in the paper)
         self.size_incr = size_incr  # size of progressive increment of sparsity levels to check
+        self.verbose = verbose
 
     def perturb(self, x_nat, y_nat):
         adv = np.copy(x_nat)
@@ -233,9 +235,10 @@ class CSattack():
                         ind_adv = np.where(pred.astype(int) == 0)
                         adv[c] = batch_x[counter * bs + ind_adv[0][0]]
                         found = True
-                        print(
-                            'Point {} - adversarial example found changing 1 pixel'
-                            .format(c))
+                        if self.verbose:
+                            print(
+                                'Point {} - adversarial example found changing 1 pixel'
+                                .format(c))
 
                 # creates the orderings
                 t1 = np.copy(logit_2[:, batch_y])
@@ -265,22 +268,27 @@ class CSattack():
                                     found = True
                                     ind_adv = np.where(pred.astype(int) == 0)
                                     adv[c] = batch_x[ind_adv[0][0]]
-                                    print(
-                                        'Point {} - adversarial example found changing {} pixels'
-                                        .format(
-                                            c,
-                                            np.sum(np.amax(
-                                                np.abs(adv[c] - x_nat[c]) >
-                                                1e-10,
-                                                axis=-1),
-                                                   axis=(0, 1))))
+                                    if self.verbose:
+                                        print(
+                                            'Point {} - adversarial example found changing {} pixels'
+                                            .format(
+                                                c,
+                                                np.sum(np.amax(
+                                                    np.abs(adv[c] - x_nat[c]) >
+                                                    1e-10,
+                                                    axis=-1),
+                                                       axis=(0, 1))))
 
                 if not found:
                     fl_success[c] = 0
-                    print('Point {} - adversarial example not found'.format(c))
+                    if self.verbose:
+                        print(
+                            'Point {} - adversarial example not found'.format(
+                                c))
 
             else:
-                print('Point {} - misclassified'.format(c))
+                if self.verbose:
+                    print('Point {} - misclassified'.format(c))
 
         pixels_changed = np.sum(np.amax(np.abs(adv - x_nat) > 1e-10, axis=-1),
                                 axis=(1, 2))
