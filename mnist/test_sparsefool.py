@@ -66,9 +66,6 @@ def main(unused_args):
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
 
-    nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
-    acc_fn = tf.keras.metrics.sparse_categorical_accuracy
-
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
