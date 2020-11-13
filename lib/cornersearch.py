@@ -1,8 +1,4 @@
 import numpy as np
-import scipy.io
-import torch
-
-from .pt_utils import prediction
 
 
 def onepixel_perturbation(attack, orig_x, pos, sigma):
@@ -191,15 +187,15 @@ def sigma_map(x):
 class CSattack():
     def __init__(self,
                  model,
-                 attack_type: str = 'L0',
+                 type_: str = 'L0',
                  n_iter: int = 1000,
                  n_max: int = 100,
                  kappa: float = -1,
                  epsilon: float = -1,
-                 sparsity: float = 10,
-                 size_incr: float = 1):
+                 sparsity: int = 100,
+                 size_incr: int = 1):
         self.model = model
-        self.type_attack = attack_type  # 'L0', 'L0+Linf', 'L0+sigma'
+        self.type_attack = type_  # 'L0', 'L0+Linf', 'L0+sigma'
         self.n_iter = n_iter  # number of iterations (N_iter in the paper)
         self.n_max = n_max  # the modifications for k-pixels perturbations are sampled among the best n_max (N in the paper)
         self.epsilon = epsilon  # for L0+Linf, the bound on the Linf-norm of the perturbation
@@ -216,7 +212,7 @@ class CSattack():
         self.n_corners = 2**self.shape_img[2] if self.type_attack in [
             'L0', 'L0+Linf'
         ] else 2
-        corr_pred = prediction(self.model(x_nat)) == y_nat
+        corr_pred = self.model(x_nat).argmax(-1) == y_nat
         bs = self.shape_img[0] * self.shape_img[1]
 
         for c in range(x_nat.shape[0]):
@@ -230,8 +226,7 @@ class CSattack():
                 # checks one-pixels modifications
                 for counter in range(self.n_corners):
                     logit_2[counter * bs:(counter + 1) * bs] = self.model(
-                        batch_x[counter * bs:(counter + 1) *
-                                bs]).cpu().numpy()
+                        batch_x[counter * bs:(counter + 1) * bs])
                     pred = logit_2[counter * bs:(counter + 1) * bs].argmax(
                         axis=-1) == np.tile(batch_y, (bs))
                     if not pred.all() and not found:
@@ -263,9 +258,8 @@ class CSattack():
 
                                 batch_x = npixels_perturbation(
                                     self, x_nat[c], ind_cl, n3, sigma)
-                                pred = prediction(
-                                    self.model(batch_x)) == np.tile(
-                                        batch_y, (batch_x.shape[0]))
+                                pred = self.model(batch_x).argmax(
+                                    -1) == np.tile(batch_y, (batch_x.shape[0]))
                                 if np.sum(pred.astype(
                                         np.int32)) < self.n_iter and not found:
                                     found = True
@@ -291,6 +285,6 @@ class CSattack():
         pixels_changed = np.sum(np.amax(np.abs(adv - x_nat) > 1e-10, axis=-1),
                                 axis=(1, 2))
         print('Pixels changed: ', pixels_changed)
-        corr_pred = prediction(self.model(adv)) == y_nat
+        corr_pred = self.model(adv).argmax(-1) == y_nat
 
         return adv, pixels_changed, fl_success
