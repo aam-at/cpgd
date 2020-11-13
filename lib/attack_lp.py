@@ -259,7 +259,7 @@ class PrimalDualGradientAttack(ABC):
     def _primal_optim_step(self, X, y_onehot):
         # gradient descent on primal variables
         with tf.GradientTape() as find_r_tape:
-            loss = self.total_loss(X, self.rx, y_onehot)
+            loss = self.total_loss(X, self.rx, y_onehot, self.lambd)
 
         # compute gradient for primal variables
         fg = find_r_tape.gradient(loss, self.rx)
