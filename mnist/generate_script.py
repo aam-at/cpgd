@@ -369,8 +369,9 @@ def daa_config(seed=123):
 
 # fab attack
 def fab_config(norm, seed=123):
-    import test_fab
     from lib.fab import FABAttack
+
+    import test_fab
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_fab)
@@ -678,6 +679,39 @@ def sparsefool_config(seed=123):
             continue
         existing_names.append(name)
         print(generate_test_optimizer('test_sparsefool', **attack_args))
+
+
+def cornersearch_config(seed=123):
+    import test_cornersearch
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_cornersearch)
+
+    norm = 'l0'
+    num_images = 1000
+    batch_size = 500
+    attack_args = {
+        'num_batches': num_images // batch_size,
+        'batch_size': batch_size,
+        'seed': seed
+    }
+
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../results_mnist/test_{type}/{norm}/cornersearch"
+        attack_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+            'attack_sparsity': 784
+        })
+        name = f"mnist_cs_{type}_{norm}_"
+        attack_args['name'] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer('test_cornersearch', **attack_args))
 
 
 # ibm art attacks
