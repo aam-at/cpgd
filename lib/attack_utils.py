@@ -198,6 +198,16 @@ def random_lp_vector(shape, ord, eps, dtype=tf.float32, seed=None):
     return r
 
 
+def build_lr(lr, lr_config=None):
+    if lr_config is not None:
+        if isinstance(lr_config, str):
+            lr_config = ast.literal_eval(lr_config)
+        return create_lr_schedule(lr_config['schedule'],
+                                  **lr_config['config'])
+    else:
+        return lr
+
+
 class AttackOptimizationLoop(object):
     def __init__(self,
                  attack,
@@ -210,9 +220,13 @@ class AttackOptimizationLoop(object):
                  multitargeted: bool = False,
                  lr: float = 0.01,
                  lr_config: str = None,
+                 dual_lr: float = 0.1,
+                 dual_lr_config: str = None,
                  finetune: bool = True,
                  finetune_lr: float = 0.01,
-                 finetune_lr_config: str = None):
+                 finetune_lr_config: str = None,
+                 finetune_dual_lr: float = 0.01,
+                 finetune_dual_lr_config: str = None):
         assert not (r0_ods_init and multitargeted)
         self.attack = attack
         self.number_restarts = number_restarts
@@ -222,25 +236,16 @@ class AttackOptimizationLoop(object):
         self.multitargeted = multitargeted
         self.r0_ods_steps = r0_ods_steps
         self.c0_initial_const = c0_initial_const
-        if lr_config is not None:
-            if isinstance(lr_config, str):
-                lr_config = ast.literal_eval(lr_config)
-            self.lr = create_lr_schedule(lr_config['schedule'],
-                                         **lr_config['config'])
-        else:
-            self.lr = lr
+        self.lr = build_lr(lr, lr_config)
+        self.dual_lr = build_lr(dual_lr, dual_lr_config)
         self.finetune = finetune
-        if finetune_lr_config is not None:
-            if isinstance(finetune_lr_config, str):
-                finetune_lr_config = ast.literal_eval(finetune_lr_config)
-            self.finetune_lr = create_lr_schedule(
-                finetune_lr_config['schedule'], **finetune_lr_config['config'])
-        else:
-            self.finetune_lr = finetune_lr
+        self.finetune_lr = build_lr(finetune_lr, finetune_lr_config)
+        self.finetune_dual_lr = build_lr(finetune_dual_lr, finetune_dual_lr_config)
 
     def _run_loop(self, X, y_onehot):
         self.attack.restart_attack(X, y_onehot)
         self.attack.primal_lr = self.lr
+        self.attack.dual_lr = self.dual_lr
         for i in range(self.number_restarts):
             r0 = init_r0(X.shape, self.r0_sampling_epsilon, self.attack.ord,
                          self.r0_sampling_algorithm)
@@ -264,6 +269,7 @@ class AttackOptimizationLoop(object):
                 self.attack.run(X, y_onehot)
         if self.finetune:
             self.attack.primal_lr = self.finetune_lr
+            self.attack.dual_lr = self.finetune_dual_lr
             rbest = self.attack.bestsol.read_value() - X
             cbest = self.attack.bestlambd.read_value()
             self.attack.reset_attack(rbest, cbest)
