@@ -8,17 +8,17 @@ import time
 import absl
 import tensorflow as tf
 from absl import flags
-from art.attacks import (CarliniL2Method, CarliniLInfMethod, DeepFool,
-                         ElasticNet)
+from art.attacks.evasion import (CarliniL2Method, CarliniLInfMethod, DeepFool,
+                                 ElasticNet)
 from art.classifiers import TensorFlowV2Classifier
-
-from config import test_thresholds
-from data import load_mnist
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, make_input_pipeline)
 from lib.utils import (import_klass_annotations_as_flags, log_metrics,
                        register_experiment_flags, reset_metrics,
                        setup_experiment)
+
+from config import test_thresholds
+from data import load_mnist
 from models import MadryCNNTf
 from utils import load_madry
 
@@ -49,11 +49,9 @@ lp_attacks = {
 
 def import_flags(norm, attack):
     global lp_attacks
-    assert args.norm in lp_attacks
-    assert args.attack in lp_attacks[args.norm]
-    import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack],
+    import_klass_annotations_as_flags(lp_attacks[norm][attack],
                                       "attack_",
-                                      include_kwargs_with_defaults=True)
+                                      exclude_args=["return", "classifier"])
 
 
 def main(unused_args):

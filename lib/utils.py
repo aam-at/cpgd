@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import subprocess
-import typing
 from argparse import Namespace
 from shutil import copyfile
 
@@ -68,11 +67,13 @@ def import_func_annotations_as_flags(f,
         float: flags.DEFINE_float,
     }
     imported = []
+    index0 = (len(spec.annotations.items()) -
+              (len(spec.defaults) if spec.defaults is not None else 0))
     for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
         if kwarg in exclude_args:
             continue
         try:
-            kwarg_default = spec.defaults[index]
+            kwarg_default = spec.defaults[index - index0]
         except:
             kwarg_default = spec.kwonlydefaults[kwarg]
         is_known_type = False

@@ -717,7 +717,7 @@ def cornersearch_config(seed=123):
 # ibm art attacks
 def art_config(norm, attack, seed=123):
     import test_art
-    from test_foolbox import import_flags
+    from test_art import import_flags
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_art)
