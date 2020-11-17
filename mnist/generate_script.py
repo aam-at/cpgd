@@ -456,7 +456,7 @@ def cleverhans_config(norm, attack, seed=123):
     elif attack == 'ead':
         # default params
         attack_grid_args.update({
-            'attack_max_iterations': [1000],
+            'attack_max_iterations': [1000, 10000],
             'attack_learning_rate': [0.01],
             'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
@@ -534,7 +534,7 @@ def foolbox_config(norm, attack, seed=123):
     elif attack == 'ead':
         # default params
         attack_grid_args.update({
-            'attack_steps': [1000],
+            'attack_steps': [1000, 10000],
             'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
             'attack_decision_rule': ['L1'],
