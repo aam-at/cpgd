@@ -1,11 +1,9 @@
 absl-py>=0.9.0
+adversarial-robustness-toolbox==1.4.2
 cma>=3.0.3
-git+git://github.com/aam-at/adversarial-robustness-toolbox@master#egg=art
+foolbox==3.2.1
 git+git://github.com/aam-at/cleverhans_tf2@master#egg=cleverhans
-git+git://github.com/aam-at/foolbox@master#egg=foolbox
-https://storage.googleapis.com/jax-releases/cuda101/jaxlib-0.1.47-cp37-none-linux_x86_64.whl
-jax>=0.1.69
-numba>=0.50
+numba==0.51.2
 numpy>=1.18.2
 pytorch-ignite>=0.3.0
 tensorboard>=2.2.0
