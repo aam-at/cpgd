@@ -31,7 +31,9 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_klass_annotations_as_flags(FABAttack, "attack_")
+import_klass_annotations_as_flags(FABAttack,
+                                  "attack_",
+                                  exclude_args=["seed", "verbose"])
 
 FLAGS = flags.FLAGS
 
