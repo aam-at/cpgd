@@ -12,8 +12,8 @@ from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, to_torch)
 from lib.sparsefool import sparsefool
 from lib.tf_utils import limit_gpu_growth, make_input_pipeline
-from lib.utils import (import_func_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
+from lib.utils import (format_float, import_func_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
 
 from config import test_thresholds
@@ -118,7 +118,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds["l1"]:
             is_adv_at_th = torch.logical_and(l1 <= threshold, is_adv)
-            test_metrics[f"acc_l1_%.2f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_l1_%s" % format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

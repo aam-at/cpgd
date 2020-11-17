@@ -10,12 +10,12 @@ import tensorflow as tf
 from absl import flags
 from art.attacks import PixelAttack
 from art.classifiers import TensorFlowV2Classifier
-
-from data import load_mnist
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric,
                           make_input_pipeline)
-from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
-                       setup_experiment)
+from lib.utils import (format_float, log_metrics, register_experiment_flags,
+                       reset_metrics, setup_experiment)
+
+from data import load_mnist
 from models import MadryCNNTf
 from utils import load_madry
 
@@ -128,7 +128,7 @@ def main(unused_args):
         test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
 
         is_adv_at_th = tf.logical_and(l0 <= FLAGS.attack_threshold, is_adv)
-        test_metrics["acc_l0_%.2f" % FLAGS.attack_threshold](~is_adv_at_th)
+        test_metrics["acc_l0_%s" % format_float(FLAGS.attack_threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
