@@ -10,8 +10,8 @@ import tensorflow as tf
 from absl import flags
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric,
                           make_input_pipeline, random_targets)
-from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
-                       setup_experiment)
+from lib.utils import (format_float, log_metrics, register_experiment_flags,
+                       reset_metrics, setup_experiment)
 
 from config import test_thresholds
 from data import load_mnist
@@ -219,7 +219,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds["l0"]:
             is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
-            test_metrics["acc_l0_%.2f" % threshold](~is_adv_at_th)
+            test_metrics["acc_l0_%s" % format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
