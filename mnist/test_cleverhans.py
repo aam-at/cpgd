@@ -51,8 +51,7 @@ def import_flags(norm, attack):
     assert norm in lp_attacks
     assert attack in lp_attacks[norm]
     import_func_annotations_as_flags(lp_attacks[norm][attack].parse_params,
-                                     prefix="attack_",
-                                     include_kwargs_with_defaults=True)
+                                     prefix="attack_")
 
 
 def main(unused_args):

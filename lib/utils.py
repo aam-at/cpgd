@@ -40,8 +40,7 @@ def flags_to_params(fls):
 
 def import_klass_annotations_as_flags(klass,
                                       prefix='',
-                                      exclude_args=None,
-                                      include_kwargs_with_defaults=False):
+                                      exclude_args=None):
     if exclude_args is None:
         exclude_args = []
     imported = []
@@ -49,14 +48,12 @@ def import_klass_annotations_as_flags(klass,
         imported += import_func_annotations_as_flags(
             base_klass.__init__,
             prefix=prefix,
-            exclude_args=exclude_args + imported,
-            include_kwargs_with_defaults=include_kwargs_with_defaults)
+            exclude_args=exclude_args + imported)
 
 
 def import_func_annotations_as_flags(f,
                                      prefix='',
-                                     exclude_args=None,
-                                     include_kwargs_with_defaults=False):
+                                     exclude_args=None):
     if exclude_args is None:
         exclude_args = []
     spec = inspect.getfullargspec(f)
@@ -67,16 +64,23 @@ def import_func_annotations_as_flags(f,
         float: flags.DEFINE_float,
     }
     imported = []
-    index0 = (len(spec.annotations.items()) -
-              (len(spec.defaults) if spec.defaults is not None else 0))
-    for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
+    total_defaults = len(spec.defaults) if spec.defaults is not None else 0
+    for index, kwarg in enumerate(spec.args[-total_defaults:]):
         if kwarg in exclude_args:
             continue
         try:
-            kwarg_default = spec.defaults[index - index0]
+            kwarg_default = spec.defaults[index]
         except:
-            kwarg_default = spec.kwonlydefaults[kwarg]
-        is_known_type = False
+            logging.debug(f"No defaults for {kwarg}")
+            continue
+        if kwarg in spec.annotations:
+            kwarg_type = spec.annotations[kwarg]
+        else:
+            if kwarg_default is None:
+                logging.debug(f"Default is None for {kwarg}")
+                continue
+            else:
+                kwarg_type = type(kwarg_default)
         arg_type = kwarg_type
         # generic type
         if hasattr(kwarg_type, "__args__"):
@@ -97,22 +101,8 @@ def import_func_annotations_as_flags(f,
             imported.append(kwarg)
         except DuplicateFlagError as e:
             logging.debug(e)
-    if include_kwargs_with_defaults and spec.defaults is not None:
-        total_kwargs_with_defaults = len(spec.defaults)
-        for index, kwarg in enumerate(spec.args[-total_kwargs_with_defaults:]):
-            if kwarg in imported or kwarg in exclude_args:
-                continue
-            kwarg_default = spec.defaults[index]
-            kwarg_type = type(kwarg_default)
-            if kwarg_type not in flag_defines:
-                logging.debug(f"Uknown {kwarg} type {kwarg_type}")
-            else:
-                arg_name = f"{prefix}{kwarg}"
-                try:
-                    flag_defines[kwarg_type](arg_name, kwarg_default,
-                                             f"{kwarg}")
-                except DuplicateFlagError as e:
-                    logging.debug(e)
+        except KeyError as e:
+            logging.debug(e)
     return imported
 
 
