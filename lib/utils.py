@@ -64,45 +64,24 @@ def import_func_annotations_as_flags(f,
         float: flags.DEFINE_float,
     }
     imported = []
-    total_defaults = len(spec.defaults) if spec.defaults is not None else 0
-    for index, kwarg in enumerate(spec.args[-total_defaults:]):
+    args_with_defaults = {}
+    if spec.defaults is not None:
+        args_with_defaults.update(dict(zip(spec.args[-len(spec.defaults):], spec.defaults)))
+    if spec.kwonlydefaults is not None:
+        args_with_defaults.update(spec.kwonlydefaults)
+    for kwarg, kwarg_default in args_with_defaults.items():
         if kwarg in exclude_args:
             continue
-        try:
-            kwarg_default = spec.defaults[index]
-        except:
-            logging.debug(f"No defaults for {kwarg}")
-            continue
-        if kwarg in spec.annotations:
-            kwarg_type = spec.annotations[kwarg]
-        else:
-            if kwarg_default is None:
-                logging.debug(f"Default is None for {kwarg}")
-                continue
-            else:
-                kwarg_type = type(kwarg_default)
-        arg_type = kwarg_type
-        # generic type
-        if hasattr(kwarg_type, "__args__"):
-            kwarg_types = kwarg_type.__args__
-            for kwarg_type in kwarg_types:
-                if kwarg_type in flag_defines:
-                    is_known_type = True
-                    arg_type = kwarg_type
-                    break
-        else:
-            if kwarg_type in flag_defines:
-                is_known_type = True
-        if not is_known_type:
-            logging.debug(f"Uknown {kwarg} type {kwarg_type}")
+        kwarg_type = type(kwarg_default)
         arg_name = f"{prefix}{kwarg}"
         try:
-            flag_defines[arg_type](arg_name, kwarg_default, f"{kwarg}")
+            flag_defines[kwarg_type](arg_name, kwarg_default, f"{kwarg}")
             imported.append(kwarg)
         except DuplicateFlagError as e:
             logging.debug(e)
         except KeyError as e:
             logging.debug(e)
+            logging.debug(f"Uknown {kwarg} type {kwarg_type}")
     return imported
 
 
