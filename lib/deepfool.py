@@ -13,7 +13,7 @@ def deepfool(image,
              num_classes: int=10,
              overshoot: float = 0.02,
              max_iter: int = 50,
-             ord=2):
+             ord: int=2):
     """Deepfool attack
 
     :param image: Image of size HxWx3
