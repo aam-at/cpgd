@@ -72,9 +72,19 @@ def import_func_annotations_as_flags(f,
     for kwarg, kwarg_default in args_with_defaults.items():
         if kwarg in exclude_args:
             continue
-        kwarg_type = type(kwarg_default)
         arg_name = f"{prefix}{kwarg}"
         try:
+            if kwarg_default is None:
+                kwarg_type = spec.annotations[kwarg]
+                # generic type
+                if hasattr(kwarg_type, "__args__"):
+                    kwarg_types = kwarg_type.__args__
+                    for t in kwarg_types:
+                        if kwarg_type in flag_defines:
+                            kwarg_type = t
+                            break
+            else:
+                kwarg_type = type(kwarg_default)
             flag_defines[kwarg_type](arg_name, kwarg_default, f"{kwarg}")
             imported.append(kwarg)
         except DuplicateFlagError as e:

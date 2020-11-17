@@ -387,10 +387,9 @@ def fab_config(norm, seed=123):
     }
 
     existing_names = []
-    for model, n_restarts in itertools.product(models, [1, 10, 100]):
+    for model, n_iter, n_restarts in itertools.product(models, [100, 500], [1, 10, 100]):
         # default params for mnist
         # see: https://openreview.net/pdf?id=HJlzxgBtwH
-        n_iter = 100
         alpha_max = 0.1
         eta = 1.05
         beta = 0.9
