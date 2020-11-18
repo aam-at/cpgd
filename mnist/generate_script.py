@@ -889,7 +889,7 @@ def pixel_attack_config(seed=123):
                 continue
             existing_names.append(name)
             print(
-                generate_test_optimizer('test_one_pixel_attack',
+                generate_test_optimizer('test_pixel_attack',
                                         **attack_args))
 
 
