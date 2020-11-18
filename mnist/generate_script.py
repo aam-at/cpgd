@@ -3,6 +3,7 @@
 from __future__ import absolute_import, division, print_function
 
 import ast
+import functools
 import importlib
 import itertools
 import subprocess
@@ -26,6 +27,15 @@ models = [
 hostname = subprocess.getoutput('hostname')
 
 FLAGS = flags.FLAGS
+
+
+def cleanflags(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        flags.FLAGS._flags().clear()
+        fn(*args, **kwargs)
+
+    return wrapper
 
 
 def generate_test_optimizer_lp(**kwargs):
@@ -61,6 +71,7 @@ def test_random(runs=1, master_seed=1):
             print(generate_test_optimizer('test_random', **attack_args))
 
 
+@cleanflags
 def test_our_attack_config(attack, epsilon=None, seed=123):
     if epsilon is not None:
         import test_our_eps_attack
@@ -269,7 +280,10 @@ def test_our_attack_config_custom(attack, topk=1, runs=1, master_seed=1):
                 attack_args["name"] = name
                 if name in existing_names:
                     continue
-                p = [s.name[:-1] for s in list(Path(attack_args['working_dir']).glob("*"))]
+                p = [
+                    s.name[:-1]
+                    for s in list(Path(attack_args['working_dir']).glob("*"))
+                ]
                 if name in p or j > topk:
                     continue
                 existing_names.append(name)
@@ -282,6 +296,7 @@ def test_our_attack_config_custom(attack, topk=1, runs=1, master_seed=1):
                                                 **attack_args))
 
 
+@cleanflags
 def pgd_config(norm, seed=123):
     import test_pgd
     from test_pgd import import_flags
@@ -303,7 +318,8 @@ def pgd_config(norm, seed=123):
     for model in models:
         type = Path(model).stem.split("_")[-1]
         for nb_iter, nb_restarts, eps, eps_scale in itertools.product(
-                [100], [1, 10, 100], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
+            [100, 500], [1, 10, 100], test_model_thresholds[type][norm],
+            [1, 2, 5, 10, 25, 50, 100]):
             working_dir = f"../results_mnist/test_{type}/{norm}/pgd"
             attack_args.update({
                 'load_from': model,
@@ -326,6 +342,7 @@ def pgd_config(norm, seed=123):
             print(generate_test_optimizer('test_pgd', **attack_args))
 
 
+@cleanflags
 def daa_config(seed=123):
     import test_daa
     from test_daa import import_flags
@@ -347,7 +364,8 @@ def daa_config(seed=123):
     for model in models:
         type = Path(model).stem.split("_")[-1]
         for nb_iter, nb_restarts, method, eps, eps_scale in itertools.product(
-                [200], [1, 50], ['dgf', 'blob'], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
+            [200], [1, 50], ['dgf', 'blob'], test_model_thresholds[type][norm],
+            [1, 2, 5, 10, 25, 50, 100]):
             working_dir = f"../results_mnist/test_{type}/{norm}/daa"
             attack_args.update({
                 'load_from': model,
@@ -367,7 +385,7 @@ def daa_config(seed=123):
             print(generate_test_optimizer('test_daa', **attack_args))
 
 
-# fab attack
+@cleanflags
 def fab_config(norm, seed=123):
     from lib.fab import FABAttack
 
@@ -387,16 +405,29 @@ def fab_config(norm, seed=123):
     }
 
     existing_names = []
-    for model, n_iter, n_restarts in itertools.product(models, [100, 500], [1, 10, 100]):
+    for model, n_iter, n_restarts in itertools.product(models, [100, 500],
+                                                       [1, 10, 100]):
         # default params for mnist
         # see: https://openreview.net/pdf?id=HJlzxgBtwH
         alpha_max = 0.1
         eta = 1.05
         beta = 0.9
         eps = {
-            'plain': {'li': 0.15, 'l2': 2.0, 'l1': 40.0},
-            'linf': {'li': 0.3, 'l2': 2.0, 'l1': 40.0},
-            'l2': {'li': 0.3, 'l2': 2.0, 'l1': 40.0}
+            'plain': {
+                'li': 0.15,
+                'l2': 2.0,
+                'l1': 40.0
+            },
+            'linf': {
+                'li': 0.3,
+                'l2': 2.0,
+                'l1': 40.0
+            },
+            'l2': {
+                'li': 0.3,
+                'l2': 2.0,
+                'l1': 40.0
+            }
         }
         eps['madry'] = eps['linf']
 
@@ -422,8 +453,10 @@ def fab_config(norm, seed=123):
         print(generate_test_optimizer('test_fab', **attack_args))
 
 
-# cleverhans attacks
+@cleanflags
 def cleverhans_config(norm, attack, seed=123):
+    """Cleverhans attacks config
+    """
     import test_cleverhans
     from test_cleverhans import import_flags
 
@@ -486,8 +519,9 @@ def cleverhans_config(norm, attack, seed=123):
         print(generate_test_optimizer('test_cleverhans', **attack_args))
 
 
-# foolbox attacks
+@cleanflags
 def foolbox_config(norm, attack, seed=123):
+    """Foobox attacks"""
     import test_foolbox
     from test_foolbox import import_flags
 
@@ -571,6 +605,7 @@ def foolbox_config(norm, attack, seed=123):
         print(generate_test_optimizer('test_foolbox', **attack_args))
 
 
+@cleanflags
 def bethge_config(norm, seed=123):
     import test_bethge
     from test_bethge import import_flags
@@ -610,6 +645,7 @@ def bethge_config(norm, seed=123):
         print(generate_test_optimizer('test_bethge', **attack_args))
 
 
+@cleanflags
 def deepfool_config(norm, seed=123):
     import test_deepfool
 
@@ -645,6 +681,7 @@ def deepfool_config(norm, seed=123):
         print(generate_test_optimizer('test_deepfool', **attack_args))
 
 
+@cleanflags
 def sparsefool_config(seed=123):
     import test_sparsefool
 
@@ -680,6 +717,7 @@ def sparsefool_config(seed=123):
         print(generate_test_optimizer('test_sparsefool', **attack_args))
 
 
+@cleanflags
 def cornersearch_config(seed=123):
     import test_cornersearch
 
@@ -713,8 +751,9 @@ def cornersearch_config(seed=123):
         print(generate_test_optimizer('test_cornersearch', **attack_args))
 
 
-# ibm art attacks
+@cleanflags
 def art_config(norm, attack, seed=123):
+    """IBM art toolbox attacks"""
     import test_art
     from test_art import import_flags
 
@@ -752,7 +791,7 @@ def art_config(norm, attack, seed=123):
             name_fn = lambda: f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
         else:
             attack_grid_args.update({
-                'attack_max_iter': [10000],
+                'attack_max_iter': [1000],
                 'attack_eps': [0.3],
             })
             name_fn = lambda: f"mnist_{type}_{attack}_art_n{attack_args['attack_max_iter']}_eps{attack_args['attack_eps']}_"
@@ -787,6 +826,7 @@ def art_config(norm, attack, seed=123):
         print(generate_test_optimizer('test_art', **attack_args))
 
 
+@cleanflags
 def jsma_config(seed=123):
     num_images = 1000
     batch_size = 500
@@ -819,7 +859,8 @@ def jsma_config(seed=123):
         print(generate_test_optimizer('test_jsma', **attack_args))
 
 
-def one_pixel_attack_config(seed=123):
+@cleanflags
+def pixel_attack_config(seed=123):
     num_images = 1000
     batch_size = 200
     attack_args = {
@@ -853,4 +894,33 @@ def one_pixel_attack_config(seed=123):
 
 
 if __name__ == '__main__':
-    pass
+    # li attacks
+    deepfool_config("li")
+    foolbox_config("li", "df")
+    bethge_config("li")
+    daa_config()
+    pgd_config("li")
+    fab_config("li")
+    # l2 attacks
+    deepfool_config("l2")
+    foolbox_config("l2", "df")
+    art_config("l2", "df")
+    foolbox_config("l2", "cw")
+    cleverhans_config("l2", "cw")
+    foolbox_config("l2", "ddn")
+    foolbox_config("l2", "newton")
+    bethge_config("l2")
+    pgd_config("l2")
+    fab_config("l2")
+    # l1 attacks
+    sparsefool_config()
+    cleverhans_config("l1", "ead")
+    foolbox_config("l1", "ead")
+    bethge_config("l1")
+    pgd_config("l1")
+    fab_config("l1")
+    # l0 attacks
+    jsma_config()
+    cornersearch_config()
+    pixel_attack_config()
+    bethge_config("l0")
