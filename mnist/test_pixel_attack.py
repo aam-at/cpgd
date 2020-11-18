@@ -8,7 +8,7 @@ import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from art.attacks import PixelAttack
+from art.attacks.evasion import PixelAttack
 from art.classifiers import TensorFlowV2Classifier
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric,
                           make_input_pipeline)
