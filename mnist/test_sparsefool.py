@@ -9,7 +9,7 @@ import torch
 import torch.nn.functional as F
 from absl import flags
 from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
-                          li_metric, to_torch)
+                          li_metric, setup_torch, to_torch)
 from lib.sparsefool import sparsefool
 from lib.tf_utils import limit_gpu_growth, make_input_pipeline
 from lib.utils import (format_float, import_func_annotations_as_flags,
@@ -38,6 +38,7 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
+    setup_torch(FLAGS.seed)
     setup_experiment(f"madry_sparsefool_test", [__file__])
 
     # models
