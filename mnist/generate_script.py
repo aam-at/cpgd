@@ -663,16 +663,17 @@ def deepfool_config(norm, seed=123):
     }
 
     existing_names = []
-    for model in models:
+    for model, max_iter in itertools.product(models, [50, 500]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results_mnist/test_{type}/{norm}/df"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
             'attack_overshoot': 0.02,
-            'attack_max_iter': 50,
+            'attack_max_iter': max_iter,
         })
-        name = f"mnist_df_orig_{type}_{norm}_"
+        name = f"mnist_df_orig_"
+        name = f"mnist_{type}_df_orig_n{attack_args['attack_max_iter']}_os{attack_args['attack_overshoot']}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
