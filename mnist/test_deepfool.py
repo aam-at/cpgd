@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from absl import flags
 from lib.deepfool import deepfool
 from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
-                          li_metric, to_torch)
+                          li_metric, setup_torch, to_torch)
 from lib.tf_utils import limit_gpu_growth, make_input_pipeline
 from lib.utils import (format_float, import_func_annotations_as_flags,
                        log_metrics, register_experiment_flags, reset_metrics,
@@ -42,6 +42,7 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     assert FLAGS.norm in ["l2", "li"]
+    setup_torch(FLAGS.seed)
     setup_experiment(f"madry_deepfool_{FLAGS.norm}_test",
                      [__file__, lib.deepfool.__file__])
 
