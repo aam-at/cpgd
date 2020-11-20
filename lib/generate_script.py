@@ -56,7 +56,7 @@ _N{attack_args["attack_loop_number_restarts"]}
     name = f"{name}_dlr_{format_lr_config(dlr_config)}"
     if finetune:
         dlr_config = attack_args["attack_loop_finetune_dual_lr_config"]
-        name = f"{name}_fdlr{format_lr_config(dlr_config)}"
+        name = f"{name}_fdlr_{format_lr_config(dlr_config)}"
     if not attack_args['attack_dual_ema']:
         name = f"{name}_noema"
     name = f"""{name}_{attack_args['attack_loop_r0_sampling_algorithm']}
