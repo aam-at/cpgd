@@ -152,7 +152,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
             })
             if attack_args['attack_loop_r0_ods_init'] and attack_args['attack_loop_multitargeted']:
                 continue
-            for lr, decay_factor, lr_decay in itertools.product([0.1], [0.01], [True, False]):
+            for lr, decay_factor, lr_decay in itertools.product([1.0, 0.5, 0.1, 0.05, 0.01], [0.01], [True, False]):
                 min_lr = round(lr * decay_factor, 6)
                 if lr_decay and min_lr < lr:
                     lr_config = {
