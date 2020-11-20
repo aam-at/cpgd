@@ -17,6 +17,11 @@ def format_lr_config(lr_config):
             f"linear_init{lr_config['config']['initial_learning_rate']}_"
             f"min{lr_config['config']['minimal_learning_rate']}"
         )
+    elif lr_config["schedule"] == "exp":
+        s = (
+            f"exp_init{lr_config['config']['initial_learning_rate']}_"
+            f"min{lr_config['config']['minimal_learning_rate']}"
+        )
     return s
 
 
