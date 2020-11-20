@@ -542,6 +542,25 @@
   <<output_results>>
 #+END_SRC
 
+** Cornersearch attack
+*** Plain
+#+BEGIN_SRC python :async :noweb yes :var attack="cornersearch" :var norm="l0" :var type="plain" :results output
+  <<parse_results>>
+  <<output_results>>
+#+END_SRC
+
+*** Linf
+#+BEGIN_SRC python :async :noweb yes :var attack="cornersearch" :var norm="l0" :var type="linf" :results output
+  <<parse_results>>
+  <<output_results>>
+#+END_SRC
+
+*** L2
+#+BEGIN_SRC python :async :noweb yes :var attack="cornersearch" :var norm="l0" :var type="l2" :results output
+  <<parse_results>>
+  <<output_results>>
+#+END_SRC
+
 ** PDPGD attack
 *** Plain
 #+BEGIN_SRC python :async :noweb yes :var attack="our_l0" :var norm="l0" :var type="plain" :results output
