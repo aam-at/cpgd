@@ -542,7 +542,7 @@ def foolbox_config(norm, attack, seed=123):
     if attack == 'df':
         # default params
         attack_grid_args.update({
-            'attack_steps': [50],
+            'attack_steps': [50, 100, 1000],
             'attack_overshoot': [0.02],
             'attack_candidates': [10]
         })
@@ -663,7 +663,7 @@ def deepfool_config(norm, seed=123):
     }
 
     existing_names = []
-    for model, max_iter in itertools.product(models, [50, 500]):
+    for model, max_iter in itertools.product(models, [50, 100, 1000]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../results_mnist/test_{type}/{norm}/df"
         attack_args.update({
@@ -776,7 +776,7 @@ def art_config(norm, attack, seed=123):
     if attack == 'df':
         # default params
         attack_grid_args.update({
-            'attack_max_iter': [100, 1000],
+            'attack_max_iter': [50, 100, 1000],
             'attack_nb_grads': [10],
             'attack_epsilon': [0.02],
         })
