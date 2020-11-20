@@ -106,9 +106,9 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         'attack_dual_ema': [True, False],
         'attack_use_proxy_constraint': [False],
         'attack_loop_number_restarts': [1],
-        'attack_loop_finetune': [False],
+        'attack_loop_finetune': [True, False],
         'attack_loop_r0_sampling_algorithm': ['uniform'],
-        'attack_loop_r0_sampling_epsilon': [0.5],
+        'attack_loop_r0_sampling_epsilon': [0.0, 0.5],
         'attack_loop_r0_ods_init': [True, False],
         'attack_loop_multitargeted': [True, False],
         'attack_loop_c0_initial_const': [1.0, 0.1, 0.01],
@@ -152,15 +152,15 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
             })
             if attack_args['attack_loop_r0_ods_init'] and attack_args['attack_loop_multitargeted']:
                 continue
-            for lr, decay_factor, lr_decay in itertools.product([0.1], [1], [True, False]):
+            for lr, decay_factor, lr_decay in itertools.product([0.1], [0.01], [True, False]):
                 min_lr = round(lr * decay_factor, 6)
                 if lr_decay and min_lr < lr:
                     lr_config = {
                         'schedule': 'linear',
                         'config': {
                             **LinearDecay(initial_learning_rate=lr,
-                                        minimal_learning_rate=min_lr,
-                                        decay_steps=attack_args['attack_iterations']).get_config(
+                                          minimal_learning_rate=min_lr,
+                                          decay_steps=attack_args['attack_iterations']).get_config(
                             )
                         }
                     }
@@ -176,9 +176,9 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                         'schedule': 'linear',
                         'config': {
                             **LinearDecay(initial_learning_rate=min_lr,
-                                        minimal_learning_rate=round(
-                                            min_lr / 10, 6),
-                                        decay_steps=attack_args['attack_iterations']).get_config(
+                                          minimal_learning_rate=round(
+                                              min_lr / 10, 6),
+                                          decay_steps=attack_args['attack_iterations']).get_config(
                             )
                         }
                     }
@@ -189,11 +189,28 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                             **ConstantDecay(learning_rate=min_lr).get_config()
                         }
                     }
+                dlr = attack_args['attack_dual_lr']
+                min_dlr = dlr / 10.0
+                dlr_config = {
+                    'schedule': 'linear',
+                    'config': {
+                        **LinearDecay(initial_learning_rate=dlr,
+                                      minimal_learning_rate=min_dlr,
+                                      decay_steps=attack_args['attack_iterations']).get_config(
+                                      )
+                    }
+                }
+                finetune_dlr_config = {
+                    'schedule': 'constant',
+                    'config': {
+                        **ConstantDecay(learning_rate=min_dlr).get_config()
+                    }
+                }
                 attack_args.update({
-                    'attack_loop_lr_config':
-                    lr_config,
-                    'attack_loop_finetune_lr_config':
-                    finetune_lr_config
+                    'attack_loop_lr_config': lr_config,
+                    'attack_loop_finetune_lr_config': finetune_lr_config,
+                    'attack_loop_dual_lr_config': dlr_config,
+                    'attack_loop_finetune_dual_lr_config': finetune_dlr_config,
                 })
                 base_name = f"mnist_{type}"
                 name = format_name(base_name, attack_args) + '_'
