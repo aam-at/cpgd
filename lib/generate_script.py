@@ -7,15 +7,15 @@ from pathlib import Path
 import six
 
 
-def format_lr_config(lr_config, prefix="lr"):
+def format_lr_config(lr_config):
     if isinstance(lr_config, str):
         lr_config = ast.literal_eval(lr_config)
     if lr_config["schedule"] == "constant":
-        s = f"{prefix}{lr_config['config']['learning_rate']}"
+        s = f"{lr_config['config']['learning_rate']}"
     elif lr_config["schedule"] == "linear":
         s = (
-            f"linear_{prefix}{lr_config['config']['initial_learning_rate']}_"
-            f"mlr{lr_config['config']['minimal_learning_rate']}"
+            f"linear_init{lr_config['config']['initial_learning_rate']}_"
+            f"min{lr_config['config']['minimal_learning_rate']}"
         )
     return s
 
@@ -29,14 +29,6 @@ def format_name(base_name, attack_args):
 _n{attack_args["attack_iterations"]}
 _N{attack_args["attack_loop_number_restarts"]}
 """
-    lr_config = attack_args["attack_loop_lr_config"]
-    name = f"{name}_{format_lr_config(lr_config)}"
-    if attack_args["attack_loop_finetune"]:
-        name = f"{name}_finetune"
-        lr_config = attack_args["attack_loop_finetune_lr_config"]
-        name = f"{name}_{format_lr_config(lr_config)}"
-    else:
-        name = f"{name}_nofinetune"
     name = f"{name}_{'sim' if attack_args['attack_simultaneous_updates'] else 'alt'}"
     name = f"{name}_{attack_args['attack_primal_opt']}"
     if (
@@ -49,10 +41,22 @@ _N{attack_args["attack_loop_number_restarts"]}
             f"{name}_apg_m{attack_args['attack_momentum']}"
             f"{'_adaptive' if attack_args['attack_adaptive_momentum'] else ''}"
         )
+    finetune = attack_args["attack_loop_finetune"]
+    name = f"{name}_finetune" if finetune else f"{name}_nofinetune"
+    # learning rate
+    lr_config = attack_args["attack_loop_lr_config"]
+    name = f"{name}_lr_{format_lr_config(lr_config)}"
+    # finetune learning rate
+    if finetune:
+        lr_config = attack_args["attack_loop_finetune_lr_config"]
+        name = f"{name}_flr_{format_lr_config(lr_config)}"
     name = f"{name}_{attack_args['attack_dual_opt']}"
-    name = f"{name}_dlr{attack_args['attack_loop_dual_lr']}"
-    if attack_args["attack_loop_finetune"]:
-        name = f"{name}_finetune_dlr{attack_args['attack_loop_finetune_dual_lr']}"
+    # dual learning rate
+    dlr_config = attack_args["attack_loop_dual_lr_config"]
+    name = f"{name}_dlr_{format_lr_config(dlr_config)}"
+    if finetune:
+        dlr_config = attack_args["attack_loop_finetune_dual_lr_config"]
+        name = f"{name}_fdlr{format_lr_config(dlr_config)}"
     if not attack_args['attack_dual_ema']:
         name = f"{name}_noema"
     name = f"""{name}_{attack_args['attack_loop_r0_sampling_algorithm']}
