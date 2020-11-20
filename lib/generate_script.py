@@ -7,6 +7,19 @@ from pathlib import Path
 import six
 
 
+def format_lr_config(lr_config, prefix="lr"):
+    if isinstance(lr_config, str):
+        lr_config = ast.literal_eval(lr_config)
+    if lr_config["schedule"] == "constant":
+        s = f"{prefix}{lr_config['config']['learning_rate']}"
+    elif lr_config["schedule"] == "linear":
+        s = (
+            f"linear_{prefix}{lr_config['config']['initial_learning_rate']}_"
+            f"mlr{lr_config['config']['minimal_learning_rate']}"
+        )
+    return s
+
+
 def format_name(base_name, attack_args):
     attack = attack_args['attack']
     if attack == 'l1g' and attack_args['attack_hard_threshold']:
@@ -17,27 +30,11 @@ _n{attack_args["attack_iterations"]}
 _N{attack_args["attack_loop_number_restarts"]}
 """
     lr_config = attack_args["attack_loop_lr_config"]
-    if isinstance(lr_config, str):
-        lr_config = ast.literal_eval(lr_config)
-    if lr_config["schedule"] == "constant":
-        name = f"{name}_lr{lr_config['config']['learning_rate']}"
-    elif lr_config["schedule"] == "linear":
-        name = (
-            f"{name}_linear_lr{lr_config['config']['initial_learning_rate']}_"
-            f"mlr{lr_config['config']['minimal_learning_rate']}"
-        )
+    name = f"{name}_{format_lr_config(lr_config)}"
     if attack_args["attack_loop_finetune"]:
         name = f"{name}_finetune"
         lr_config = attack_args["attack_loop_finetune_lr_config"]
-        if isinstance(lr_config, str):
-            lr_config = ast.literal_eval(lr_config)
-        if lr_config["schedule"] == "constant":
-            name = f"{name}_flr{lr_config['config']['learning_rate']}"
-        else:
-            name = (
-                f"{name}_linear_lr{lr_config['config']['initial_learning_rate']}_"
-                f"mlr{lr_config['config']['minimal_learning_rate']}"
-            )
+        name = f"{name}_{format_lr_config(lr_config)}"
     else:
         name = f"{name}_nofinetune"
     name = f"{name}_{'sim' if attack_args['attack_simultaneous_updates'] else 'alt'}"
@@ -52,7 +49,10 @@ _N{attack_args["attack_loop_number_restarts"]}
             f"{name}_apg_m{attack_args['attack_momentum']}"
             f"{'_adaptive' if attack_args['attack_adaptive_momentum'] else ''}"
         )
-    name = f"{name}_dlr{attack_args['attack_dual_lr']}_d{attack_args['attack_dual_opt']}"
+    name = f"{name}_{attack_args['attack_dual_opt']}"
+    name = f"{name}_dlr{attack_args['attack_loop_dual_lr']}"
+    if attack_args["attack_loop_finetune"]:
+        name = f"{name}_finetune_dlr{attack_args['attack_loop_finetune_dual_lr']}"
     if not attack_args['attack_dual_ema']:
         name = f"{name}_noema"
     name = f"""{name}_{attack_args['attack_loop_r0_sampling_algorithm']}
