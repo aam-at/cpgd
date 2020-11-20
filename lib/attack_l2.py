@@ -1,5 +1,7 @@
 from __future__ import absolute_import, division, print_function
 
+import tensorflow as tf
+
 from .attack_lp import (ClassConstrainedAttack, NormConstrainedAttack,
                         PrimalDualGradientAttack,
                         ProximalPrimalDualGradientAttack)
@@ -17,7 +19,9 @@ class L2Attack(PrimalDualGradientAttack):
         return g
 
     def lp_metric(self, u, keepdims=False):
-        return l2_metric(u, keepdims=keepdims)
+        l2_n = l2_metric(u, keepdims=keepdims)
+        # NOTE: stop gradient when norm is zero to avoid nans
+        return tf.where(l2_n == 0, tf.stop_gradient(l2_n), l2_n)
 
 
 class ClassConstrainedL2Attack(ClassConstrainedAttack, L2Attack):
