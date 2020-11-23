@@ -13,13 +13,23 @@
   from lib.parse_logs import (parse_log, org_table)
   from lib.utils import format_float
 
+  try:
+      export_params = [group_param]
+  except:
+      group_param = None
+      export_params = []
 
-  model_thresholds = [format_float(th) for th in np.array(test_model_thresholds[type][norm])]
+  model_thresholds = [
+      format_float(th) for th in np.array(test_model_thresholds[type][norm])
+  ]
   dirs = glob.glob(f"../results_mnist/test_{type}/{norm}/{attack}/*")
   df_logs = []
   for load_dir in dirs:
-      df_logs.append(parse_log(load_dir, exclude=["nll_loss", "conf"],
-                               export_test_params=["num_batches", "batch_size"]))
+      df_logs.append(
+          parse_log(load_dir,
+                    exclude=["nll_loss", "conf"],
+                    export_test_params=["num_batches", "batch_size"] +
+                    export_params))
   df = pd.concat(df_logs, ignore_index=True)
   df = df.sort_values(f"{norm}_corr")
   df["total"] = df["num_batches"] * df["batch_size"]
@@ -34,6 +44,7 @@
           return 10
       else:
           return 0
+
   df = df[sorted(df.columns, key=col_sort, reverse=True)]
 
   if len(model_thresholds) > 0:
@@ -46,6 +57,14 @@
   for col in df.columns:
       if col.startswith(f"acc_{norm}_"):
           df[col] = df[col] * 100
+
+  df_list = {}
+  if group_param is None:
+      df_list[attack] = df
+  else:
+      df_gr = df.groupby(by=group_param)
+      for gr_key, gr_df in df_gr:
+          df_list[f"{attack}-{gr_key}"] = gr_df
 #+END_SRC
 
 #+NAME: output_results
@@ -63,18 +82,22 @@
       writer.book = book
   else:
       writer = pd.ExcelWriter(output_file, mode='w')
-  df.to_excel(writer, sheet_name=attack)
 
-  # autoresize columns
-  ws = writer.sheets[attack]
-  dims = {}
-  for row in ws.rows:
-      for cell in row:
-          if cell.value:
-              dims[cell.column] = max((dims.get(cell.column,
-                                                0), len(str(cell.value))))
-  for col, value in dims.items():
-      ws.column_dimensions[get_column_letter(col)].width = value
+  book = writer.book
+  for name, df in df_list.items():
+      if name in book.sheetnames:
+          del book[name]
+      df.to_excel(writer, sheet_name=name)
+      # autoresize columns
+      ws = writer.sheets[name]
+      dims = {}
+      for row in ws.rows:
+          for cell in row:
+              if cell.value:
+                  dims[cell.column] = max((dims.get(cell.column,
+                                                    0), len(str(cell.value))))
+      for col, value in dims.items():
+          ws.column_dimensions[get_column_letter(col)].width = value
   writer.save()
 #+END_SRC
 
