@@ -5,7 +5,6 @@ import json
 import logging
 import os
 import subprocess
-import typing
 from argparse import Namespace
 from shutil import copyfile
 
@@ -41,8 +40,7 @@ def flags_to_params(fls):
 
 def import_klass_annotations_as_flags(klass,
                                       prefix='',
-                                      exclude_args=None,
-                                      include_kwargs_with_defaults=False):
+                                      exclude_args=None):
     if exclude_args is None:
         exclude_args = []
     imported = []
@@ -50,14 +48,12 @@ def import_klass_annotations_as_flags(klass,
         imported += import_func_annotations_as_flags(
             base_klass.__init__,
             prefix=prefix,
-            exclude_args=exclude_args + imported,
-            include_kwargs_with_defaults=include_kwargs_with_defaults)
+            exclude_args=exclude_args + imported)
 
 
 def import_func_annotations_as_flags(f,
                                      prefix='',
-                                     exclude_args=None,
-                                     include_kwargs_with_defaults=False):
+                                     exclude_args=None):
     if exclude_args is None:
         exclude_args = []
     spec = inspect.getfullargspec(f)
@@ -68,50 +64,34 @@ def import_func_annotations_as_flags(f,
         float: flags.DEFINE_float,
     }
     imported = []
-    for index, (kwarg, kwarg_type) in enumerate(spec.annotations.items()):
+    args_with_defaults = {}
+    if spec.defaults is not None:
+        args_with_defaults.update(dict(zip(spec.args[-len(spec.defaults):], spec.defaults)))
+    if spec.kwonlydefaults is not None:
+        args_with_defaults.update(spec.kwonlydefaults)
+    for kwarg, kwarg_default in args_with_defaults.items():
         if kwarg in exclude_args:
             continue
-        try:
-            kwarg_default = spec.defaults[index]
-        except:
-            kwarg_default = spec.kwonlydefaults[kwarg]
-        is_known_type = False
-        arg_type = kwarg_type
-        # generic type
-        if hasattr(kwarg_type, "__args__"):
-            kwarg_types = kwarg_type.__args__
-            for kwarg_type in kwarg_types:
-                if kwarg_type in flag_defines:
-                    is_known_type = True
-                    arg_type = kwarg_type
-                    break
-        else:
-            if kwarg_type in flag_defines:
-                is_known_type = True
-        if not is_known_type:
-            logging.debug(f"Uknown {kwarg} type {kwarg_type}")
         arg_name = f"{prefix}{kwarg}"
         try:
-            flag_defines[arg_type](arg_name, kwarg_default, f"{kwarg}")
+            if kwarg_default is None:
+                kwarg_type = spec.annotations[kwarg]
+                # generic type
+                if hasattr(kwarg_type, "__args__"):
+                    kwarg_types = kwarg_type.__args__
+                    for t in kwarg_types:
+                        if kwarg_type in flag_defines:
+                            kwarg_type = t
+                            break
+            else:
+                kwarg_type = type(kwarg_default)
+            flag_defines[kwarg_type](arg_name, kwarg_default, f"{kwarg}")
             imported.append(kwarg)
         except DuplicateFlagError as e:
             logging.debug(e)
-    if include_kwargs_with_defaults and spec.defaults is not None:
-        total_kwargs_with_defaults = len(spec.defaults)
-        for index, kwarg in enumerate(spec.args[-total_kwargs_with_defaults:]):
-            if kwarg in imported or kwarg in exclude_args:
-                continue
-            kwarg_default = spec.defaults[index]
-            kwarg_type = type(kwarg_default)
-            if kwarg_type not in flag_defines:
-                logging.debug(f"Uknown {kwarg} type {kwarg_type}")
-            else:
-                arg_name = f"{prefix}{kwarg}"
-                try:
-                    flag_defines[kwarg_type](arg_name, kwarg_default,
-                                             f"{kwarg}")
-                except DuplicateFlagError as e:
-                    logging.debug(e)
+        except KeyError as e:
+            logging.debug(e)
+            logging.debug(f"Uknown {kwarg} type {kwarg_type}")
     return imported
 
 

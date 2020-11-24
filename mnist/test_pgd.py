@@ -2,10 +2,8 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
-import os
 import sys
 import time
-from pathlib import Path
 
 import absl
 import numpy as np
@@ -54,8 +52,7 @@ def import_flags(norm):
     import_func_annotations_as_flags(
         lp_attacks[norm].parse_params,
         prefix="attack_",
-        exclude_args=exclude_args,
-        include_kwargs_with_defaults=True)
+        exclude_args=exclude_args)
 
 
 def main(unused_args):

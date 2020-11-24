@@ -1,5 +1,8 @@
+import numpy as np
 import scipy.io
+import tensorflow as tf
 import torch
+from tensorflow.python.training import py_checkpoint_reader
 
 
 def load_madry(load_dir, model_vars, model_type="plain", sess=None):
@@ -54,22 +57,77 @@ def load_madry(load_dir, model_vars, model_type="plain", sess=None):
             model_var[0].assign(var)
 
 
-def load_madry_official(load_from, model_vars, sess=None):
-    w = scipy.io.loadmat(load_from)
-    initialized_vars = {var.name: False for var in model_vars}
-    for var_name in w.keys():
-        var = w[var_name]
-        if var.ndim == 2:
-            var = var.squeeze()
-        model_var = [v for v in model_vars if v.name == var_name]
-        assert len(model_var) == 1
-        if sess:
-            sess.run(model_var[0].assign(var))
+def convert_madry_official_to_mat(load_from, save_to):
+    ckpt_manager = tf.train.CheckpointManager(tf.train.Checkpoint(),
+                                              load_from,
+                                              max_to_keep=3)
+    ckpt_reader = py_checkpoint_reader.NewCheckpointReader(
+        ckpt_manager.latest_checkpoint)
+    all_ckpt_tensors = ckpt_reader.get_variable_to_shape_map()
+    all_ckpt_tensors = [name for name in all_ckpt_tensors
+                        if not name.endswith("Momentum")]
+    all_ckpt_tensors = sorted(all_ckpt_tensors)
+    mdict = {}
+    for var_name in all_ckpt_tensors:
+        var_loaded_value = ckpt_reader.get_tensor(var_name)
+        mdict[var_name] = var_loaded_value
+    scipy.io.savemat(save_to, mdict)
+
+
+def map_var_name(var_name):
+    var_name = var_name.replace(":0", "")
+    if var_name.endswith("kernel"):
+        var_name = var_name.replace("kernel", "DW")
+    if var_name.endswith("bias"):
+        var_name = var_name.replace("bias", "biases")
+    if "dense" in var_name:
+        var_name = var_name.replace("dense", "logit")
+    if var_name.startswith("conv0"):
+        var_name = var_name.replace("conv0", "input/init_conv")
+    if var_name.startswith("group"):
+        group_index = index = int(var_name[5])
+        var_name = var_name.replace("group%d/" % index, "unit_%d_" % (index + 1))
+    else:
+        group_index = -1
+    if "block" in var_name:
+        block_index = index = int(var_name[var_name.find("block") + 5])
+        var_name = var_name.replace("block%d" % index, "%d" % (index))
+    if "conv1/bn" in var_name:
+        if group_index == 0 and block_index == 0:
+            var_name = var_name.replace("conv1", "shared_activation")
         else:
-            model_var[0].assign(var)
-        initialized_vars[model_var.name] = True
+            var_name = var_name.replace("conv1", "residual_only_activation")
+    if "conv" in var_name and group_index != -1:
+        conv_index = index = int(var_name[var_name.find("conv") + 4])
+        var_name = var_name.replace("conv%d" % index, "sub%d/conv%d" % (index, index))
+    else:
+        conv_index = -1
+    if "bn" in var_name:
+        var_name = var_name.replace("bn", "BatchNorm")
+        if conv_index > 1:
+            var_name = var_name.replace("conv%d/" % index, "")
+
+    return var_name
+
+
+def load_madry_official(load_dir, model_vars, sess=None):
+    w = scipy.io.loadmat(load_dir)
+    initialized_vars = {var.name: False for var in model_vars}
+    for var in model_vars:
+        var_name = var.name
+        mapped_var_name = map_var_name(var_name)
+        try:
+            var_loaded_value = w[mapped_var_name]
+            var_loaded_value = np.squeeze(var_loaded_value)
+            if sess:
+                sess.run(var.assign(var_loaded_value))
+            else:
+                var.assign(var_loaded_value)
+            initialized_vars[var_name] = True
+        except:
+            print("Failed to find: {}".format(mapped_var_name))
     print("Failed to find a matching variable .mat -> model: {}".format(
-        [name for name, v in initialized_vars.items() if not v]))
+        [map_var_name(name) for name, v in initialized_vars.items() if not v]))
 
 
 def load_madry_pt(load_from, model_params, model_type="plain"):

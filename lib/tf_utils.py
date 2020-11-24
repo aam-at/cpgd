@@ -41,6 +41,10 @@ def create_lr_schedule(schedule, **kwargs):
         lr = kwargs['learning_rate']
     elif schedule == 'linear':
         lr = LinearDecay(**kwargs)
+    elif schedule == 'exp':
+        lr = ExpDecay(**kwargs)
+    else:
+        raise ValueError
     return lr
 
 
@@ -227,6 +231,43 @@ class LinearDecay(LearningRateSchedule):
         with tf.control_dependencies([assert_op]):
             return (minimal_learning_rate +
                     (initial_learning_rate - minimal_learning_rate) * (1 - p))
+
+    def get_config(self):
+        return {
+            "initial_learning_rate": self.initial_learning_rate,
+            "minimal_learning_rate": self.minimal_learning_rate,
+            "decay_steps": self.decay_steps,
+            "name": self.name
+        }
+
+
+class ExpDecay(LearningRateSchedule):
+    def __init__(self,
+                 initial_learning_rate,
+                 minimal_learning_rate,
+                 decay_steps,
+                 name=None):
+        super(ExpDecay, self).__init__()
+        assert initial_learning_rate > minimal_learning_rate, (
+            initial_learning_rate, minimal_learning_rate)
+        self.initial_learning_rate = initial_learning_rate
+        self.minimal_learning_rate = minimal_learning_rate
+        self.decay_steps = decay_steps
+        self.name = name
+
+    def __call__(self, step):
+        initial_learning_rate = tf.convert_to_tensor(
+            self.initial_learning_rate, name="initial_learning_rate")
+        dtype = initial_learning_rate.dtype
+        minimal_learning_rate = tf.cast(self.minimal_learning_rate, dtype)
+        decay_factor = minimal_learning_rate / initial_learning_rate
+        decay_steps = tf.cast(self.decay_steps, dtype)
+        global_step_recomp = tf.cast(step, dtype)
+        p = global_step_recomp / decay_steps
+
+        assert_op = tf.Assert(decay_steps >= global_step_recomp, [step])
+        with tf.control_dependencies([assert_op]):
+            return initial_learning_rate * tf.pow(decay_factor, p)
 
     def get_config(self):
         return {

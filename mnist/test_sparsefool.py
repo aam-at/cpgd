@@ -5,20 +5,19 @@ import sys
 import time
 
 import absl
-import tensorflow as tf
 import torch
 import torch.nn.functional as F
 from absl import flags
+from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
+                          li_metric, setup_torch, to_torch)
+from lib.sparsefool import sparsefool
+from lib.tf_utils import limit_gpu_growth, make_input_pipeline
+from lib.utils import (format_float, import_func_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 
 from config import test_thresholds
 from data import load_mnist
-from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
-                          li_metric, to_torch)
-from lib.sparsefool import sparsefool
-from lib.tf_utils import limit_gpu_growth, make_input_pipeline
-from lib.utils import (import_func_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
-                       setup_experiment)
 from models import MadryCNNPt
 from utils import load_madry_pt
 
@@ -39,16 +38,8 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
+    setup_torch(FLAGS.seed)
     setup_experiment(f"madry_sparsefool_test", [__file__])
-
-    # data
-    _, _, test_ds = load_mnist(FLAGS.validation_size,
-                               data_format="NCHW",
-                               seed=FLAGS.data_seed)
-    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(test_ds,
-                                  shuffle=False,
-                                  batch_size=FLAGS.batch_size)
 
     # models
     num_classes = 10
@@ -59,14 +50,22 @@ def main(unused_args):
     classifier.cuda()
     classifier.eval()
 
+    # data
+    _, _, test_ds = load_mnist(FLAGS.validation_size,
+                               data_format="NCHW",
+                               seed=FLAGS.data_seed)
+    # NOTE: load tensorflow after converting model to cuda
+    import tensorflow as tf
+    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
+    test_ds = make_input_pipeline(test_ds,
+                                  shuffle=False,
+                                  batch_size=FLAGS.batch_size)
+
     # attacks
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
     }
-
-    nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
-    acc_fn = tf.keras.metrics.sparse_categorical_accuracy
 
     test_metrics = MetricsDictionary()
 
@@ -120,7 +119,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds["l1"]:
             is_adv_at_th = torch.logical_and(l1 <= threshold, is_adv)
-            test_metrics[f"acc_l1_%.2f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_l1_%s" % format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

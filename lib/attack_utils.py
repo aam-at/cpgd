@@ -198,6 +198,16 @@ def random_lp_vector(shape, ord, eps, dtype=tf.float32, seed=None):
     return r
 
 
+def build_lr(lr, lr_config=None):
+    if lr_config is not None:
+        if isinstance(lr_config, str):
+            lr_config = ast.literal_eval(lr_config)
+        return create_lr_schedule(lr_config['schedule'],
+                                  **lr_config['config'])
+    else:
+        return lr
+
+
 class AttackOptimizationLoop(object):
     def __init__(self,
                  attack,
@@ -210,9 +220,13 @@ class AttackOptimizationLoop(object):
                  multitargeted: bool = False,
                  lr: float = 0.01,
                  lr_config: str = None,
+                 dual_lr: float = 0.1,
+                 dual_lr_config: str = None,
                  finetune: bool = True,
                  finetune_lr: float = 0.01,
-                 finetune_lr_config: str = None):
+                 finetune_lr_config: str = None,
+                 finetune_dual_lr: float = 0.01,
+                 finetune_dual_lr_config: str = None):
         assert not (r0_ods_init and multitargeted)
         self.attack = attack
         self.number_restarts = number_restarts
@@ -222,25 +236,16 @@ class AttackOptimizationLoop(object):
         self.multitargeted = multitargeted
         self.r0_ods_steps = r0_ods_steps
         self.c0_initial_const = c0_initial_const
-        if lr_config is not None:
-            if isinstance(lr_config, str):
-                lr_config = ast.literal_eval(lr_config)
-            self.lr = create_lr_schedule(lr_config['schedule'],
-                                         **lr_config['config'])
-        else:
-            self.lr = lr
+        self.lr = build_lr(lr, lr_config)
+        self.dual_lr = build_lr(dual_lr, dual_lr_config)
         self.finetune = finetune
-        if finetune_lr_config is not None:
-            if isinstance(finetune_lr_config, str):
-                finetune_lr_config = ast.literal_eval(finetune_lr_config)
-            self.finetune_lr = create_lr_schedule(
-                finetune_lr_config['schedule'], **finetune_lr_config['config'])
-        else:
-            self.finetune_lr = finetune_lr
+        self.finetune_lr = build_lr(finetune_lr, finetune_lr_config)
+        self.finetune_dual_lr = build_lr(finetune_dual_lr, finetune_dual_lr_config)
 
     def _run_loop(self, X, y_onehot):
         self.attack.restart_attack(X, y_onehot)
         self.attack.primal_lr = self.lr
+        self.attack.dual_lr = self.dual_lr
         for i in range(self.number_restarts):
             r0 = init_r0(X.shape, self.r0_sampling_epsilon, self.attack.ord,
                          self.r0_sampling_algorithm)
@@ -264,7 +269,8 @@ class AttackOptimizationLoop(object):
                 self.attack.run(X, y_onehot)
         if self.finetune:
             self.attack.primal_lr = self.finetune_lr
-            rbest = self.attack.attack.read_value() - X
+            self.attack.dual_lr = self.finetune_dual_lr
+            rbest = self.attack.bestsol.read_value() - X
             cbest = self.attack.bestlambd.read_value()
             self.attack.reset_attack(rbest, cbest)
             self.attack.run(X, y_onehot)
@@ -273,18 +279,18 @@ class AttackOptimizationLoop(object):
         if tf.executing_eagerly():
             # eager mode
             self._run_loop(X, y_onehot)
-            return self.attack.attack.read_value()
+            return self.attack.bestsol.read_value()
         else:
             # graph mode
             with tf.control_dependencies(
                 [tf.py_function(self._run_loop, [X, y_onehot], [])]):
-                return self.attack.attack.read_value()
+                return self.attack.bestsol.read_value()
 
 
 @contextmanager
 def ods_init(attack, ods_iterations=50):
     old_iterations = attack.iterations
-    old_loss = attack.cls_constraint_and_loss
+    old_loss = attack.classification_loss
     old_optim_step = attack.optim_step
     rand_vector = None
 
@@ -293,19 +299,18 @@ def ods_init(attack, ods_iterations=50):
         logits = attack.model(X)
         if rand_vector is None:
             rand_vector = tf.random.uniform(logits.shape, -1.0, 1.0)
-        return tf.ones(X.shape[0]), tf.reduce_sum(rand_vector * logits,
-                                                  axis=-1)
+        return tf.reduce_sum(rand_vector * logits, axis=-1)
 
     @tf.function
     def ods_optim_step(X, y_onehot):
         attack._primal_optim_step(X, y_onehot)
 
     attack.iterations = ods_iterations
-    attack.cls_constraint_and_loss = ods_loss
+    attack.classification_loss = ods_loss
     attack.optim_step = ods_optim_step
     try:
         yield attack
     finally:
         attack.iterations = old_iterations
-        attack.cls_constraint_and_loss = old_loss
+        attack.classification_loss = old_loss
         attack.optim_step = old_optim_step

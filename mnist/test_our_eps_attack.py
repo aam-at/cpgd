@@ -10,13 +10,13 @@ import lib
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from lib.attack_l0 import ClassConstrainedProximalL0Attack
-from lib.attack_l1 import (ClassConstrainedL1Attack,
-                           ClassConstrainedProximalL1Attack)
-from lib.attack_l2 import (ClassConstrainedL2Attack,
-                           ClassConstrainedProximalL2Attack)
-from lib.attack_li import ClassConstrainedProximalLiAttack
-from lib.attack_utils import AttackOptimizationLoop
+from lib.attack_l0 import NormConstrainedProximalL0Attack
+from lib.attack_l1 import (NormConstrainedL1Attack,
+                           NormConstrainedProximalL1Attack)
+from lib.attack_l2 import (NormConstrainedL2Attack,
+                           NormConstrainedProximalL2Attack)
+from lib.attack_li import NormConstrainedProximalLiAttack
+from lib.attack_utils import AttackOptimizationLoop, margin
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, make_input_pipeline)
 from lib.utils import (format_float, import_klass_annotations_as_flags,
@@ -47,12 +47,12 @@ import_klass_annotations_as_flags(AttackOptimizationLoop, "attack_loop_")
 FLAGS = flags.FLAGS
 
 lp_attacks = {
-    "l0": ("l0", ClassConstrainedProximalL0Attack),
-    "l1": ("l1", ClassConstrainedProximalL1Attack),
-    "l1g": ("l1", ClassConstrainedL1Attack),
-    "l2": ("l2", ClassConstrainedProximalL2Attack),
-    "l2g": ("l2", ClassConstrainedL2Attack),
-    "li": ("li", ClassConstrainedProximalLiAttack),
+    "l0": ("l0", NormConstrainedProximalL0Attack),
+    "l1": ("l1", NormConstrainedProximalL1Attack),
+    "l1g": ("l1", NormConstrainedL1Attack),
+    "l2": ("l2", NormConstrainedProximalL2Attack),
+    "l2g": ("l2", NormConstrainedL2Attack),
+    "li": ("li", NormConstrainedProximalLiAttack),
 }
 
 
@@ -143,6 +143,13 @@ def main(unused_args):
         test_metrics[f"acc_{norm}"](acc_adv)
         test_metrics[f"conf_{norm}"](outs_adv["conf"])
 
+        # adversarial metrics
+        nll_adv_loss = tf.keras.metrics.sparse_categorical_crossentropy(
+            label, outs_adv["logits"])
+        margin_adv_loss = tf.nn.relu(-margin(label_onehot, outs_adv["logits"]))
+        test_metrics["nll_adv_loss"](nll_adv_loss)
+        test_metrics["margin_adv_loss"](margin_adv_loss)
+
         # measure norm
         r = image - image_adv
         lp = alp.lp_metric(r)
@@ -167,7 +174,10 @@ def main(unused_args):
                          format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
-        return image_adv
+        assert_op = tf.Assert(tf.reduce_all(lp <= FLAGS.attack_epsilon),
+                              [image_adv])
+        with tf.control_dependencies([assert_op]):
+            return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
@@ -189,7 +199,10 @@ def main(unused_args):
                 break
         else:
             is_completed = True
-        X_adv = np.concatenate(X_adv, axis=0)
+        if len(X_adv) > 1:
+            X_adv = np.concatenate(X_adv, axis=0)
+        else:
+            X_adv = np.array(X_adv[0])
         if is_completed:
             if FLAGS.attack_save:
                 np.save(
