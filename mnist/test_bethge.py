@@ -14,14 +14,14 @@ from foolbox.attacks import (DatasetAttack, L0BrendelBethgeAttack,
                              LinearSearchBlendedUniformNoiseAttack,
                              LinfinityBrendelBethgeAttack)
 from foolbox.models import TensorFlowModel
+from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
+                          li_metric, make_input_pipeline)
+from lib.utils import (format_float, import_klass_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 
 from config import test_thresholds
 from data import load_mnist
-from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
-                          li_metric, make_input_pipeline)
-from lib.utils import (import_klass_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
-                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 
@@ -47,7 +47,8 @@ lp_attacks = {
 def import_flags(norm):
     global lp_attacks
     assert norm in lp_attacks
-    import_klass_annotations_as_flags(lp_attacks[norm], "attack_")
+    import_klass_annotations_as_flags(lp_attacks[norm], "attack_",
+                                      exclude_args=['init_attack', 'tensorboard'])
 
 
 def main(unused_args):
@@ -172,7 +173,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.2f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" % format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

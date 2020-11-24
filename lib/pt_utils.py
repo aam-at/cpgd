@@ -70,6 +70,14 @@ def prediction(prob, dim=-1):
     return torch.argmax(prob, dim=dim)
 
 
+def setup_torch(seed=0):
+    """Enable cudnn deterministic
+    """
+    torch.manual_seed(seed)
+    torch.backends.cudnn.benchmark = False
+    torch.backends.cudnn.deterministic = True
+
+
 # pytorch layer configuration utils
 def add_default_end_points(end_points):
     logits = end_points["logits"]

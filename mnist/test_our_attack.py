@@ -10,10 +10,12 @@ import lib
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from lib.attack_l0 import ProximalL0Attack
-from lib.attack_l1 import GradientL1Attack, ProximalL1Attack
-from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
-from lib.attack_li import ProximalLiAttack
+from lib.attack_l0 import ClassConstrainedProximalL0Attack
+from lib.attack_l1 import (ClassConstrainedL1Attack,
+                           ClassConstrainedProximalL1Attack)
+from lib.attack_l2 import (ClassConstrainedL2Attack,
+                           ClassConstrainedProximalL2Attack)
+from lib.attack_li import ClassConstrainedProximalLiAttack
 from lib.attack_utils import AttackOptimizationLoop
 from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
                           li_metric, make_input_pipeline)
@@ -30,8 +32,8 @@ from utils import load_madry
 # general experiment parameters
 register_experiment_flags(working_dir="../results/mnist/test_lp")
 flags.DEFINE_string(
-    "attack", None, "choice of the attack ('l0', 'l1', 'l2', 'l2g', 'li')"
-)
+    "attack", None,
+    "choice of the attack ('l0', 'l1', 'l1g', 'l2', 'l2g', 'li')")
 flags.DEFINE_bool("attack_save", False, "True if save results of the attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
@@ -45,12 +47,12 @@ import_klass_annotations_as_flags(AttackOptimizationLoop, "attack_loop_")
 FLAGS = flags.FLAGS
 
 lp_attacks = {
-    "l0": ("l0", ProximalL0Attack),
-    "l1": ("l1", ProximalL1Attack),
-    "l1g": ("l1", GradientL1Attack),
-    "l2": ("l2", ProximalL2Attack),
-    "l2g": ("l2", GradientL2Attack),
-    "li": ("li", ProximalLiAttack),
+    "l0": ("l0", ClassConstrainedProximalL0Attack),
+    "l1": ("l1", ClassConstrainedProximalL1Attack),
+    "l1g": ("l1", ClassConstrainedL1Attack),
+    "l2": ("l2", ClassConstrainedProximalL2Attack),
+    "l2g": ("l2", ClassConstrainedL2Attack),
+    "li": ("li", ClassConstrainedProximalLiAttack),
 }
 
 
@@ -77,12 +79,13 @@ def main(unused_args):
     )
 
     # data
-    _, _, test_ds = load_mnist(
-        FLAGS.validation_size, data_format="NHWC", seed=FLAGS.data_seed
-    )
+    _, _, test_ds = load_mnist(FLAGS.validation_size,
+                               data_format="NHWC",
+                               seed=FLAGS.data_seed)
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(
-        test_ds, shuffle=False, batch_size=FLAGS.batch_size)
+    test_ds = make_input_pipeline(test_ds,
+                                  shuffle=False,
+                                  batch_size=FLAGS.batch_size)
 
     # models
     num_classes = 10
@@ -100,8 +103,7 @@ def main(unused_args):
     # attacks
     attack_loop_kwargs = {
         kwarg.replace("attack_loop_", ""): getattr(FLAGS, kwarg)
-        for kwarg in dir(FLAGS)
-        if kwarg.startswith("attack_loop_")
+        for kwarg in dir(FLAGS) if kwarg.startswith("attack_loop_")
     }
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
@@ -129,8 +131,7 @@ def main(unused_args):
 
         # metrics
         nll_loss = tf.keras.metrics.sparse_categorical_crossentropy(
-            label, outs["logits"]
-        )
+            label, outs["logits"])
         acc_fn = tf.keras.metrics.sparse_categorical_accuracy
         acc = acc_fn(label, outs["logits"])
         acc_adv = acc_fn(label, outs_adv["logits"])
@@ -176,13 +177,12 @@ def main(unused_args):
         X_adv = []
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_adv_b = test_step(image, label)
-            X_adv_b = np.reshape(X_adv_b, (X_adv_b.shape[0], -1))
             X_adv.append(X_adv_b)
             log_metrics(
                 test_metrics,
-                "Batch results [{}, {:.2f}s]:".format(
-                    batch_index, time.time() - start_time
-                ),
+                "Batch results [{}, {:.2f}s]:".format(batch_index,
+                                                      time.time() -
+                                                      start_time),
             )
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 is_completed = True
@@ -192,27 +192,30 @@ def main(unused_args):
         X_adv = np.concatenate(X_adv, axis=0)
         if is_completed:
             if FLAGS.attack_save:
-                np.save(Path(FLAGS.working_dir) / "attack.npy", X_adv)
+                np.save(
+                    Path(FLAGS.working_dir) / "attack.npy",
+                    X_adv.reshape(X_adv.shape[0], -1))
             # hyperparameter tuning
             with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
                 # hyperparameters
                 hp_param_names = [
-                    kwarg for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
+                    kwarg for kwarg in dir(FLAGS)
+                    if kwarg.startswith("attack_")
                 ]
                 hp_metric_names = [f"final_{norm}", f"final_{norm}_corr"]
                 hp_params = [
-                    hp.HParam(hp_param_name) for hp_param_name in hp_param_names
+                    hp.HParam(hp_param_name)
+                    for hp_param_name in hp_param_names
                 ]
                 hp_metrics = [
-                    hp.Metric(hp_metric_name) for hp_metric_name in hp_metric_names
+                    hp.Metric(hp_metric_name)
+                    for hp_metric_name in hp_metric_names
                 ]
                 hp.hparams_config(hparams=hp_params, metrics=hp_metrics)
-                hp.hparams(
-                    {
-                        hp_param_name: getattr(FLAGS, hp_param_name)
-                        for hp_param_name in hp_param_names
-                    }
-                )
+                hp.hparams({
+                    hp_param_name: getattr(FLAGS, hp_param_name)
+                    for hp_param_name in hp_param_names
+                })
                 final_lp = test_metrics[f"{norm}"].result()
                 tf.summary.scalar(f"final_{norm}", final_lp, step=1)
                 final_lp_corr = test_metrics[f"{norm}_corr"].result()
@@ -223,8 +226,8 @@ def main(unused_args):
     finally:
         log_metrics(
             test_metrics,
-            "Test results [{:.2f}s, {}]:".format(
-                time.time() - start_time, batch_index),
+            "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
+                                                 batch_index),
         )
 
 

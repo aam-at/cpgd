@@ -134,7 +134,7 @@ def sparsefool(x_0,
                lambda_: float = 3.0,
                max_iter: int = 20,
                epsilon: float = 0.02,
-               device="cuda"):
+               device: str="cuda"):
     assert x_0.shape[0] == 1
 
     pred_label = torch.argmax(

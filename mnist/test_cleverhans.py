@@ -11,13 +11,13 @@ import tensorflow as tf
 from absl import flags
 from cleverhans.attacks import CarliniWagnerL2, ElasticNetMethod
 from cleverhans.model import Model
+from lib.tf_utils import l0_metric, l1_metric, l2_metric, li_metric
+from lib.utils import (batch_iterator, format_float,
+                       import_func_annotations_as_flags, log_metrics,
+                       register_experiment_flags, setup_experiment)
 
 from config import test_thresholds
 from data import load_mnist
-from lib.tf_utils import l0_metric, l1_metric, l2_metric, li_metric
-from lib.utils import (batch_iterator, import_func_annotations_as_flags,
-                       log_metrics, register_experiment_flags,
-                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 
@@ -52,7 +52,7 @@ def import_flags(norm, attack):
     assert attack in lp_attacks[norm]
     import_func_annotations_as_flags(lp_attacks[norm][attack].parse_params,
                                      prefix="attack_",
-                                     include_kwargs_with_defaults=True)
+                                     exclude_args=["y", "y_target"])
 
 
 def main(unused_args):
@@ -132,7 +132,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            results[f"acc_{FLAGS.norm}_%.2f" % threshold] = ~is_adv_at_th
+            results[f"acc_{FLAGS.norm}_%s" % format_float(threshold)] = ~is_adv_at_th
         results["success_rate"] = is_adv[is_corr]
 
         return results
