@@ -199,10 +199,7 @@ class PrimalDualGradientAttack(ABC):
         logits = self.model(X)
         if self.loss == "cw":
             m = margin(logits, y_onehot, targeted=self.targeted)
-            if self.targeted:
-                cls_loss = tf.nn.relu(-m)
-            else:
-                cls_loss = tf.nn.relu(m)
+            cls_loss = tf.nn.relu(m)
         elif self.loss == "ce":
             if self.targeted:
                 cls_loss = tf.nn.softmax_cross_entropy_with_logits(
