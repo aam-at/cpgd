@@ -116,7 +116,7 @@ class PrimalDualGradientAttack(ABC):
 
     @property
     def dual_lr(self):
-        if callable(self.dual_lr):
+        if callable(self.dual_opt.lr):
             return self.dual_opt.lr(self.dual_opt.iterations)
         else:
             return self.dual_opt.lr

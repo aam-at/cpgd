@@ -273,7 +273,13 @@ class AttackOptimizationLoop(object):
             rbest = self.attack.bestsol.read_value() - X
             cbest = self.attack.bestlambd.read_value()
             self.attack.reset_attack(rbest, cbest)
-            self.attack.run(X, y_onehot)
+            if self.attack.targeted:
+                # run on the same target to finetune
+                y_t = tf.argmax(self.attack.model(X + rbest), -1)
+                y_t_onehot = tf.one_hot(y_t, y_onehot.shape[1])
+                self.attack.run(X, y_t_onehot)
+            else:
+                self.attack.run(X, y_onehot)
 
     def run_loop(self, X, y_onehot):
         if tf.executing_eagerly():
