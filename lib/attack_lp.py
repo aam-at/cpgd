@@ -240,22 +240,18 @@ class PrimalDualGradientAttack(ABC):
     def state_gradient(self, constraints_gradients):
         pass
 
+    @abstractmethod
     def total_loss(self, X, r, y_onehot):
-        """Returns total loss (classification + lp_metric).
+        """Returns total optimization loss (classification + lp_metric).
         Args:
             X: original images.
             r: perturbation to the original images X.
             y_onehot: original labels.
-            lambd: trade-off between the objective and the constraints.
 
         Returns:
             Total cost.
         """
-        objective = self.objective(X, r, y_onehot)
-        constraints = self.proxy_constraints(X, r, y_onehot)
-        return tf.reduce_sum(self.lambdas * tf.stack(
-            (objective, constraints), axis=1),
-                             axis=1)
+        pass
 
     def gradient_preprocess(self, g):
         return g
@@ -405,6 +401,13 @@ class ClassConstrainedAttack(PrimalDualGradientAttack):
             (tf.zeros_like(constraint_gradients), constraint_gradients),
             axis=1)
 
+    def total_loss(self, X, r, y_onehot):
+        lp_metric = self.objective(X, r, y_onehot)
+        cls_constraint = self.proxy_constraints(X, r, y_onehot)
+        return tf.reduce_sum(self.lambdas * tf.stack(
+            (lp_metric, cls_constraint), axis=1),
+                             axis=1)
+
 
 class NormConstrainedAttack(PrimalDualGradientAttack):
     def __init__(self, model, epsilon: float = None, **kwargs):
@@ -422,6 +425,13 @@ class NormConstrainedAttack(PrimalDualGradientAttack):
         return -tf.stack(
             (constraint_gradients, tf.zeros_like(constraint_gradients)),
             axis=1)
+
+    def total_loss(self, X, r, y_onehot):
+        cls_loss = self.objective(X, r, y_onehot)
+        lp_constraint = self.proxy_constraints(X, r, y_onehot)
+        return tf.reduce_sum(self.lambdas * tf.stack(
+            (lp_constraint, cls_loss), axis=1),
+                             axis=1)
 
 
 class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
