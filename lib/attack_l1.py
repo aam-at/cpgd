@@ -27,10 +27,11 @@ class L1Attack(BaseL1Attack):
     def _primal_optim_step(self, X, y_onehot):
         # gradient descent on primal variables
         self._primal_optim_step(X, y_onehot)
+        rx = self._rx
         if self.hard_threshold:
             lr = self.primal_lr
             th = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
-            self.rx.assign(hard_threshold(self.rx, th))
+            rx.assign(hard_threshold(rx, th))
 
 
 class ClassConstrainedL1Attack(ClassConstrainedAttack, L1Attack):
