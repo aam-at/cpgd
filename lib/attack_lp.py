@@ -79,7 +79,7 @@ class PrimalDualGradientAttack(ABC):
         """
         super(PrimalDualGradientAttack, self).__init__()
         self.model = model
-        assert loss in ["cw", "ce"]
+        assert loss in ["cw", "log", "ce"]
         self.loss = loss
         self.iterations = iterations
         if not isinstance(primal_opt_kwargs, dict):
@@ -197,9 +197,11 @@ class PrimalDualGradientAttack(ABC):
             Classification constraints and classification loss.
         """
         logits = self.model(X)
+        m = margin(logits, y_onehot, targeted=self.targeted)
         if self.loss == "cw":
-            m = margin(logits, y_onehot, targeted=self.targeted)
-            cls_loss = tf.nn.relu(m + 1.0)
+            cls_loss = tf.nn.relu(1.0 + m)
+        elif self.loss == "log":
+            cls_loss = tf.math.log(1 + tf.exp(m))
         elif self.loss == "ce":
             if self.targeted:
                 cls_loss = tf.nn.softmax_cross_entropy_with_logits(
@@ -349,7 +351,7 @@ class PrimalDualGradientAttack(ABC):
         self._lambdas_ema.assign(tf.exp(self._state))
         self._ema.average(self._lambdas_ema).assign(self._lambdas_ema)
 
-    # @tf.function
+    @tf.function
     def optim_step(self, X, y_onehot):
         # TODO: compare with simultaneous optimization
         r = self._rx
