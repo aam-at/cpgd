@@ -124,6 +124,18 @@ class PrimalDualGradientAttack(ABC):
     def dual_lr(self, lr):
         self.dual_opt.lr = lr
 
+    @property
+    def lambdas(self):
+        # lambda0 - lp metric
+        # lambda1 - classification constraint
+        return (self._ema.average(self._lambdas_ema)
+                if self.dual_ema else tf.exp(self._state))
+
+    @property
+    def lambd(self):
+        lambdas = self.lambdas
+        return lambdas[:, 0] / lambdas[:, 1]
+
     def build(self, inputs_shape):
         assert not self.built
         X_shape, y_shape = inputs_shape
@@ -244,16 +256,6 @@ class PrimalDualGradientAttack(ABC):
         return tf.reduce_sum(self.lambdas * tf.stack(
             (objective, constraints), axis=1),
                              axis=1)
-
-    @property
-    def lambdas(self):
-        return (self._ema.average(self._lambdas_ema)
-                if self.dual_ema else tf.exp(self._state))
-
-    @property
-    def lambd(self):
-        lambdas = self.lambdas
-        return lambdas[:, 0] / lambdas[:, 1]
 
     def gradient_preprocess(self, g):
         return g
