@@ -447,15 +447,15 @@ class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
         X_shape, _ = inputs_shape
         batch_size = X_shape[0]
         # variable to update so we track momentum for accelerated gradient
-        self.ry = tf.Variable(tf.zeros_like(self._rx),
-                              trainable=True,
-                              name="ry")
+        self._ry = tf.Variable(tf.zeros_like(self._rx),
+                               trainable=True,
+                               name="ry")
         # (adaptive) momentum for accelerated gradient
-        self.beta = tf.Variable(tf.zeros(batch_size))
+        self._beta = tf.Variable(tf.zeros(batch_size))
 
     def _primal_optim_step(self, X, y_onehot):
         # proximal gradient descent on primal variables
-        rx, ry = self._rx, self.ry
+        rx, ry = self._rx, self._ry
         batch_indices = tf.range(X.shape[0])
         # proximal gradient descent on primal variables
         with tf.GradientTape() as find_r_tape:
@@ -481,22 +481,22 @@ class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
             ry.assign(self.project_box(X, self.proximity_operator(rx, mu)))
         if self.accelerated:
             rv = self.project_box(
-                X, ry + tf.reshape(self.beta, (-1, 1, 1, 1)) * (ry - ry_v))
+                X, ry + tf.reshape(self._beta, (-1, 1, 1, 1)) * (ry - ry_v))
             F_y = self.total_loss(X, ry, y_onehot)
             F_v = self.total_loss(X, rv, y_onehot)
             rx.assign(tf.where(tf.reshape(F_y <= F_v, (-1, 1, 1, 1)), ry, rv))
             if self.adaptive_momentum:
-                self.beta.scatter_mul(
+                self._beta.scatter_mul(
                     tf.IndexedSlices(tf.where(F_y <= F_v, 0.9, 1.0 / 0.9),
                                      batch_indices))
-                self.beta.assign(tf.minimum(self.beta, 1.0))
+                self._beta.assign(tf.minimum(self._beta, 1.0))
         else:
             rx.assign(ry)
 
     @tf.function
     def reset_attack(self, r0, C0):
         super(ProximalPrimalDualGradientAttack, self).reset_attack(r0, C0)
-        self.ry.assign(self._rx)
+        self._ry.assign(self._rx)
 
     @abstractmethod
     def proximity_operator(self, u, l):
