@@ -3,7 +3,6 @@ from contextlib import contextmanager
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
 
 from .tf_utils import create_lr_schedule, l2_metric, random_targets
 
@@ -47,8 +46,19 @@ def proximal_l0(u, lambd):
     return hard_threshold(u, tf.sqrt(2 * lambd))
 
 
+def soft_threshold(x, threshold, name=None):
+    # taken from tensorflow_probability
+    # https://math.stackexchange.com/questions/471339/derivation-of-soft-thresholding-operator
+    with tf.name_scope(name or 'soft_threshold'):
+        x = tf.convert_to_tensor(x, name='x')
+        threshold = tf.convert_to_tensor(threshold,
+                                         dtype=x.dtype,
+                                         name='threshold')
+        return tf.sign(x) * tf.maximum(tf.abs(x) - threshold, 0.)
+
+
 def proximal_l1(u, lambd):
-    return tfp.math.soft_threshold(u, lambd)
+    return soft_threshold(u, lambd)
 
 
 def proximal_l2(u, lambd):
