@@ -213,7 +213,7 @@ class PrimalDualGradientAttack(ABC):
         elif self.loss == "log":
             cls_loss = tf.nn.softplus(m) / tf.math.log(2.0)
         elif self.loss == "square":
-            cls_loss = tf.square(1.0 - m)
+            cls_loss = tf.square(1.0 + m)
         elif self.loss == "matsushita":
             cls_loss = tf.sqrt(1.0 + tf.square(m)) + m
         elif self.loss == "ce":
