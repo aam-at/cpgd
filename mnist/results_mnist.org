@@ -22,7 +22,8 @@
   model_thresholds = [
       format_float(th) for th in np.array(test_model_thresholds[type][norm])
   ]
-  dirs = glob.glob(f"../results_mnist/test_{type}/{norm}/{attack}/*")
+  base_dir = "results_mnist22"
+  dirs = glob.glob(f"../{base_dir}/test_{type}/{norm}/{attack}/*")
   df_logs = []
   for load_dir in dirs:
       df_logs.append(
@@ -35,6 +36,7 @@
   df["total"] = df["num_batches"] * df["batch_size"]
   df = df.drop(columns=["num_batches", "batch_size"])
 
+
   def col_sort(k):
       if k == "name":
           return 1000
@@ -44,6 +46,7 @@
           return 10
       else:
           return 0
+
 
   df = df[sorted(df.columns, key=col_sort, reverse=True)]
 
@@ -73,7 +76,7 @@
   from openpyxl import load_workbook
   from openpyxl.utils import get_column_letter
 
-  output_file = f"../results_mnist/mnist_{type}_{norm}.xlsx"
+  output_file = f"../{base_dir}/{type}_{norm}.xlsx"
   if Path(output_file).exists():
       writer = pd.ExcelWriter(output_file, mode='a')
       book = load_workbook(output_file)
