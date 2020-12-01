@@ -79,7 +79,7 @@ class PrimalDualGradientAttack(ABC):
         """
         super(PrimalDualGradientAttack, self).__init__()
         self.model = model
-        assert loss in ["cw", "log", "ce"]
+        assert loss in ["cw", "exp", "log", "square", "matsushita", "ce"]
         self.loss = loss
         self.iterations = iterations
         if not isinstance(primal_opt_kwargs, dict):
@@ -212,8 +212,14 @@ class PrimalDualGradientAttack(ABC):
         m = margin(logits, y_onehot, targeted=self.targeted)
         if self.loss == "cw":
             cls_loss = tf.nn.relu(1.0 + m)
+        elif self.loss == "exp":
+            cls_loss = tf.exp(m)
         elif self.loss == "log":
-            cls_loss = tf.math.log(1 + tf.exp(m))
+            cls_loss = tf.nn.softplus(m) / tf.math.log(2.0)
+        elif self.loss == "square":
+            cls_loss = tf.square(1.0 - m)
+        elif self.loss == "matsushita":
+            cls_loss = tf.sqrt(1.0 + tf.square(m)) + m
         elif self.loss == "ce":
             if self.targeted:
                 cls_loss = tf.nn.softmax_cross_entropy_with_logits(
