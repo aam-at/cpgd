@@ -104,7 +104,6 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         'attack_dual_opt_kwargs': ["{}"],
         'attack_dual_lr': [1e-1],
         'attack_dual_ema': [True, False],
-        'attack_use_proxy_constraint': [False],
         'attack_loop_number_restarts': [1],
         'attack_loop_finetune': [True, False],
         'attack_loop_r0_sampling_algorithm': ['uniform'],

@@ -51,7 +51,6 @@ class PrimalDualGradientAttack(ABC):
         targeted: bool = False,
         confidence: float = 0.0,
         # parameters for non-convex constrained minimization
-        use_proxy_constraint: bool = True,
         boxmin: float = 0.0,
         boxmax: float = 1.0,
         min_dual_ratio: float = 1e-6,
@@ -70,8 +69,6 @@ class PrimalDualGradientAttack(ABC):
             dual_ema: if to use exponential moving average for the dual variables.
             targeted: if the attack is targeted.
             confidence: attack confidence.
-            use_proxy_constraint: if to use proxy Lagrangian formulation
-            (https://arxiv.org/abs/1804.06500) to update constraints weights
             boxmin: clipping minimum value.
             boxmax: clipping maximum value.
             min_dual_ratio: minimal ratio C after dual state projection
@@ -96,7 +93,6 @@ class PrimalDualGradientAttack(ABC):
         self.simultaneous_updates = simultaneous_updates
         self.targeted = targeted
         self.confidence = confidence
-        self.use_proxy_constraint = use_proxy_constraint
         self.boxmin = boxmin
         self.boxmax = boxmax
         self.min_dual_ratio = min_dual_ratio
@@ -246,7 +242,6 @@ class PrimalDualGradientAttack(ABC):
     def state_gradient(self, constraints_gradients):
         pass
 
-    @abstractmethod
     def total_loss(self, X, r, y_onehot):
         """Returns total optimization loss (classification + lp_metric).
         Args:
@@ -257,7 +252,11 @@ class PrimalDualGradientAttack(ABC):
         Returns:
             Total cost.
         """
-        pass
+        lp_metric = self.lp_metric(r)
+        cls_loss = self.classification_loss(X + r, y_onehot)
+        return tf.reduce_sum(self.lambdas * tf.stack(
+            (lp_metric, cls_loss), axis=1),
+                             axis=1)
 
     def gradient_preprocess(self, g):
         return g
@@ -283,10 +282,7 @@ class PrimalDualGradientAttack(ABC):
     def _dual_optim_step(self, X, y_onehot):
         # gradient ascent on dual variables
         r = self._rx
-        if self.use_proxy_constraint:
-            constraint_gradients = self.proxy_constraints(X, r, y_onehot)
-        else:
-            constraint_gradients = self.constraints(X, r, y_onehot)
+        constraint_gradients = self.constraints(X, r, y_onehot)
         state_gradient = self.state_gradient(constraint_gradients)
         self.dual_opt.apply_gradients([(state_gradient, self._state)])
         # update moving average of dual variables
@@ -407,13 +403,6 @@ class ClassConstrainedAttack(PrimalDualGradientAttack):
             (tf.zeros_like(constraint_gradients), constraint_gradients),
             axis=1)
 
-    def total_loss(self, X, r, y_onehot):
-        lp_metric = self.objective(X, r, y_onehot)
-        cls_constraint = self.proxy_constraints(X, r, y_onehot)
-        return tf.reduce_sum(self.lambdas * tf.stack(
-            (lp_metric, cls_constraint), axis=1),
-                             axis=1)
-
 
 class NormConstrainedAttack(PrimalDualGradientAttack):
     def __init__(self, model, epsilon: float = None, **kwargs):
@@ -431,13 +420,6 @@ class NormConstrainedAttack(PrimalDualGradientAttack):
         return -tf.stack(
             (constraint_gradients, tf.zeros_like(constraint_gradients)),
             axis=1)
-
-    def total_loss(self, X, r, y_onehot):
-        cls_loss = self.objective(X, r, y_onehot)
-        lp_constraint = self.proxy_constraints(X, r, y_onehot)
-        return tf.reduce_sum(self.lambdas * tf.stack(
-            (lp_constraint, cls_loss), axis=1),
-                             axis=1)
 
 
 class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):

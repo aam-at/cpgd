@@ -67,8 +67,7 @@ _N{attack_args["attack_loop_number_restarts"]}
     name = f"""{name}_{attack_args['attack_loop_r0_sampling_algorithm']}
 _R{attack_args['attack_loop_r0_sampling_epsilon']}
 {'_ods' if attack_args['attack_loop_r0_ods_init'] else ''}
-_C{attack_args['attack_loop_c0_initial_const']}
-{'_proxy' if attack_args['attack_use_proxy_constraint'] else '_noproxy'}"""
+_C{attack_args['attack_loop_c0_initial_const']}"""
     return name.replace("\n", "")
 
 
