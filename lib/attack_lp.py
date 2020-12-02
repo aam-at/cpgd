@@ -489,14 +489,16 @@ class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
                 self._beta.scatter_mul(
                     tf.IndexedSlices(tf.where(F_y <= F_v, 0.9, 1.0 / 0.9),
                                      batch_indices))
-                self._beta.assign(tf.minimum(self._beta, 1.0))
+                self._beta.assign(tf.clip_by_value(self._beta, 0.01, 0.99))
         else:
             rx.assign(ry)
 
     @tf.function
     def reset_attack(self, r0, C0):
         super(ProximalPrimalDualGradientAttack, self).reset_attack(r0, C0)
+        batch_size = r0.shape[0]
         self._ry.assign(self._rx)
+        self._beta.assign(tf.ones(batch_size) * self.momentum)
 
     @abstractmethod
     def proximity_operator(self, u, l):
