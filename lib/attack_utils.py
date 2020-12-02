@@ -38,6 +38,25 @@ def init_r0(shape, epsilon, norm, init='uniform'):
     return r0
 
 
+def get_opt_psi(optimizer, var):
+    """Return Psi estimate for adaptive proximal gradient. Supported optimizers:
+    Adam, AmsGrad
+    """
+    assert isinstance(optimizer, tf.keras.optimizers.Optimizer)
+    iterations = tf.cast(optimizer.iterations, tf.float32)
+    if isinstance(optimizer, tf.keras.optimizers.Adam):
+        beta_2 = optimizer.beta_2
+        v = optimizer.get_slot(var, "v")
+        if optimizer.amsgrad:
+            psi = tf.sqrt(v)
+        else:
+            psi = tf.sqrt(v /
+                          (1 - tf.pow(beta_2, iterations))) + optimizer.epsilon
+    else:
+        raise ValueError("Unsupported optimizer %s" % type(optimizer))
+    return psi
+
+
 def hard_threshold(u, th):
     return tf.where(tf.abs(u) <= th, 0.0, u)
 
@@ -212,8 +231,7 @@ def build_lr(lr, lr_config=None):
     if lr_config is not None:
         if isinstance(lr_config, str):
             lr_config = ast.literal_eval(lr_config)
-        return create_lr_schedule(lr_config['schedule'],
-                                  **lr_config['config'])
+        return create_lr_schedule(lr_config['schedule'], **lr_config['config'])
     else:
         return lr
 
@@ -250,7 +268,8 @@ class AttackOptimizationLoop(object):
         self.dual_lr = build_lr(dual_lr, dual_lr_config)
         self.finetune = finetune
         self.finetune_lr = build_lr(finetune_lr, finetune_lr_config)
-        self.finetune_dual_lr = build_lr(finetune_dual_lr, finetune_dual_lr_config)
+        self.finetune_dual_lr = build_lr(finetune_dual_lr,
+                                         finetune_dual_lr_config)
 
     def _run_loop(self, X, y_onehot):
         self.attack.restart_attack(X, y_onehot)
