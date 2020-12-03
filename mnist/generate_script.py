@@ -96,7 +96,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         'batch_size': [batch_size],
         'seed': [seed],
         'attack': [attack],
-        'attack_loss': ["cw"],
+        'attack_loss': ["cw", "exp", "log", "square", "matsushita", "ce"],
         'attack_iterations': [500],
         'attack_simultaneous_updates': [True, False],
         'attack_primal_lr': [1e-1],
