@@ -227,16 +227,24 @@ class PrimalDualGradientAttack(ABC):
 
     @abstractmethod
     def objective(self, X, r, y_onehot):
+        """Objective
+        """
         pass
 
     @abstractmethod
     def constraints(self, X, r, y_onehot):
+        """Constraints
+        """
         pass
 
     def proxy_constraints(self, X, r, y_onehot):
-        """Proxy constraints which by default to use original constraints.
+        """Proxy constraints (default: original constraints).
         """
         return self.constraints(X, r, y_onehot)
+
+    @abstractmethod
+    def is_feasible(self, X, r, y_onehot):
+        pass
 
     @abstractmethod
     def state_gradient(self, constraints_gradients):
@@ -296,7 +304,7 @@ class PrimalDualGradientAttack(ABC):
         batch_indices = tf.range(X.shape[0])
         r = self._rx
         objective = self.objective(X, r, y_onehot)
-        is_feasible = self.constraints(X, r, y_onehot) <= 0
+        is_feasible = self.is_feasible(X, r, y_onehot)
         # check if it is the best perturbation
         is_best_sol = tf.logical_and(objective < self.bestobj, is_feasible)
         self.bestsol.scatter_update(
@@ -398,6 +406,11 @@ class ClassConstrainedAttack(PrimalDualGradientAttack):
     def proxy_constraints(self, X, r, y_onehot):
         return self.classification_loss(X + r, y_onehot)
 
+    def is_feasible(self, X, r, y_onehot):
+        pred = tf.argmax(self.model(X + r), axis=-1)
+        label = tf.argmax(y_onehot, axis=-1)
+        return pred != label
+
     def state_gradient(self, constraint_gradients):
         return -tf.stack(
             (tf.zeros_like(constraint_gradients), constraint_gradients),
@@ -415,6 +428,9 @@ class NormConstrainedAttack(PrimalDualGradientAttack):
 
     def constraints(self, X, r, y_onehot):
         return self.lp_metric(r) - self.epsilon
+
+    def is_feasible(self, X, r, y_onehot):
+        return self.lp_metric(r) <= self.epsilon
 
     def state_gradient(self, constraint_gradients):
         return -tf.stack(
