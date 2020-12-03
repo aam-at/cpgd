@@ -6,7 +6,7 @@ from typing import Union
 
 import tensorflow as tf
 
-from .attack_utils import (margin, project_box,
+from .attack_utils import (get_opt_psi, l2_metric, margin, project_box,
                            project_log_distribution_wrt_kl_divergence)
 from .tf_utils import (create_optimizer, prediction, reset_optimizer,
                        to_indexed_slices)
@@ -474,11 +474,40 @@ class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
         # proximal or accelerated proximal gradient
         lr = self.primal_lr
         ry_v = ry.read_value()
-        # FIXME: consider using LazyAdam from tf.addons to do sparse updates
         with tf.control_dependencies(
             [self.primal_opt.apply_gradients([(fg, rx)])]):
-            mu = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
-            ry.assign(self.project_box(X, self.proximity_operator(rx, mu)))
+            if isinstance(self.primal_opt, tf.keras.optimizers.Adam):
+                # Adam and AmsGrad Proximal Gradient
+                # https://arxiv.org/pdf/1910.10094.pdf
+                psi = get_opt_psi(self.primal_opt, rx)
+                psi_max = tf.reduce_max(psi, axis=(1, 2, 3), keepdims=True)
+                effective_lr = lr / tf.squeeze(psi_max)
+                # proximal sub-iterations
+                mu = tf.reshape(self.lambd * effective_lr, (-1, 1, 1, 1))
+                z_curr = rx
+                eps = tf.ones(X.shape[0])
+                # parameters for proximal sub-iterations
+                prox_iter = 5
+                eps_th = 1e-3
+                for i in tf.range(prox_iter):
+                    z_prev = z_curr
+                    z_curr = tf.where(
+                        tf.reshape(eps > eps_th, (-1, 1, 1, 1)),
+                        self.project_box(
+                            X,
+                            self.proximity_operator(
+                                z_curr - psi / psi_max * (z_curr - rx), mu)),
+                        z_prev)
+                    eps = l2_metric(z_curr - z_prev) / l2_metric(z_curr)
+                    if tf.reduce_all(eps < eps_th):
+                        break
+                ry.assign(z_curr)
+            elif isinstance(self.primal_opt, tf.keras.optimizers.SGD):
+                # Standard Gradient Descent
+                mu = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
+                ry.assign(self.project_box(X, self.proximity_operator(rx, mu)))
+            else:
+                raise ValueError("Unsupported optimizer")
         if self.accelerated:
             rv = self.project_box(
                 X, ry + tf.reshape(self._beta, (-1, 1, 1, 1)) * (ry - ry_v))
