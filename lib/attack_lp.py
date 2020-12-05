@@ -496,24 +496,31 @@ class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
                 # Adam and AmsGrad Proximal Gradient
                 # https://arxiv.org/pdf/1910.10094.pdf
                 psi = get_opt_psi(self.primal_opt, rx)
+                # NOTE: clip in case of the numerical errors (effectively slips
+                # multiplier for effective learning rate)
+                psi = tf.clip_by_value(psi, 0.01, 100.0)
                 psi_max = tf.reduce_max(psi, axis=(1, 2, 3), keepdims=True)
                 effective_lr = lr / tf.squeeze(psi_max)
-                # proximal sub-iterations
-                mu = tf.reshape(self.lambd * effective_lr, (-1, 1, 1, 1))
+                ## variable metric proximal gradient
+                # proximal sub-iterations variables
                 z_curr = rx
                 eps = tf.ones(X.shape[0])
-                # parameters for proximal sub-iterations
+                # proximal sub-iterations parameters
                 prox_iter = 5
-                eps_th = 1e-3
+                eps_th = 1e-2
                 for i in tf.range(prox_iter):
+                    lambd = self.lambd
+                    mu = tf.reshape(lambd * effective_lr, (-1, 1, 1, 1))
                     z_prev = z_curr
-                    z_curr = tf.where(
-                        tf.reshape(eps > eps_th, (-1, 1, 1, 1)),
-                        self.project_box(
+                    z_new = self.project_box(
                             X,
                             self.proximity_operator(
-                                z_curr - psi / psi_max * (z_curr - rx), mu)),
+                                z_curr - psi / psi_max * (z_curr - rx), mu))
+                    z_curr = tf.where(
+                        tf.reshape(eps > eps_th, (-1, 1, 1, 1)),
+                        z_new,
                         z_prev)
+
                     eps = l2_metric(z_curr - z_prev) / l2_metric(z_curr)
                     if tf.reduce_all(eps < eps_th):
                         break
