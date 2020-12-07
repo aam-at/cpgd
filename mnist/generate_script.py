@@ -116,9 +116,6 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
     if epsilon is not None:
         attack_grid_args['attack_epsilon'] = [epsilon]
 
-    if attack == 'l1g':
-        attack_grid_args.update({'attack_hard_threshold': [True, False]})
-
     if issubclass(attack_klass, ProximalPrimalDualGradientAttack):
         attack_grid_args.update({
             'attack_primal_opt': ["sgd"],
@@ -135,6 +132,12 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
 
     if norm == 'li':
         attack_grid_args.update({'attack_gradient_preprocessing': [True]})
+
+    if attack == 'l1g':
+        attack_grid_args.update({'attack_hard_threshold': [False, True]})
+
+    if norm == 'l0':
+        attack_grid_args.update({'attack_soft_threshold': [False, True]})
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
