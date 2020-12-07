@@ -30,7 +30,7 @@ def format_name(base_name, attack_args):
     if attack == 'l1g' and attack_args['attack_hard_threshold']:
         attack = f"{attack}_threshold"
     if attack == 'l0':
-        attack = f"{attack}_{'soft' if attack_args['attack_soft_threshold'] else 'hard'}"
+        attack = f"{attack}_{attack_args['attack_operator']}"
     name = f"""{base_name}_{attack}_{attack_args["attack_loss"]}
 {'_multi' if attack_args['attack_loop_multitargeted'] else ''}
 _n{attack_args["attack_iterations"]}
@@ -70,7 +70,7 @@ _N{attack_args["attack_loop_number_restarts"]}
 _R{attack_args['attack_loop_r0_sampling_epsilon']}
 {'_ods' if attack_args['attack_loop_r0_ods_init'] else ''}
 _C{attack_args['attack_loop_c0_initial_const']}"""
-    return name.replace("\n", "")
+    return name.replace("\n", "").replace("/", "")
 
 
 def get_tmpl_str(script_name, **flags):

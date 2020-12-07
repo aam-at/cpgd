@@ -137,7 +137,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         attack_grid_args.update({'attack_hard_threshold': [False, True]})
 
     if norm == 'l0':
-        attack_grid_args.update({'attack_soft_threshold': [False, True]})
+        attack_grid_args.update({'attack_operator': ["l0", "l1", "l1/2", "l2/3"]})
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
