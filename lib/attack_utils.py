@@ -65,6 +65,37 @@ def proximal_l0(u, lambd):
     return hard_threshold(u, tf.sqrt(2 * lambd))
 
 
+def proximal_l12(u, lambd):
+    """Proximal operator for L-1/2-norm
+    https://ieeexplore.ieee.org/document/7490503
+    """
+    th = 3 / 2 * tf.pow(lambd, 2 / 3)
+    return tf.where(
+        tf.abs(u) <= th, 0.0,
+        2 / 3 * u * (1 + tf.math.cos(2 / 3 * tf.math.acos(
+            -tf.pow(3.0, 1.5) / 4 * lambd * tf.pow(tf.abs(u), -3 / 2)))))
+
+
+def proximal_l23(u, lambd):
+    """Proximal operator for L-2/3-norm
+    https://ieeexplore.ieee.org/document/7490503
+    """
+    th = 2 * tf.pow(2 / 3 * lambd, 3 / 4)
+    z = tf.where(
+        tf.abs(u) > th, (tf.pow(
+            1 / 16.0 * tf.square(u) +
+            tf.sqrt(tf.pow(u, 4) / 256.0 - 8 * tf.pow(lambd, 3) / 729.0),
+            1 / 3) + tf.pow(
+                1 / 16 * tf.square(u) -
+                tf.sqrt(tf.pow(u, 4) / 256.0 - 8 * tf.pow(lambd, 3) / 729.0),
+                1 / 3)), 0)
+    return tf.where(
+        tf.abs(u) <= th, 0.0,
+        tf.sign(u) * 1 / 8 * tf.pow(
+            tf.sqrt(2 * z) + tf.sqrt((2 * tf.abs(u)) /
+                                     (tf.sqrt(2 * z)) - 2 * z), 3))
+
+
 def soft_threshold(x, threshold, name=None):
     # taken from tensorflow_probability
     # https://math.stackexchange.com/questions/471339/derivation-of-soft-thresholding-operator
