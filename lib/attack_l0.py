@@ -29,12 +29,12 @@ class ProximalL0Attack(ProximalPrimalDualGradientAttack):
         """Compute l0 proximal operator pixelwise (excluding channel dimension)
         """
         if self.soft_threshold:
+            u = proximal_l1(u, l)
+            return u
+        else:
             u_c = tf.reduce_max(tf.abs(u), axis=self.channel_dim, keepdims=True)
             pu_c = proximal_l0(u_c, l)
             return tf.where(tf.abs(pu_c) > 0, u, 0.0)
-        else:
-            u = proximal_l1(u, l)
-            return u
 
 
 class NormConstrainedProximalL0Attack(NormConstrainedAttack, ProximalL0Attack):

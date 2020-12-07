@@ -29,6 +29,8 @@ def format_name(base_name, attack_args):
     attack = attack_args['attack']
     if attack == 'l1g' and attack_args['attack_hard_threshold']:
         attack = f"{attack}_threshold"
+    if attack == 'l0':
+        attack = f"{attack}_{'soft' if attack_args['attack_soft_threshold'] else 'hard'}"
     name = f"""{base_name}_{attack}_{attack_args["attack_loss"]}
 {'_multi' if attack_args['attack_loop_multitargeted'] else ''}
 _n{attack_args["attack_iterations"]}
