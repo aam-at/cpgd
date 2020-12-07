@@ -496,9 +496,6 @@ class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
                 # Adam and AmsGrad Proximal Gradient
                 # https://arxiv.org/pdf/1910.10094.pdf
                 psi = get_opt_psi(self.primal_opt, rx)
-                # NOTE: clip in case of the numerical errors (effectively slips
-                # multiplier for effective learning rate)
-                psi = tf.clip_by_value(psi, 0.01, 100.0)
                 psi_max = tf.reduce_max(psi, axis=(1, 2, 3), keepdims=True)
                 effective_lr = lr / tf.squeeze(psi_max)
                 ## variable metric proximal gradient
