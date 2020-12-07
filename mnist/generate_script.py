@@ -156,13 +156,24 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                 continue
             for lr, decay_factor, lr_decay in itertools.product([1.0, 0.5, 0.1, 0.05, 0.01], [0.01], [True, False]):
                 min_lr = round(lr * decay_factor, 6)
+                dlr = attack_args['attack_dual_lr']
+                min_dlr = round(dlr * decay_factor, 6)
                 if lr_decay and min_lr < lr:
                     lr_config = {
-                        'schedule': 'linear',
+                        'schedule': 'exp',
                         'config': {
-                            **LinearDecay(initial_learning_rate=lr,
-                                          minimal_learning_rate=min_lr,
-                                          decay_steps=attack_args['attack_iterations']).get_config(
+                            **ExpDecay(initial_learning_rate=lr,
+                                       minimal_learning_rate=min_lr,
+                                       decay_steps=attack_args['attack_iterations']).get_config(
+                            )
+                        }
+                    }
+                    dlr_config = {
+                        'schedule': 'exp',
+                        'config': {
+                            **ExpDecay(initial_learning_rate=dlr,
+                                       minimal_learning_rate=min_dlr,
+                                       decay_steps=attack_args['attack_iterations']).get_config(
                             )
                         }
                     }
@@ -173,14 +184,30 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                             **ConstantDecay(lr).get_config()
                         }
                     }
+                    dlr_config = {
+                        'schedule': 'constant',
+                        'config': {
+                            **ConstantDecay(learning_rate=dlr).get_config()
+                        }
+                    }
                 if lr_decay:
                     finetune_lr_config = {
-                        'schedule': 'linear',
+                        'schedule': 'exp',
                         'config': {
-                            **LinearDecay(initial_learning_rate=min_lr,
-                                          minimal_learning_rate=round(
-                                              min_lr / 10, 6),
-                                          decay_steps=attack_args['attack_iterations']).get_config(
+                            **ExpDecay(initial_learning_rate=min_lr,
+                                       minimal_learning_rate=round(
+                                           min_lr * decay_factor, 8),
+                                       decay_steps=attack_args['attack_iterations']).get_config(
+                            )
+                        }
+                    }
+                    finetune_dlr_config = {
+                        'schedule': 'exp',
+                        'config': {
+                            **ExpDecay(initial_learning_rate=min_dlr,
+                                       minimal_learning_rate=round(
+                                           min_dlr * decay_factor, 8),
+                                       decay_steps=attack_args['attack_iterations']).get_config(
                             )
                         }
                     }
@@ -191,23 +218,13 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                             **ConstantDecay(learning_rate=min_lr).get_config()
                         }
                     }
-                dlr = attack_args['attack_dual_lr']
-                min_dlr = dlr / 10.0
-                dlr_config = {
-                    'schedule': 'linear',
-                    'config': {
-                        **LinearDecay(initial_learning_rate=dlr,
-                                      minimal_learning_rate=min_dlr,
-                                      decay_steps=attack_args['attack_iterations']).get_config(
-                                      )
+                    finetune_dlr_config = {
+                        'schedule': 'constant',
+                        'config': {
+                            **ConstantDecay(learning_rate=min_dlr).get_config(
+                            )
+                        }
                     }
-                }
-                finetune_dlr_config = {
-                    'schedule': 'constant',
-                    'config': {
-                        **ConstantDecay(learning_rate=min_dlr).get_config()
-                    }
-                }
                 attack_args.update({
                     'attack_loop_lr_config': lr_config,
                     'attack_loop_finetune_lr_config': finetune_lr_config,
