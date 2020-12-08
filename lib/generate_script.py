@@ -1,10 +1,12 @@
 from __future__ import absolute_import, division, print_function
 
 import ast
+import functools
 import importlib
 from pathlib import Path
 
 import six
+from absl import flags
 
 
 def format_lr_config(lr_config):
@@ -13,15 +15,11 @@ def format_lr_config(lr_config):
     if lr_config["schedule"] == "constant":
         s = f"{lr_config['config']['learning_rate']}"
     elif lr_config["schedule"] == "linear":
-        s = (
-            f"linear_init{lr_config['config']['initial_learning_rate']}_"
-            f"min{lr_config['config']['minimal_learning_rate']}"
-        )
+        s = (f"linear_init{lr_config['config']['initial_learning_rate']}_"
+             f"min{lr_config['config']['minimal_learning_rate']}")
     elif lr_config["schedule"] == "exp":
-        s = (
-            f"exp_init{lr_config['config']['initial_learning_rate']}_"
-            f"min{lr_config['config']['minimal_learning_rate']}"
-        )
+        s = (f"exp_init{lr_config['config']['initial_learning_rate']}_"
+             f"min{lr_config['config']['minimal_learning_rate']}")
     return s
 
 
@@ -41,12 +39,11 @@ _N{attack_args["attack_loop_number_restarts"]}
 """
     name = f"{name}_{'sim' if attack_args['attack_simultaneous_updates'] else 'alt'}"
     name = f"{name}_{attack_args['attack_primal_opt']}"
-    if (
-        "attack_gradient_preprocessing" in attack_args
-        and attack_args["attack_gradient_preprocessing"]
-    ):
+    if ("attack_gradient_preprocessing" in attack_args
+            and attack_args["attack_gradient_preprocessing"]):
         name = f"{name}_gprep"
-    if "attack_accelerated" in attack_args and attack_args["attack_accelerated"]:
+    if "attack_accelerated" in attack_args and attack_args[
+            "attack_accelerated"]:
         name = (
             f"{name}_apg_m{attack_args['attack_momentum']}"
             f"{'_adaptive' if attack_args['attack_adaptive_momentum'] else ''}"
@@ -98,3 +95,12 @@ def generate_test_optimizer(script_name, **kwargs):
     tmpl_str = get_tmpl_str(script_name, **kwargs)
     assert Path(f"{script_name}.py").exists()
     return tmpl_str
+
+
+def cleanflags(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        flags.FLAGS._flags().clear()
+        fn(*args, **kwargs)
+
+    return wrapper
