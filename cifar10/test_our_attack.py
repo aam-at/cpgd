@@ -4,6 +4,7 @@ import argparse
 import logging
 import os
 import time
+import traceback
 from pathlib import Path
 
 import absl
@@ -11,15 +12,18 @@ import lib
 import numpy as np
 import tensorflow as tf
 from absl import flags
-from lib.attack_l0 import ProximalL0Attack
-from lib.attack_l1 import GradientL1Attack, ProximalL1Attack
-from lib.attack_l2 import GradientL2Attack, ProximalL2Attack
-from lib.attack_li import ProximalLiAttack
+from lib.attack_l0 import ClassConstrainedProximalL0Attack
+from lib.attack_l1 import (ClassConstrainedL1Attack,
+                           ClassConstrainedProximalL1Attack)
+from lib.attack_l2 import (ClassConstrainedL2Attack,
+                           ClassConstrainedProximalL2Attack)
+from lib.attack_li import ClassConstrainedProximalLiAttack
 from lib.attack_utils import AttackOptimizationLoop
-from lib.utils import (MetricsDictionary, get_acc_for_lp_threshold,
-                       import_klass_annotations_as_flags, log_metrics,
-                       make_input_pipeline, register_experiment_flags,
-                       reset_metrics, save_images, setup_experiment)
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric, make_input_pipeline)
+from lib.utils import (format_float, import_klass_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 from tensorboard.plugins.hparams import api as hp
 
 from config import test_thresholds
@@ -29,9 +33,8 @@ from utils import load_madry
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/cifar10/test_lp")
-flags.DEFINE_string(
-    "attack", None, "choice of the attack ('l0', 'l1', 'l2', 'l2g', 'li')"
-)
+flags.DEFINE_string("attack", None,
+                    "choice of the attack ('l0', 'l1', 'l2', 'l2g', 'li')")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -44,13 +47,19 @@ import_klass_annotations_as_flags(AttackOptimizationLoop, "attack_loop_")
 FLAGS = flags.FLAGS
 
 lp_attacks = {
-    "l0": ("l0", ProximalL0Attack),
-    "l1": ("l1", ProximalL1Attack),
-    "l1g": ("l1", GradientL1Attack),
-    "l2": ("l2", ProximalL2Attack),
-    "l2g": ("l2", GradientL2Attack),
-    "li": ("li", ProximalLiAttack),
+    "l0": ("l0", ClassConstrainedProximalL0Attack),
+    "l1": ("l1", ClassConstrainedProximalL1Attack),
+    "l1g": ("l1", ClassConstrainedL1Attack),
+    "l2": ("l2", ClassConstrainedProximalL2Attack),
+    "l2g": ("l2", ClassConstrainedL2Attack),
+    "li": ("li", ClassConstrainedProximalLiAttack),
 }
+
+
+def import_flags(attack):
+    assert attack in lp_attacks
+    attack_klass = lp_attacks[attack][1]
+    import_klass_annotations_as_flags(attack_klass, "attack_")
 
 
 def main(unused_args):
@@ -97,13 +106,13 @@ def main(unused_args):
     # attacks
     attack_loop_kwargs = {
         kwarg.replace("attack_loop_", ""): getattr(FLAGS, kwarg)
-        for kwarg in dir(FLAGS)
-        if kwarg.startswith("attack_loop_")
+        for kwarg in dir(FLAGS) if kwarg.startswith("attack_loop_")
     }
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS)
         if kwarg.startswith("attack_") and not kwarg.startswith("attack_loop_")
+        and kwarg not in ["attack_save"]
     }
     alp = attack_klass(lambda x: test_classifier(x)["logits"], **attack_kwargs)
     alp.build([X_shape, y_shape])
@@ -114,120 +123,129 @@ def main(unused_args):
 
     @tf.function
     def test_step(image, label):
-        label_onehot = tf.one_hot(label, num_classes)
-        image_lp = allp.run_loop(image, label_onehot)
-
         outs = test_classifier(image)
-        outs_lp = test_classifier(image_lp)
+        is_corr = outs["pred"] == label
+
+        label_onehot = tf.one_hot(label, num_classes)
+        image_adv = allp.run_loop(image, label_onehot)
+
+        outs_adv = test_classifier(image_adv)
+        is_adv = outs_adv["pred"] != label
 
         # metrics
         nll_loss = tf.keras.metrics.sparse_categorical_crossentropy(
-            label, outs["logits"]
-        )
+            label, outs["logits"])
         acc_fn = tf.keras.metrics.sparse_categorical_accuracy
         acc = acc_fn(label, outs["logits"])
-        acc_lp = acc_fn(label, outs_lp["logits"])
+        acc_adv = acc_fn(label, outs_adv["logits"])
 
         # accumulate metrics
         test_metrics["nll_loss"](nll_loss)
         test_metrics["acc"](acc)
         test_metrics["conf"](outs["conf"])
-        test_metrics[f"acc_{norm}"](acc_lp)
-        test_metrics[f"conf_{norm}"](outs_lp["conf"])
+        test_metrics[f"acc_{norm}"](acc_adv)
+        test_metrics[f"conf_{norm}"](outs_adv["conf"])
 
         # measure norm
-        lp = alp.lp_metric(image - image_lp)
-        for threshold in test_thresholds[norm]:
-            acc_th = get_acc_for_lp_threshold(
-                lambda x: test_classifier(x)["logits"],
-                image,
-                image_lp,
-                label,
-                lp,
-                threshold,
-            )
-            test_metrics[f"acc_{norm}_%.3f" % threshold](acc_th)
-        test_metrics[f"{norm}"](lp)
-        # compute statistics only for correctly classified inputs
-        is_corr = outs["pred"] == label
-        test_metrics[f"{norm}_corr"](lp[is_corr])
+        r = image - image_adv
+        lp = alp.lp_metric(r)
+        l0 = l0_metric(r)
+        l0p = l0_pixel_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics["l0"](l0)
+        test_metrics["l0p"](l0p)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
+        # exclude incorrectly classified
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0p_corr"](l0p[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
 
-        return image_lp
+        # robust accuracy at threshold
+        for threshold in test_thresholds[norm]:
+            is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
+            test_metrics[f"acc_{norm}_%s" %
+                         format_float(threshold)](~is_adv_at_th)
+            if norm == "l0":
+                is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
+                test_metrics["acc_l0p_%s" %
+                             format_float(threshold)](~is_adv_at_th)
+        test_metrics["success_rate"](is_adv[is_corr])
+
+        return image_adv
 
     # reset metrics
     reset_metrics(test_metrics)
-    X_lp_list = []
-    y_list = []
     start_time = time.time()
     try:
         is_completed = False
+        X_adv = []
         for batch_index, (image, label) in enumerate(test_ds, 1):
-            X_lp = test_step(image, label)
+            X_adv_b = test_step(image, label)
+            X_adv.append(X_adv_b)
             log_metrics(
                 test_metrics,
-                "Batch results [{}, {:.2f}s]:".format(
-                    batch_index, time.time() - start_time
-                ),
+                "Batch results [{}, {:.2f}s]:".format(batch_index,
+                                                      time.time() -
+                                                      start_time),
             )
-            # save adversarial data
-            save_path = os.path.join(
-                FLAGS.samples_dir, "epoch_orig-%d.png" % batch_index
-            )
-            save_images(image, save_path, data_format="NHWC")
-            save_path = os.path.join(
-                FLAGS.samples_dir, f"epoch_{norm}-%d.png" % batch_index
-            )
-            save_images(X_lp, save_path, data_format="NHWC")
-            X_lp_list.append(X_lp)
-            y_list.append(label)
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 is_completed = True
                 break
         else:
             is_completed = True
+        X_adv = np.concatenate(X_adv, axis=0)
         if is_completed:
+            if FLAGS.attack_save:
+                np.save(
+                    Path(FLAGS.working_dir) / "attack.npy",
+                    X_adv.reshape(X_adv.shape[0], -1))
             # hyperparameter tuning
             with tf.summary.create_file_writer(FLAGS.working_dir).as_default():
                 # hyperparameters
                 hp_param_names = [
-                    kwarg for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
+                    kwarg for kwarg in dir(FLAGS)
+                    if kwarg.startswith("attack_")
                 ]
                 hp_metric_names = [f"final_{norm}", f"final_{norm}_corr"]
                 hp_params = [
-                    hp.HParam(hp_param_name) for hp_param_name in hp_param_names
+                    hp.HParam(hp_param_name)
+                    for hp_param_name in hp_param_names
                 ]
                 hp_metrics = [
-                    hp.Metric(hp_metric_name) for hp_metric_name in hp_metric_names
+                    hp.Metric(hp_metric_name)
+                    for hp_metric_name in hp_metric_names
                 ]
                 hp.hparams_config(hparams=hp_params, metrics=hp_metrics)
-                hp.hparams(
-                    {
-                        hp_param_name: getattr(FLAGS, hp_param_name)
-                        for hp_param_name in hp_param_names
-                    }
-                )
+                hp.hparams({
+                    hp_param_name: getattr(FLAGS, hp_param_name)
+                    for hp_param_name in hp_param_names
+                })
                 final_lp = test_metrics[f"{norm}"].result()
                 tf.summary.scalar(f"final_{norm}", final_lp, step=1)
                 final_lp_corr = test_metrics[f"{norm}_corr"].result()
                 tf.summary.scalar(f"final_{norm}_corr", final_lp_corr, step=1)
                 tf.summary.flush()
-    except:
-        logging.info("Stopping after {}".format(batch_index))
+    except KeyboardInterrupt as e:
+        logging.info("Stopping becaues".format(batch_index))
+    except Exception:
+        traceback.print_exc()
     finally:
         log_metrics(
             test_metrics,
-            "Test results [{:.2f}s, {}]:".format(time.time() - start_time, batch_index),
+            "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
+                                                 batch_index),
         )
-        X_lp_all = tf.concat(X_lp_list, axis=0).numpy()
-        y_all = tf.concat(y_list, axis=0).numpy()
-        np.savez(Path(FLAGS.working_dir) / "X_adv", X_adv=X_lp_all, y=y_all)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--attack", default=None, type=str)
     args, _ = parser.parse_known_args()
-    assert args.attack in lp_attacks
-    attack_klass = lp_attacks[args.attack][1]
-    import_klass_annotations_as_flags(attack_klass, "attack_")
+    import_flags(args.attack)
     absl.app.run(main)
