@@ -50,10 +50,9 @@ def import_flags(norm):
     exclude_args = ['clip_min', 'clip_max', 'rand_init']
     if norm != 'l1':
         exclude_args.append('ord')
-    import_func_annotations_as_flags(
-        lp_attacks[norm].parse_params,
-        prefix="attack_",
-        exclude_args=exclude_args)
+    import_func_annotations_as_flags(lp_attacks[norm].parse_params,
+                                     prefix="attack_",
+                                     exclude_args=exclude_args)
 
 
 def main(unused_args):
@@ -96,11 +95,7 @@ def main(unused_args):
 
     pgd = lp_attacks[FLAGS.norm](MadryModel())
 
-    lp_metrics = {
-        "l1": l1_metric,
-        "l2": l2_metric,
-        "li": li_metric
-    }
+    lp_metrics = {"l1": l1_metric, "l2": l2_metric, "li": li_metric}
 
     # attack arguments
     attack_kwargs = {
@@ -167,7 +162,8 @@ def main(unused_args):
         # add small constant eps = 1e-6
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%s" % format_float(threshold)](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

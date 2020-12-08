@@ -11,7 +11,7 @@ import torch.nn.functional as F
 from absl import flags
 from lib.fab import FABAttack, FABPtModelAdapter
 from lib.pt_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
-                          li_metric, to_torch)
+                          li_metric, setup_torch, to_torch)
 from lib.tf_utils import limit_gpu_growth, make_input_pipeline
 from lib.utils import (format_float, import_klass_annotations_as_flags,
                        log_metrics, register_experiment_flags, reset_metrics,
@@ -41,7 +41,9 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_fab_test", [__file__, lib.fab.__file__])
+    setup_torch(FLAGS.seed)
+    setup_experiment(f"madry_fab_{FLAGS.attack_norm}",
+                     [__file__, lib.fab.__file__])
 
     # models
     num_classes = 10
@@ -56,18 +58,14 @@ def main(unused_args):
     _, _, test_ds = load_mnist(FLAGS.validation_size,
                                data_format="NCHW",
                                seed=FLAGS.data_seed)
+    # NOTE: load tensorflow after converting model to cuda
     import tensorflow as tf
     test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
     test_ds = make_input_pipeline(test_ds,
                                   shuffle=False,
                                   batch_size=FLAGS.batch_size)
 
-    lp_metrics = {
-        "l0": l0_metric,
-        "l1": l1_metric,
-        "l2": l2_metric,
-        "li": li_metric
-    }
+    lp_metrics = {"l1": l1_metric, "l2": l2_metric, "li": li_metric}
 
     # attacks
     attack_kwargs = {

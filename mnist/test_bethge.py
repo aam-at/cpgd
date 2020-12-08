@@ -47,8 +47,10 @@ lp_attacks = {
 def import_flags(norm):
     global lp_attacks
     assert norm in lp_attacks
-    import_klass_annotations_as_flags(lp_attacks[norm], "attack_",
-                                      exclude_args=['init_attack', 'tensorboard'])
+    import_klass_annotations_as_flags(
+        lp_attacks[norm],
+        "attack_",
+        exclude_args=['init_attack', 'tensorboard'])
 
 
 def main(unused_args):
@@ -173,7 +175,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%s" % format_float(threshold)](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

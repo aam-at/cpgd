@@ -9,17 +9,17 @@ from pathlib import Path
 import absl
 import tensorflow as tf
 from absl import flags
-from art.attacks import (CarliniL2Method, CarliniLInfMethod, DeepFool,
-                         ElasticNet)
+from art.attacks.evasion import (CarliniL2Method, CarliniLInfMethod, DeepFool,
+                                 ElasticNet)
 from art.classifiers import TensorFlowV2Classifier
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric, make_input_pipeline)
+from lib.utils import (format_float, import_klass_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 
 from config import test_thresholds
 from data import load_cifar10
-from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric, make_input_pipeline)
-from lib.utils import (import_klass_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
-                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 
@@ -41,7 +41,9 @@ lp_attacks = {
         'df': DeepFool,
         'cw': CarliniL2Method
     },
-    "li": {'cw': CarliniLInfMethod},
+    "li": {
+        'cw': CarliniLInfMethod
+    },
     "l1": {
         'ead': ElasticNet
     }
@@ -50,11 +52,9 @@ lp_attacks = {
 
 def import_flags(norm, attack):
     global lp_attacks
-    assert args.norm in lp_attacks
-    assert args.attack in lp_attacks[args.norm]
-    import_klass_annotations_as_flags(lp_attacks[args.norm][args.attack],
+    import_klass_annotations_as_flags(lp_attacks[norm][attack],
                                       "attack_",
-                                      include_kwargs_with_defaults=True)
+                                      exclude_args=["return", "classifier"])
 
 
 def main(unused_args):
@@ -97,12 +97,11 @@ def main(unused_args):
     def art_classifier(x):
         return test_classifier(x)['logits']
 
-    art_model = TensorFlowV2Classifier(
-        model=art_classifier,
-        input_shape=X_shape[1:],
-        nb_classes=num_classes,
-        channel_index=3,
-        clip_values=(0, 1))
+    art_model = TensorFlowV2Classifier(model=art_classifier,
+                                       input_shape=X_shape[1:],
+                                       nb_classes=num_classes,
+                                       channel_index=3,
+                                       clip_values=(0, 1))
 
     # attacks
     attack_kwargs = {
@@ -169,7 +168,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
