@@ -12,7 +12,8 @@ from pathlib import Path
 import numpy as np
 from absl import flags
 from lib.attack_lp import ProximalPrimalDualGradientAttack
-from lib.generate_script import format_name, generate_test_optimizer
+from lib.generate_script import (cleanflags, format_name,
+                                 generate_test_optimizer)
 from lib.parse_logs import parse_log
 from lib.tf_utils import ConstantDecay, ExpDecay, LinearDecay
 from lib.utils import (import_func_annotations_as_flags,
@@ -27,19 +28,6 @@ models = [
 hostname = subprocess.getoutput('hostname')
 
 FLAGS = flags.FLAGS
-
-
-def cleanflags(fn):
-    @functools.wraps(fn)
-    def wrapper(*args, **kwargs):
-        flags.FLAGS._flags().clear()
-        fn(*args, **kwargs)
-
-    return wrapper
-
-
-def generate_test_optimizer_lp(**kwargs):
-    return generate_test_optimizer('test_optimizer_lp_madry', **kwargs)
 
 
 def test_random(runs=1, master_seed=1):
