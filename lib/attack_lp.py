@@ -6,7 +6,7 @@ from typing import Union
 
 import tensorflow as tf
 
-from .attack_utils import (margin, project_box,
+from .attack_utils import (get_opt_psi, l2_metric, margin, project_box,
                            project_log_distribution_wrt_kl_divergence)
 from .tf_utils import (create_optimizer, prediction, reset_optimizer,
                        to_indexed_slices)
@@ -40,21 +40,22 @@ class PrimalDualGradientAttack(ABC):
         iterations: int = 100,
         primal_opt: str = "sgd",
         primal_lr: float = 1e-1,
-        primal_opt_kwargs: Union[dict, str] = "",
+        primal_opt_kwargs: Union[dict, str] = "{}",
         gradient_preprocessing: bool = False,
         dual_opt: str = "sgd",
         dual_lr: float = 1e-1,
         dual_ema: bool = True,
-        dual_opt_kwargs: Union[dict, str] = "",
+        dual_opt_kwargs: Union[dict, str] = "{}",
         simultaneous_updates: bool = False,
         # attack parameters
         targeted: bool = False,
         confidence: float = 0.0,
         # parameters for non-convex constrained minimization
-        use_proxy_constraint: bool = True,
         boxmin: float = 0.0,
         boxmax: float = 1.0,
         min_dual_ratio: float = 1e-6,
+        # other parameters
+        has_ecc: bool = False
     ):
         """
         Args:
@@ -70,16 +71,17 @@ class PrimalDualGradientAttack(ABC):
             dual_ema: if to use exponential moving average for the dual variables.
             targeted: if the attack is targeted.
             confidence: attack confidence.
-            use_proxy_constraint: if to use proxy Lagrangian formulation
-            (https://arxiv.org/abs/1804.06500) to update constraints weights
             boxmin: clipping minimum value.
             boxmax: clipping maximum value.
             min_dual_ratio: minimal ratio C after dual state projection
+            has_ecc: if the computer supports error-correction (if the computer
+            doesn't support it, due to numerical errors some of the operations
+            may return nans, please see proximal_l23).
 
         """
         super(PrimalDualGradientAttack, self).__init__()
         self.model = model
-        assert loss in ["cw", "ce"]
+        assert loss in ["cw", "exp", "log", "square", "matsushita", "ce"]
         self.loss = loss
         self.iterations = iterations
         if not isinstance(primal_opt_kwargs, dict):
@@ -89,7 +91,6 @@ class PrimalDualGradientAttack(ABC):
                                            **primal_opt_kwargs)
         self.gradient_preprocessing = gradient_preprocessing
         self.dual_ema = dual_ema
-        self.ema = tf.train.ExponentialMovingAverage(decay=0.9)
         if not isinstance(dual_opt_kwargs, dict):
             assert isinstance(dual_opt_kwargs, str)
             dual_opt_kwargs = ast.literal_eval(dual_opt_kwargs)
@@ -97,10 +98,10 @@ class PrimalDualGradientAttack(ABC):
         self.simultaneous_updates = simultaneous_updates
         self.targeted = targeted
         self.confidence = confidence
-        self.use_proxy_constraint = use_proxy_constraint
         self.boxmin = boxmin
         self.boxmax = boxmax
         self.min_dual_ratio = min_dual_ratio
+        self.has_ecc = has_ecc
         self.built = False
 
     @property
@@ -116,7 +117,7 @@ class PrimalDualGradientAttack(ABC):
 
     @property
     def dual_lr(self):
-        if callable(self.dual_lr):
+        if callable(self.dual_opt.lr):
             return self.dual_opt.lr(self.dual_opt.iterations)
         else:
             return self.dual_opt.lr
@@ -125,27 +126,40 @@ class PrimalDualGradientAttack(ABC):
     def dual_lr(self, lr):
         self.dual_opt.lr = lr
 
+    @property
+    def lambdas(self):
+        # lambda0 - lp metric
+        # lambda1 - classification constraint
+        return (self._ema.average(self._lambdas_ema)
+                if self.dual_ema else tf.exp(self._state))
+
+    @property
+    def lambd(self):
+        lambdas = self.lambdas
+        return lambdas[:, 0] / lambdas[:, 1]
+
     def build(self, inputs_shape):
         assert not self.built
         X_shape, y_shape = inputs_shape
         batch_size = X_shape[0]
         assert y_shape.ndims == 2
         # primal and dual variable
-        self.rx = tf.Variable(tf.zeros(X_shape), trainable=True, name="rx")
-        self.state = tf.Variable(
+        self._rx = tf.Variable(tf.zeros(X_shape), trainable=True, name="rx")
+        self._state = tf.Variable(
             tf.zeros((batch_size, 2)),
             trainable=True,
             constraint=self.project_state,
             name="dual_state",
         )
-        self.lambd_ema = tf.Variable(tf.zeros(batch_size),
-                                     trainable=False,
-                                     name="lambd_mu")
-        self.ema.apply([self.lambd_ema])
+        self._ema = tf.train.ExponentialMovingAverage(decay=0.9)
+        self._lambdas_ema = tf.Variable(tf.zeros((batch_size, 2)),
+                                        trainable=False,
+                                        name="lambdas_mu")
+        self._ema.apply([self._lambdas_ema])
         # create optimizer variables
-        self.primal_opt.apply_gradients([(tf.zeros_like(self.rx), self.rx)])
-        self.dual_opt.apply_gradients([(tf.zeros_like(self.state), self.state)
-                                       ])
+        self.primal_opt.apply_gradients([(tf.zeros_like(self._rx), self._rx)])
+        self.dual_opt.apply_gradients([(tf.zeros_like(self._state),
+                                        self._state)])
         # create other attack variables to store the best attack between optimization iteration
         self.bestsol = tf.Variable(tf.zeros(X_shape),
                                    trainable=False,
@@ -197,12 +211,17 @@ class PrimalDualGradientAttack(ABC):
             Classification constraints and classification loss.
         """
         logits = self.model(X)
+        m = margin(logits, y_onehot, targeted=self.targeted)
         if self.loss == "cw":
-            m = margin(logits, y_onehot, targeted=self.targeted)
-            if self.targeted:
-                cls_loss = tf.nn.relu(-m)
-            else:
-                cls_loss = tf.nn.relu(m)
+            cls_loss = tf.nn.relu(1.0 + m)
+        elif self.loss == "exp":
+            cls_loss = tf.exp(m)
+        elif self.loss == "log":
+            cls_loss = tf.nn.softplus(m) / tf.math.log(2.0)
+        elif self.loss == "square":
+            cls_loss = tf.square(1.0 + m)
+        elif self.loss == "matsushita":
+            cls_loss = tf.sqrt(1.0 + tf.square(m)) + m
         elif self.loss == "ce":
             if self.targeted:
                 cls_loss = tf.nn.softmax_cross_entropy_with_logits(
@@ -214,40 +233,44 @@ class PrimalDualGradientAttack(ABC):
 
     @abstractmethod
     def objective(self, X, r, y_onehot):
+        """Objective
+        """
         pass
 
     @abstractmethod
     def constraints(self, X, r, y_onehot):
+        """Constraints
+        """
         pass
 
     def proxy_constraints(self, X, r, y_onehot):
-        """Proxy constraints which by default to use original constraints.
+        """Proxy constraints (default: original constraints).
         """
         return self.constraints(X, r, y_onehot)
+
+    @abstractmethod
+    def is_feasible(self, X, r, y_onehot):
+        pass
 
     @abstractmethod
     def state_gradient(self, constraints_gradients):
         pass
 
-    def total_loss(self, X, r, y_onehot, lambd):
-        """Returns total loss (classification + lp_metric).
+    def total_loss(self, X, r, y_onehot):
+        """Returns total optimization loss (classification + lp_metric).
         Args:
             X: original images.
             r: perturbation to the original images X.
             y_onehot: original labels.
-            lambd: trade-off between the objective and the constraints.
 
         Returns:
             Total cost.
         """
+        lp_metric = self.lp_metric(r)
         cls_loss = self.classification_loss(X + r, y_onehot)
-        lp_loss = self.lp_metric(r)
-        return cls_loss + lambd * lp_loss
-
-    @property
-    def lambd(self):
-        return (self.ema.average(self.lambd_ema)
-                if self.dual_ema else compute_lambda(self.state))
+        return tf.reduce_sum(self.lambdas * tf.stack(
+            (lp_metric, cls_loss), axis=1),
+                             axis=1)
 
     def gradient_preprocess(self, g):
         return g
@@ -258,39 +281,40 @@ class PrimalDualGradientAttack(ABC):
 
     def _primal_optim_step(self, X, y_onehot):
         # gradient descent on primal variables
+        r = self._rx
         with tf.GradientTape() as find_r_tape:
-            loss = self.total_loss(X, self.rx, y_onehot, self.lambd)
+            loss = self.total_loss(X, r, y_onehot)
 
         # compute gradient for primal variables
-        fg = find_r_tape.gradient(loss, self.rx)
+        fg = find_r_tape.gradient(loss, r)
         if self.gradient_preprocessing:
             fg = self.gradient_preprocess(fg)
         with tf.control_dependencies(
-            [self.primal_opt.apply_gradients([(fg, self.rx)])]):
-            self.rx.assign(self.project_box(X, self.rx))
+            [self.primal_opt.apply_gradients([(fg, r)])]):
+            r.assign(self.project_box(X, r))
 
     def _dual_optim_step(self, X, y_onehot):
         # gradient ascent on dual variables
-        if self.use_proxy_constraint:
-            constraint_gradients = self.proxy_constraints(X, self.rx, y_onehot)
-        else:
-            constraint_gradients = self.constraints(X, self.rx, y_onehot)
+        r = self._rx
+        constraint_gradients = self.constraints(X, r, y_onehot)
         state_gradient = self.state_gradient(constraint_gradients)
-        self.dual_opt.apply_gradients([(state_gradient, self.state)])
-
+        self.dual_opt.apply_gradients([(state_gradient, self._state)])
+        # update moving average of dual variables
         if self.dual_ema:
-            lambd_new = compute_lambda(self.state)
-            with tf.control_dependencies([self.lambd_ema.assign(lambd_new)]):
-                self.ema.apply([self.lambd_ema])
+            lambdas_new = tf.exp(self._state)
+            with tf.control_dependencies(
+                [self._lambdas_ema.assign(lambdas_new)]):
+                self._ema.apply([self._lambdas_ema])
 
     def _update_attack_state(self, X, y_onehot):
         batch_indices = tf.range(X.shape[0])
-        objective = self.objective(X, self.rx, y_onehot)
-        is_feasible = self.constraints(X, self.rx, y_onehot) <= 0
+        r = self._rx
+        objective = self.objective(X, r, y_onehot)
+        is_feasible = self.is_feasible(X, r, y_onehot)
         # check if it is the best perturbation
         is_best_sol = tf.logical_and(objective < self.bestobj, is_feasible)
         self.bestsol.scatter_update(
-            to_indexed_slices(X + self.rx, batch_indices, is_best_sol))
+            to_indexed_slices(X + r, batch_indices, is_best_sol))
         self.bestlambd.scatter_update(
             to_indexed_slices(self.lambd, batch_indices, is_best_sol))
         self.bestobj.scatter_update(
@@ -335,22 +359,23 @@ class PrimalDualGradientAttack(ABC):
         # which may be useful even at different starting point
         # reset primal optimizer and primal variables
         reset_optimizer(self.primal_opt)
-        self.rx.assign(r0)
+        self._rx.assign(r0)
         reset_optimizer(self.dual_opt)
-        self.lambd_ema.assign(tf.ones(batch_size) * C0)
-        self.ema.average(self.lambd_ema).assign(self.lambd_ema)
-        self.state.assign(init_state(self.lambd_ema))
+        self._state.assign(init_state(tf.ones(batch_size) * C0))
+        self._lambdas_ema.assign(tf.exp(self._state))
+        self._ema.average(self._lambdas_ema).assign(self._lambdas_ema)
 
     @tf.function
     def optim_step(self, X, y_onehot):
         # TODO: compare with simultaneous optimization
-        rx_v_0 = self.rx.read_value()
+        r = self._rx
+        r_v_0 = r.read_value()
         self._primal_optim_step(X, y_onehot)
-        rx_v_1 = self.rx.read_value()
+        r_v_1 = r.read_value()
         if self.simultaneous_updates:
-            self.rx.assign(rx_v_0)
+            r.assign(r_v_0)
             self._dual_optim_step(X, y_onehot)
-            self.rx.assign(rx_v_1)
+            r.assign(r_v_1)
         else:
             self._dual_optim_step(X, y_onehot)
         self._update_attack_state(X, y_onehot)
@@ -380,12 +405,17 @@ class ClassConstrainedAttack(PrimalDualGradientAttack):
         return self.lp_metric(r)
 
     def constraints(self, X, r, y_onehot):
-        return tf.sign(self.proxy_constraints(X, r, y_onehot))
-
-    def proxy_constraints(self, X, r, y_onehot):
         logits = self.model(X + r)
         m = margin(logits, y_onehot, targeted=self.targeted)
-        return m
+        return tf.sign(m)
+
+    def proxy_constraints(self, X, r, y_onehot):
+        return self.classification_loss(X + r, y_onehot)
+
+    def is_feasible(self, X, r, y_onehot):
+        pred = tf.argmax(self.model(X + r), axis=-1)
+        label = tf.argmax(y_onehot, axis=-1)
+        return pred != label
 
     def state_gradient(self, constraint_gradients):
         return -tf.stack(
@@ -404,6 +434,9 @@ class NormConstrainedAttack(PrimalDualGradientAttack):
 
     def constraints(self, X, r, y_onehot):
         return self.lp_metric(r) - self.epsilon
+
+    def is_feasible(self, X, r, y_onehot):
+        return self.lp_metric(r) <= self.epsilon
 
     def state_gradient(self, constraint_gradients):
         return -tf.stack(
@@ -436,15 +469,15 @@ class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
         X_shape, _ = inputs_shape
         batch_size = X_shape[0]
         # variable to update so we track momentum for accelerated gradient
-        self.ry = tf.Variable(tf.zeros_like(self.rx),
-                              trainable=True,
-                              name="ry")
+        self._ry = tf.Variable(tf.zeros_like(self._rx),
+                               trainable=True,
+                               name="ry")
         # (adaptive) momentum for accelerated gradient
-        self.beta = tf.Variable(tf.zeros(batch_size))
+        self._beta = tf.Variable(tf.zeros(batch_size))
 
     def _primal_optim_step(self, X, y_onehot):
         # proximal gradient descent on primal variables
-        rx, ry = self.rx, self.ry
+        rx, ry = self._rx, self._ry
         batch_indices = tf.range(X.shape[0])
         # proximal gradient descent on primal variables
         with tf.GradientTape() as find_r_tape:
@@ -463,29 +496,64 @@ class ProximalPrimalDualGradientAttack(PrimalDualGradientAttack, ABC):
         # proximal or accelerated proximal gradient
         lr = self.primal_lr
         ry_v = ry.read_value()
-        # FIXME: consider using LazyAdam from tf.addons to do sparse updates
         with tf.control_dependencies(
             [self.primal_opt.apply_gradients([(fg, rx)])]):
-            mu = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
-            ry.assign(self.project_box(X, self.proximity_operator(rx, mu)))
+            if isinstance(self.primal_opt, tf.keras.optimizers.Adam):
+                # Adam and AmsGrad Proximal Gradient
+                # https://arxiv.org/pdf/1910.10094.pdf
+                psi = get_opt_psi(self.primal_opt, rx)
+                psi_max = tf.reduce_max(psi, axis=(1, 2, 3), keepdims=True)
+                effective_lr = lr / tf.squeeze(psi_max)
+                ## variable metric proximal gradient
+                # proximal sub-iterations variables
+                z_curr = rx
+                eps = tf.ones(X.shape[0])
+                # proximal sub-iterations parameters
+                prox_iter = 5
+                eps_th = 1e-2
+                for i in tf.range(prox_iter):
+                    lambd = self.lambd
+                    mu = tf.reshape(lambd * effective_lr, (-1, 1, 1, 1))
+                    z_prev = z_curr
+                    z_new = self.project_box(
+                            X,
+                            self.proximity_operator(
+                                z_curr - psi / psi_max * (z_curr - rx), mu))
+                    z_curr = tf.where(
+                        tf.reshape(eps > eps_th, (-1, 1, 1, 1)),
+                        z_new,
+                        z_prev)
+
+                    eps = l2_metric(z_curr - z_prev) / l2_metric(z_curr)
+                    if tf.reduce_all(eps < eps_th):
+                        break
+                ry.assign(z_curr)
+            elif isinstance(self.primal_opt, tf.keras.optimizers.SGD):
+                # Standard Gradient Descent
+                mu = tf.reshape(lr * self.lambd, (-1, 1, 1, 1))
+                ry.assign(self.project_box(X, self.proximity_operator(rx, mu)))
+            else:
+                raise ValueError("Unsupported optimizer")
         if self.accelerated:
             rv = self.project_box(
-                X, ry + tf.reshape(self.beta, (-1, 1, 1, 1)) * (ry - ry_v))
-            F_y = self.total_loss(X, ry, y_onehot, self.lambd)
-            F_v = self.total_loss(X, rv, y_onehot, self.lambd)
+                X, ry + tf.reshape(self._beta, (-1, 1, 1, 1)) * (ry - ry_v))
+            F_y = self.total_loss(X, ry, y_onehot)
+            F_v = self.total_loss(X, rv, y_onehot)
             rx.assign(tf.where(tf.reshape(F_y <= F_v, (-1, 1, 1, 1)), ry, rv))
             if self.adaptive_momentum:
-                self.beta.scatter_mul(
+                self._beta.scatter_mul(
                     tf.IndexedSlices(tf.where(F_y <= F_v, 0.9, 1.0 / 0.9),
                                      batch_indices))
-                self.beta.assign(tf.minimum(self.beta, 1.0))
+                self._beta.assign(tf.clip_by_value(self._beta, 0.01, 0.99))
         else:
             rx.assign(ry)
 
     @tf.function
     def reset_attack(self, r0, C0):
         super(ProximalPrimalDualGradientAttack, self).reset_attack(r0, C0)
-        self.ry.assign(self.rx)
+        batch_size = r0.shape[0]
+        self._ry.assign(self._rx)
+        self._beta.assign(tf.ones(batch_size) * self.momentum)
 
     @abstractmethod
     def proximity_operator(self, u, l):

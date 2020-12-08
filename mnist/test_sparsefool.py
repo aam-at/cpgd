@@ -39,7 +39,7 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     setup_torch(FLAGS.seed)
-    setup_experiment(f"madry_sparsefool_test", [__file__])
+    setup_experiment("madry_sparsefool_test", [__file__])
 
     # models
     num_classes = 10
@@ -119,7 +119,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds["l1"]:
             is_adv_at_th = torch.logical_and(l1 <= threshold, is_adv)
-            test_metrics[f"acc_l1_%s" % format_float(threshold)](~is_adv_at_th)
+            test_metrics["acc_l1_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

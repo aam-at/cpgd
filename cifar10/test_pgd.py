@@ -2,7 +2,6 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
-import os
 import sys
 import time
 from pathlib import Path
@@ -13,14 +12,14 @@ import tensorflow as tf
 from absl import flags
 from cleverhans.attacks import ProjectedGradientDescent, SparseL1Descent
 from cleverhans.model import Model
+from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
+                          make_input_pipeline)
+from lib.utils import (format_float, import_func_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 
 from config import test_thresholds
 from data import load_cifar10
-from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
-                          make_input_pipeline)
-from lib.utils import (import_func_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
-                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 
@@ -28,7 +27,7 @@ from utils import load_madry
 register_experiment_flags(working_dir="../results/cifar10/test_pgd")
 flags.DEFINE_string("norm", "lp", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
-# test paramrs
+# test params
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
@@ -51,11 +50,9 @@ def import_flags(norm):
     exclude_args = ['clip_min', 'clip_max', 'rand_init']
     if norm != 'l1':
         exclude_args.append('ord')
-    import_func_annotations_as_flags(
-        lp_attacks[norm].parse_params,
-        prefix="attack_",
-        exclude_args=exclude_args,
-        include_kwargs_with_defaults=True)
+    import_func_annotations_as_flags(lp_attacks[norm].parse_params,
+                                     prefix="attack_",
+                                     exclude_args=exclude_args)
 
 
 def main(unused_args):
@@ -98,11 +95,7 @@ def main(unused_args):
 
     pgd = lp_attacks[FLAGS.norm](MadryModel())
 
-    lp_metrics = {
-        "l1": l1_metric,
-        "l2": l2_metric,
-        "li": li_metric
-    }
+    lp_metrics = {"l1": l1_metric, "l2": l2_metric, "li": li_metric}
 
     # attack arguments
     attack_kwargs = {
@@ -169,7 +162,8 @@ def main(unused_args):
         # add small constant eps = 1e-6
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

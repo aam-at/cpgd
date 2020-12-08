@@ -7,19 +7,18 @@ import time
 from pathlib import Path
 
 import absl
+import lib
 import numpy as np
 import tensorflow as tf
 from absl import flags
+from lib.daa import LinfBLOBAttack, LinfDGFAttack
+from lib.tf_utils import MetricsDictionary, li_metric, make_input_pipeline
+from lib.utils import (format_float, import_klass_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 
-import lib
 from config import test_thresholds
 from data import load_cifar10
-from lib.daa import LinfBLOBAttack, LinfDGFAttack
-from lib.tf_utils import (MetricsDictionary, li_metric, make_input_pipeline,
-                          to_indexed_slices)
-from lib.utils import (import_klass_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics, save_images,
-                       setup_experiment)
 from models import MadryCNNTf
 from utils import load_madry
 
@@ -145,7 +144,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds["li"]:
             is_adv_at_th = tf.logical_and(li <= threshold + 5e-6, is_adv)
-            test_metrics["acc_li_%.3f" % threshold](~is_adv_at_th)
+            test_metrics["acc_li_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
     # reset metrics
@@ -162,10 +162,10 @@ def main(unused_args):
                 for (image, label, indx) in test_ds:
                     image_adv = tf.gather(x_adv, tf.expand_dims(indx, 1))
                     image_adv = attack_step(image, image_adv, label)
-                    x_adv = tf.tensor_scatter_nd_update(x_adv, tf.expand_dims(indx, 1),
-                                                        image_adv)
-            is_adv = tf.logical_and(test_classifier(x_adv)['pred'] != test_labels,
-                                    is_corr0)
+                    x_adv = tf.tensor_scatter_nd_update(
+                        x_adv, tf.expand_dims(indx, 1), image_adv)
+            is_adv = tf.logical_and(
+                test_classifier(x_adv)['pred'] != test_labels, is_corr0)
             image_adv_final.scatter_update(
                 tf.IndexedSlices(x_adv[is_adv], all_indices[is_adv]))
 
@@ -180,8 +180,9 @@ def main(unused_args):
                 test_step(image, image_adv, label)
             log_metrics(
                 test_metrics,
-                "Test results after {} restarts [{:.2f}s]:".format(restart_number,
-                                                                   time.time() - start_time),
+                "Test results after {} restarts [{:.2f}s]:".format(
+                    restart_number,
+                    time.time() - start_time),
             )
     except KeyboardInterrupt:
         logging.info("Stopping after {} restarts".format(restart_number))

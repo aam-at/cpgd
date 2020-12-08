@@ -29,6 +29,11 @@ def format_name(base_name, attack_args):
     attack = attack_args['attack']
     if attack == 'l1g' and attack_args['attack_hard_threshold']:
         attack = f"{attack}_threshold"
+    if attack == 'l0':
+        operator = attack_args['attack_operator']
+        attack = f"{attack}_{operator}"
+        if operator == "l2/3":
+            attack = f"{attack}{'_ecc' if attack_args['attack_has_ecc'] else ''}"
     name = f"""{base_name}_{attack}_{attack_args["attack_loss"]}
 {'_multi' if attack_args['attack_loop_multitargeted'] else ''}
 _n{attack_args["attack_iterations"]}
@@ -67,9 +72,8 @@ _N{attack_args["attack_loop_number_restarts"]}
     name = f"""{name}_{attack_args['attack_loop_r0_sampling_algorithm']}
 _R{attack_args['attack_loop_r0_sampling_epsilon']}
 {'_ods' if attack_args['attack_loop_r0_ods_init'] else ''}
-_C{attack_args['attack_loop_c0_initial_const']}
-{'_proxy' if attack_args['attack_use_proxy_constraint'] else '_noproxy'}"""
-    return name.replace("\n", "")
+_C{attack_args['attack_loop_c0_initial_const']}"""
+    return name.replace("\n", "").replace("/", "")
 
 
 def get_tmpl_str(script_name, **flags):

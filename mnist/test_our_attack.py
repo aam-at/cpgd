@@ -3,6 +3,7 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import logging
 import time
+import traceback
 from pathlib import Path
 
 import absl
@@ -221,8 +222,10 @@ def main(unused_args):
                 final_lp_corr = test_metrics[f"{norm}_corr"].result()
                 tf.summary.scalar(f"final_{norm}_corr", final_lp_corr, step=1)
                 tf.summary.flush()
-    except:
+    except KeyboardInterrupt as e:
         logging.info("Stopping after {}".format(batch_index))
+    except Exception:
+        traceback.print_exc()
     finally:
         log_metrics(
             test_metrics,

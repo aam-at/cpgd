@@ -157,10 +157,10 @@ def main(unused_args):
                 for (image, label, indx) in test_ds:
                     image_adv = tf.gather(x_adv, tf.expand_dims(indx, 1))
                     image_adv = attack_step(image, image_adv, label)
-                    x_adv = tf.tensor_scatter_nd_update(x_adv, tf.expand_dims(indx, 1),
-                                                        image_adv)
-            is_adv = tf.logical_and(test_classifier(x_adv)['pred'] != test_labels,
-                                    is_corr0)
+                    x_adv = tf.tensor_scatter_nd_update(
+                        x_adv, tf.expand_dims(indx, 1), image_adv)
+            is_adv = tf.logical_and(
+                test_classifier(x_adv)['pred'] != test_labels, is_corr0)
             image_adv_final.scatter_update(
                 tf.IndexedSlices(x_adv[is_adv], all_indices[is_adv]))
 
@@ -175,8 +175,9 @@ def main(unused_args):
                 test_step(image, image_adv, label)
             log_metrics(
                 test_metrics,
-                "Test results after {} restarts [{:.2f}s]:".format(restart_number,
-                                                                   time.time() - start_time),
+                "Test results after {} restarts [{:.2f}s]:".format(
+                    restart_number,
+                    time.time() - start_time),
             )
     except KeyboardInterrupt:
         logging.info("Stopping after {} restarts".format(restart_number))
