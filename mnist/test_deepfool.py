@@ -52,8 +52,8 @@ def main(unused_args):
 
     # load classifier
     load_madry_pt(FLAGS.load_from, classifier.parameters())
-    classifier.eval()
     classifier.cuda()
+    classifier.eval()
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
@@ -131,7 +131,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = torch.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%s" % format_float(threshold)](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

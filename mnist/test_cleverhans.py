@@ -132,7 +132,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            results[f"acc_{FLAGS.norm}_%s" % format_float(threshold)] = ~is_adv_at_th
+            results[f"acc_{FLAGS.norm}_%s" %
+                    format_float(threshold)] = ~is_adv_at_th
         results["success_rate"] = is_adv[is_corr]
 
         return results
@@ -164,7 +165,9 @@ def main(unused_args):
                                                batchsize=FLAGS.batch_size):
                 label_onehot = tf.keras.utils.to_categorical(
                     label, num_classes)
-                image_adv = attack.generate_np(image, y=label_onehot, **attack_kwargs)
+                image_adv = attack.generate_np(image,
+                                               y=label_onehot,
+                                               **attack_kwargs)
                 image_adv_list.append(image_adv)
             image_adv = np.vstack(image_adv_list)
 
