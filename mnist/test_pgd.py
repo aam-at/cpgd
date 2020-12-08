@@ -11,6 +11,7 @@ import tensorflow as tf
 from absl import flags
 from cleverhans.attacks import ProjectedGradientDescent, SparseL1Descent
 from cleverhans.model import Model
+from lib.attack_utils import cw_loss
 from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
                           make_input_pipeline)
 from lib.utils import (format_float, import_func_annotations_as_flags,
@@ -33,6 +34,7 @@ flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
 flags.DEFINE_integer("attack_nb_restarts", "1", "number of attack restarts")
+flags.DEFINE_string("attack_loss", "ce", "loss for the attack")
 
 FLAGS = flags.FLAGS
 
@@ -96,10 +98,19 @@ def main(unused_args):
     # attack arguments
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
-        for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
+        for kwarg in dir(FLAGS)
+        if kwarg.startswith("attack_") and kwarg not in ['attack_loss']
     }
     if FLAGS.norm != 'l1':
         attack_kwargs['ord'] = 2 if FLAGS.norm == 'l2' else np.inf
+    # select loss
+    if FLAGS.attack_loss == "cw":
+        attack_kwargs["loss_fn"] = lambda labels, logits: -cw_loss(
+            labels, logits)
+    elif FLAGS.attack_loss == "ce":
+        pass
+    else:
+        raise ValueError(f"Invalid loss {FLAGS.attack_loss}")
     pgd.parse_params(**attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
