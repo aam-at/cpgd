@@ -30,7 +30,10 @@ def format_name(base_name, attack_args):
     if attack == 'l1g' and attack_args['attack_hard_threshold']:
         attack = f"{attack}_threshold"
     if attack == 'l0':
-        attack = f"{attack}_{attack_args['attack_operator']}"
+        operator = attack_args['attack_operator']
+        attack = f"{attack}_{operator}"
+        if operator == "l2/3":
+            attack = f"{attack}{'_ecc' if attack_args['attack_has_ecc'] else ''}"
     name = f"""{base_name}_{attack}_{attack_args["attack_loss"]}
 {'_multi' if attack_args['attack_loop_multitargeted'] else ''}
 _n{attack_args["attack_iterations"]}

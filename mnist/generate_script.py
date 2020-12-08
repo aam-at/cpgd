@@ -131,13 +131,17 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         })
 
     if norm == 'li':
-        attack_grid_args.update({'attack_gradient_preprocessing': [True]})
+        attack_grid_args.update(
+            {'attack_gradient_preprocessing': [False, True]})
 
     if attack == 'l1g':
         attack_grid_args.update({'attack_hard_threshold': [False, True]})
 
     if norm == 'l0':
-        attack_grid_args.update({'attack_operator': ["l0", "l1", "l1/2", "l2/3"]})
+        attack_grid_args.update({
+            'attack_operator': ["l0", "l1", "l1/2", "l2/3"],
+            'attack_has_ecc': [False, True]
+        })
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []

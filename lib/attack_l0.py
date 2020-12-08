@@ -1,5 +1,7 @@
 from __future__ import absolute_import, division, print_function
 
+import functools
+
 from .attack_lp import (ClassConstrainedAttack, NormConstrainedAttack,
                         ProximalPrimalDualGradientAttack)
 from .attack_utils import proximal_l0, proximal_l1, proximal_l12, proximal_l23
@@ -30,7 +32,7 @@ class ProximalL0Attack(ProximalPrimalDualGradientAttack):
         operators = {
             "l0": proximal_l0,
             "l1/2": proximal_l12,
-            "l2/3": proximal_l23,
+            "l2/3": functools.partial(proximal_l23, has_ecc=self.has_ecc),
             "l1": proximal_l1,
         }
         return operators[self.operator](u, l)
