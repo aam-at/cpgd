@@ -302,6 +302,7 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                 print(generate_test_optimizer('test_pgd', **attack_args))
 
 
+@cleanflags
 def daa_config(seed=123):
     import test_daa
     from test_daa import import_flags
@@ -312,41 +313,53 @@ def daa_config(seed=123):
 
     num_images = 1000
     batch_size = 200
-    norm = 'li'
-    attack_args = {
-        'num_batches': num_images // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+    norm = "li"
+    attack_grid_args = {
+        'num_batches': [num_images // batch_size],
+        'batch_size': [batch_size],
+        'seed': [seed],
+        'attack_loss_fn': ["xent", "cw"],
+        'attack_nb_iter': [200, 500],
+        'attack_nb_restarts': [1],
+        'method': ["dgf", "blob"]
     }
 
+    attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
+
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        for nb_iter, nb_restarts, method, eps, eps_scale in itertools.product(
-                [200], [1, 50], ['dgf', 'blob'], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
-            working_dir = f"../results_cifar10/test_{type}/{norm}/daa"
+        working_dir = f"../{basedir}/test_{type}/{norm}/daa"
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        for attack_arg_value in itertools.product(*attack_grid_args.values()):
+            attack_args = dict(zip(attack_arg_names, attack_arg_value))
             attack_args.update({
                 'load_from': model,
                 'working_dir': working_dir,
-                'method': method,
-                'attack_nb_restarts': nb_restarts,
-                'attack_nb_iter': nb_iter,
-                'attack_eps': eps,
-                'attack_eps_iter': eps / eps_scale
             })
-            name = f"cifar10_daa_{method}_{type}_n{nb_iter}_N{nb_restarts}_eps{eps}_epss{eps_scale}_"
-            attack_args['name'] = name
-            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-            if name in p or name in existing_names:
-                continue
-            existing_names.append(name)
-            print(generate_test_optimizer('test_daa', **attack_args))
+            for eps, eps_scale in itertools.product(
+                    test_model_thresholds[type][norm],
+                [1, 2, 5, 10, 25, 50, 100]):
+                attack_args.update({
+                    'attack_eps': eps,
+                    'attack_eps_iter': eps / eps_scale
+                })
+                name = f"""cifar10_daa_{type}_{norm}_
+{attack_args['attack_loss_fn']}_{attack_args['method']}_
+n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
+eps{eps}_epss{eps_scale}_""".replace("\n", "")
+                attack_args['name'] = name
+                if name in p or name in existing_names:
+                    continue
+                existing_names.append(name)
+                print(generate_test_optimizer('test_daa', **attack_args))
 
 
 # fab attack
 def fab_config(norm, seed=123):
-    import test_fab
     from lib.fab import FABAttack
+
+    import test_fab
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_fab)
