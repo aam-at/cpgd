@@ -6,22 +6,22 @@ import time
 from pathlib import Path
 
 import absl
+import lib
 import numpy as np
-import tensorflow as tf
 import torch
 import torch.nn.functional as F
 from absl import flags
-
-import lib
-from config import test_thresholds
-from data import load_cifar10
 from lib.deepfool import deepfool
 from lib.pt_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric, to_torch)
+                          l1_metric, l2_metric, li_metric, setup_torch,
+                          to_torch)
 from lib.tf_utils import limit_gpu_growth, make_input_pipeline
 from lib.utils import (import_func_annotations_as_flags, log_metrics,
                        register_experiment_flags, reset_metrics,
                        setup_experiment)
+
+from config import test_thresholds
+from data import load_cifar10
 from models import MadryCNNPt
 from utils import load_madry_pt
 
@@ -44,17 +44,9 @@ def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
     assert FLAGS.norm in ["l2", "li"]
+    setup_torch(FLAGS.seed)
     setup_experiment(f"madry_deepfool_{FLAGS.norm}_test",
                      [__file__, lib.deepfool.__file__])
-
-    # data
-    _, _, test_ds = load_cifar10(FLAGS.validation_size,
-                                 data_format="NCHW",
-                                 seed=FLAGS.data_seed)
-    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
-    test_ds = make_input_pipeline(test_ds,
-                                  shuffle=False,
-                                  batch_size=FLAGS.batch_size)
 
     # models
     num_classes = 10
@@ -67,6 +59,17 @@ def main(unused_args):
                   model_type=model_type)
     classifier.cuda()
     classifier.eval()
+
+    # data
+    _, _, test_ds = load_cifar10(FLAGS.validation_size,
+                                 data_format="NCHW",
+                                 seed=FLAGS.data_seed)
+    # NOTE: load tensorflow after converting model to cuda
+    import tensorflow as tf
+    test_ds = tf.data.Dataset.from_tensor_slices(test_ds)
+    test_ds = make_input_pipeline(test_ds,
+                                  shuffle=False,
+                                  batch_size=FLAGS.batch_size)
 
     lp_metrics = {
         "l2": l2_metric,
@@ -137,7 +140,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = torch.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.3f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

@@ -3,7 +3,6 @@ from contextlib import contextmanager
 
 import numpy as np
 import tensorflow as tf
-import tensorflow_probability as tfp
 
 from .tf_utils import create_lr_schedule, l2_metric, random_targets
 
@@ -39,6 +38,25 @@ def init_r0(shape, epsilon, norm, init='uniform'):
     return r0
 
 
+def get_opt_psi(optimizer, var):
+    """Return Psi estimate for adaptive proximal gradient. Supported optimizers:
+    Adam, AmsGrad
+    """
+    assert isinstance(optimizer, tf.keras.optimizers.Optimizer)
+    iterations = tf.cast(optimizer.iterations, tf.float32)
+    if isinstance(optimizer, tf.keras.optimizers.Adam):
+        beta_2 = optimizer.beta_2
+        v = optimizer.get_slot(var, "v")
+        if optimizer.amsgrad:
+            psi = tf.sqrt(v)
+        else:
+            psi = tf.sqrt(v /
+                          (1 - tf.pow(beta_2, iterations))) + optimizer.epsilon
+    else:
+        raise ValueError("Unsupported optimizer %s" % type(optimizer))
+    return psi
+
+
 def hard_threshold(u, th):
     return tf.where(tf.abs(u) <= th, 0.0, u)
 
@@ -47,8 +65,53 @@ def proximal_l0(u, lambd):
     return hard_threshold(u, tf.sqrt(2 * lambd))
 
 
+def proximal_l12(u, lambd):
+    """Proximal operator for L-1/2-norm
+    https://ieeexplore.ieee.org/document/7490503
+    """
+    th = 3 / 2 * tf.pow(lambd, 2 / 3)
+    return tf.where(
+        tf.abs(u) <= th, 0.0,
+        2 / 3 * u * (1 + tf.math.cos(2 / 3 * tf.math.acos(
+            -tf.pow(3.0, 1.5) / 4 * lambd * tf.pow(tf.abs(u), -3 / 2)))))
+
+
+def proximal_l23(u, lambd, has_ecc=False):
+    """Proximal operator for L-2/3-norm
+
+    :param u: the vector input.
+    :param lambd: the proximity threshold.
+    :param has_ecc: if the computer supports error-correction, e.g. a computer
+    with Intel Xeon (if the computer doesn't support it, due to numerical
+    errors this operation may return nans).
+
+    """
+    th = 2 * tf.pow(2 / 3 * lambd, 3 / 4)
+    a = tf.sqrt(tf.pow(u, 4) / 256.0 - 8 * tf.pow(lambd, 3) / 729.0)
+    b = (tf.pow(1 / 16.0 * tf.square(u) + a, 1 / 3) +
+         tf.pow(1 / 16.0 * tf.square(u) - a, 1 / 3))
+    z = tf.sign(u) * 1 / 8 * tf.pow(
+        tf.sqrt(2 * b) + tf.sqrt((2 * tf.abs(u)) /
+                                 (tf.sqrt(2 * b)) - 2 * b), 3)
+    if has_ecc:
+        return tf.where(tf.abs(u) <= th, 0.0, z)
+    else:
+        return tf.where(tf.math.is_nan(z), 0.0, z)
+
+
+def soft_threshold(x, threshold, name=None):
+    # taken from tensorflow_probability
+    # https://math.stackexchange.com/questions/471339/derivation-of-soft-thresholding-operator
+    with tf.name_scope(name or 'soft_threshold'):
+        x = tf.convert_to_tensor(x, name='x')
+        threshold = tf.convert_to_tensor(threshold,
+                                         dtype=x.dtype,
+                                         name='threshold')
+        return tf.sign(x) * tf.maximum(tf.abs(x) - threshold, 0.)
+
+
 def proximal_l1(u, lambd):
-    return tfp.math.soft_threshold(u, lambd)
+    return soft_threshold(u, lambd)
 
 
 def proximal_l2(u, lambd):
@@ -202,8 +265,7 @@ def build_lr(lr, lr_config=None):
     if lr_config is not None:
         if isinstance(lr_config, str):
             lr_config = ast.literal_eval(lr_config)
-        return create_lr_schedule(lr_config['schedule'],
-                                  **lr_config['config'])
+        return create_lr_schedule(lr_config['schedule'], **lr_config['config'])
     else:
         return lr
 
@@ -240,7 +302,8 @@ class AttackOptimizationLoop(object):
         self.dual_lr = build_lr(dual_lr, dual_lr_config)
         self.finetune = finetune
         self.finetune_lr = build_lr(finetune_lr, finetune_lr_config)
-        self.finetune_dual_lr = build_lr(finetune_dual_lr, finetune_dual_lr_config)
+        self.finetune_dual_lr = build_lr(finetune_dual_lr,
+                                         finetune_dual_lr_config)
 
     def _run_loop(self, X, y_onehot):
         self.attack.restart_attack(X, y_onehot)
@@ -273,7 +336,13 @@ class AttackOptimizationLoop(object):
             rbest = self.attack.bestsol.read_value() - X
             cbest = self.attack.bestlambd.read_value()
             self.attack.reset_attack(rbest, cbest)
-            self.attack.run(X, y_onehot)
+            if self.attack.targeted:
+                # run on the same target to finetune
+                y_t = tf.argmax(self.attack.model(X + rbest), -1)
+                y_t_onehot = tf.one_hot(y_t, y_onehot.shape[1])
+                self.attack.run(X, y_t_onehot)
+            else:
+                self.attack.run(X, y_onehot)
 
     def run_loop(self, X, y_onehot):
         if tf.executing_eagerly():

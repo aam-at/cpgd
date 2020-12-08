@@ -39,7 +39,7 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_one_pixel_test", [__file__])
+    setup_experiment("madry_pixel_test", [__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
@@ -70,12 +70,11 @@ def main(unused_args):
         x = tf.cast(x / 255.0, tf.float32)
         return test_classifier(x)['logits']
 
-    art_model = TensorFlowV2Classifier(
-        model=art_classifier,
-        input_shape=X_shape[1:],
-        nb_classes=num_classes,
-        channel_index=3,
-        clip_values=(0, 1))
+    art_model = TensorFlowV2Classifier(model=art_classifier,
+                                       input_shape=X_shape[1:],
+                                       nb_classes=num_classes,
+                                       channel_index=3,
+                                       clip_values=(0, 1))
     a0 = PixelAttack(art_model,
                      th=FLAGS.attack_threshold,
                      es=FLAGS.attack_es,
@@ -128,7 +127,8 @@ def main(unused_args):
         test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
 
         is_adv_at_th = tf.logical_and(l0 <= FLAGS.attack_threshold, is_adv)
-        test_metrics["acc_l0_%s" % format_float(FLAGS.attack_threshold)](~is_adv_at_th)
+        test_metrics["acc_l0_%s" %
+                     format_float(FLAGS.attack_threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

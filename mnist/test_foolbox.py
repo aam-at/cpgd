@@ -59,8 +59,7 @@ def import_flags(norm, attack):
     assert attack in lp_attacks[norm]
     import_klass_annotations_as_flags(lp_attacks[norm][attack],
                                       prefix="attack_",
-                                      exclude_args=["loss",
-                                                    "decision_rule"])
+                                      exclude_args=["loss", "decision_rule"])
     if attack == 'ead':
         flags.DEFINE_string("attack_decision_rule", "L1", "")
 
@@ -68,7 +67,8 @@ def import_flags(norm, attack):
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_foolbox_{FLAGS.attack}_{FLAGS.norm}_test", [__file__])
+    setup_experiment(f"madry_foolbox_{FLAGS.attack}_{FLAGS.norm}_test",
+                     [__file__])
 
     # data
     _, _, test_ds = load_mnist(FLAGS.validation_size,
@@ -162,7 +162,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%s" % format_float(threshold)](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

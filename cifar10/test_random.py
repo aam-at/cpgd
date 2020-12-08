@@ -9,12 +9,12 @@ import numpy as np
 import tensorflow as tf
 import tensorflow_probability as tfp
 from absl import flags
-
-from data import load_cifar10
 from lib.attack_utils import init_r0, project_box
 from lib.utils import (MetricsDictionary, log_metrics, make_input_pipeline,
                        register_experiment_flags, reset_metrics,
                        setup_experiment)
+
+from data import load_cifar10
 from models import MadryCNN
 from utils import load_madry
 
@@ -38,7 +38,7 @@ FLAGS = flags.FLAGS
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
     assert FLAGS.load_from is not None
-    setup_experiment(f"madry_test")
+    setup_experiment("madry_test")
 
     # data
     _, _, test_ds = load_cifar10(
