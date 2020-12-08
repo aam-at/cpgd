@@ -81,9 +81,10 @@ def proximal_l23(u, lambd, has_ecc=False):
 
     :param u: the vector input.
     :param lambd: the proximity threshold.
-    :param has_ecc: if the computer has error-correcting code memory (if the
-    computer doesn't support it, due to numerical results this operation may
-    return nans)
+    :param has_ecc: if the computer supports error-correction, e.g. a computer
+    with Intel Xeon (if the computer doesn't support it, due to numerical
+    errors this operation may return nans).
+
     """
     th = 2 * tf.pow(2 / 3 * lambd, 3 / 4)
     a = tf.sqrt(tf.pow(u, 4) / 256.0 - 8 * tf.pow(lambd, 3) / 729.0)

@@ -54,6 +54,8 @@ class PrimalDualGradientAttack(ABC):
         boxmin: float = 0.0,
         boxmax: float = 1.0,
         min_dual_ratio: float = 1e-6,
+        # other parameters
+        has_ecc: bool = False
     ):
         """
         Args:
@@ -72,6 +74,9 @@ class PrimalDualGradientAttack(ABC):
             boxmin: clipping minimum value.
             boxmax: clipping maximum value.
             min_dual_ratio: minimal ratio C after dual state projection
+            has_ecc: if the computer supports error-correction (if the computer
+            doesn't support it, due to numerical errors some of the operations
+            may return nans, please see proximal_l23).
 
         """
         super(PrimalDualGradientAttack, self).__init__()
@@ -96,6 +101,7 @@ class PrimalDualGradientAttack(ABC):
         self.boxmin = boxmin
         self.boxmax = boxmax
         self.min_dual_ratio = min_dual_ratio
+        self.has_ecc = has_ecc
         self.built = False
 
     @property
