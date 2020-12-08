@@ -76,24 +76,26 @@ def proximal_l12(u, lambd):
             -tf.pow(3.0, 1.5) / 4 * lambd * tf.pow(tf.abs(u), -3 / 2)))))
 
 
-def proximal_l23(u, lambd):
+def proximal_l23(u, lambd, has_ecc=False):
     """Proximal operator for L-2/3-norm
-    https://ieeexplore.ieee.org/document/7490503
+
+    :param u: the vector input.
+    :param lambd: the proximity threshold.
+    :param has_ecc: if the computer has error-correcting code memory (if the
+    computer doesn't support it, due to numerical results this operation may
+    return nans)
     """
     th = 2 * tf.pow(2 / 3 * lambd, 3 / 4)
-    z = tf.where(
-        tf.abs(u) > th, (tf.pow(
-            1 / 16.0 * tf.square(u) +
-            tf.sqrt(tf.pow(u, 4) / 256.0 - 8 * tf.pow(lambd, 3) / 729.0),
-            1 / 3) + tf.pow(
-                1 / 16 * tf.square(u) -
-                tf.sqrt(tf.pow(u, 4) / 256.0 - 8 * tf.pow(lambd, 3) / 729.0),
-                1 / 3)), 0)
-    return tf.where(
-        tf.abs(u) <= th, 0.0,
-        tf.sign(u) * 1 / 8 * tf.pow(
-            tf.sqrt(2 * z) + tf.sqrt((2 * tf.abs(u)) /
-                                     (tf.sqrt(2 * z)) - 2 * z), 3))
+    a = tf.sqrt(tf.pow(u, 4) / 256.0 - 8 * tf.pow(lambd, 3) / 729.0)
+    b = (tf.pow(1 / 16.0 * tf.square(u) + a, 1 / 3) +
+         tf.pow(1 / 16.0 * tf.square(u) - a, 1 / 3))
+    z = tf.sign(u) * 1 / 8 * tf.pow(
+        tf.sqrt(2 * b) + tf.sqrt((2 * tf.abs(u)) /
+                                 (tf.sqrt(2 * b)) - 2 * b), 3)
+    if has_ecc:
+        return tf.where(tf.abs(u) <= th, 0.0, z)
+    else:
+        return tf.where(tf.math.is_nan(z), 0.0, z)
 
 
 def soft_threshold(x, threshold, name=None):
