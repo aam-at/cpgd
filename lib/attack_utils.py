@@ -21,6 +21,12 @@ def margin(logits, y_onehot, delta=0.0, targeted=False):
     return margin
 
 
+def cw_loss(labels=None, logits=None):
+    """Carlini-Wagner loss"""
+    m = margin(logits, labels, targeted=False)
+    return tf.nn.relu(m)
+
+
 def init_r0(shape, epsilon, norm, init='uniform'):
     if epsilon is not None and epsilon > 0:
         if init == 'sign':
