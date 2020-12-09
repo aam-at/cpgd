@@ -19,10 +19,15 @@
       group_param = None
       export_params = []
 
+  try:
+      len(sort_column)
+  except:
+      sort_column = f"{norm}_corr"
+
   model_thresholds = [
       format_float(th) for th in np.array(test_model_thresholds[type][norm])
   ]
-  base_dir = "results_mnist22"
+  base_dir = "results_mnist"
   dirs = glob.glob(f"../{base_dir}/test_{type}/{norm}/{attack}/*")
   df_logs = []
   for load_dir in dirs:
@@ -32,7 +37,7 @@
                     export_test_params=["num_batches", "batch_size"] +
                     export_params))
   df = pd.concat(df_logs, ignore_index=True)
-  df = df.sort_values(f"{norm}_corr")
+  df = df.sort_values(sort_column)
   df["total"] = df["num_batches"] * df["batch_size"]
   df = df.drop(columns=["num_batches", "batch_size"])
 
@@ -101,6 +106,23 @@
                                                     0), len(str(cell.value))))
       for col, value in dims.items():
           ws.column_dimensions[get_column_letter(col)].width = value
+
+  def sort_by_title(title):
+      if norm == 'li':
+          index = {'df': 0, 'bethge': 1, 'daa': 2, 'pgd': 3, 'fab': 4}
+      elif norm == 'l2':
+          index = {'df': 0, 'cw': 1, 'ddn': 2, 'bethge': 3, 'pgd': 4, 'fab': 5}
+      elif norm == 'l1':
+          index = {'sparsefool': 0, 'ead': 1, 'bethge': 2, 'pgd': 3, 'fab': 4}
+      elif norm == 'l0':
+          index = {'jsma': 0, 'pixel': 1, 'bethge': 2, 'cornersearch': 3}
+      else:
+          raise ValueError
+      for n, v in index.items():
+          if n in title:
+              return v
+      return 100
+  book._sheets.sort(key=lambda ws: sort_by_title(ws.title))
   writer.save()
 #+END_SRC
 
