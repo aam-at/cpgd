@@ -209,38 +209,38 @@
 
 ** DAA attack
 *** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="daa" :var type="plain" :var norm="li" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="daa" :var type="plain" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** Linf
-#+BEGIN_SRC python :noweb yes :var attack="daa" :var type="linf" :var norm="li" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="daa" :var type="linf" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="daa" :var type="l2" :var norm="li" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="daa" :var type="l2" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 ** PGD attack
 *** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="plain" :var norm="li" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="plain" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="linf" :var norm="li" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="linf" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="l2" :var norm="li" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="l2" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
@@ -362,19 +362,19 @@
 
 ** PGD attack
 *** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="plain" :var norm="l2" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="plain" :var norm="l2" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="linf" :var norm="l2" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="linf" :var norm="l2" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="l2" :var norm="l2" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="l2" :var norm="l2" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
@@ -477,19 +477,19 @@
 
 ** PGD attack
 *** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var norm="l1" :var type="plain" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="plain" :var norm="l1" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var norm="l1" :var type="linf" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="linf" :var norm="l1" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var norm="l1" :var type="l2" :var group_param="attack_nb_restarts" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="l2" :var norm="l1" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
@@ -554,19 +554,19 @@
 
 ** Pixel attack
 *** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="one_pixel" :var norm="l0" :var type="plain" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="one_pixel" :var norm="l0" :var type="plain" :var group_param="attack_threshold" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="one_pixel" :var norm="l0" :var type="linf" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="one_pixel" :var norm="l0" :var type="linf" :var group_param="attack_threshold" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC
 
 *** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="one_pixel" :var norm="l0" :var type="l2" :results output
+#+BEGIN_SRC python :async :noweb yes :var attack="one_pixel" :var norm="l0" :var type="l2" :var group_param="attack_threshold" :var sort_column="acc_adv" :results output
   <<parse_results>>
   <<output_results>>
 #+END_SRC

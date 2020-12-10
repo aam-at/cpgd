@@ -270,8 +270,8 @@ def pgd_config(norm, seed=123):
         'seed': [seed],
         'norm': [norm],
         'attack_loss': ["ce", "cw"],
-        'attack_nb_iter': [100],
-        'attack_nb_restarts': [1]
+        'attack_nb_iter': [200],
+        'attack_nb_restarts': [1, 10, 100]
     }
     if norm == 'l1':
         attack_grid_args.update({
@@ -327,9 +327,9 @@ def daa_config(seed=123):
         'batch_size': [batch_size],
         'seed': [seed],
         'attack_loss_fn': ["xent", "cw"],
-        'attack_nb_iter': [200, 500],
-        'attack_nb_restarts': [1],
-        'method': ["dgf", "blob"]
+        'attack_nb_iter': [500],
+        'attack_nb_restarts': [1, 50],
+        'method': ["blob"]
     }
 
     attack_arg_names = list(attack_grid_args.keys())
