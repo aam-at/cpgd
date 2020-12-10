@@ -399,7 +399,7 @@ def daa_config(seed=123):
         'seed': [seed],
         'attack_loss_fn': ["xent", "cw"],
         'attack_nb_iter': [500],
-        'attack_nb_restarts': [1, 50],
+        'attack_nb_restarts': [1],
         'method': ["blob"]
     }
 
@@ -421,7 +421,7 @@ def daa_config(seed=123):
                 [1, 2, 5, 10, 25, 50, 100]):
                 attack_args.update({
                     'attack_eps': eps,
-                    'attack_eps_iter': eps / eps_scale
+                    'attack_eps_iter': round(eps / eps_scale, 6)
                 })
                 name = f"""mnist_daa_{type}_{norm}_
 {attack_args['attack_loss_fn']}_{attack_args['method']}_
