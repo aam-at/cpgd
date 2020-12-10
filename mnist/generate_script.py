@@ -4,12 +4,14 @@ from __future__ import absolute_import, division, print_function
 
 import ast
 import functools
+import glob
 import importlib
 import itertools
 import subprocess
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from absl import flags
 from lib.attack_lp import ProximalPrimalDualGradientAttack
 from lib.generate_script import (cleanflags, format_name,
@@ -59,6 +61,15 @@ def test_random(runs=1, master_seed=1):
             seed = np.random.randint(1000)
             attack_args["seed"] = seed
             print(generate_test_optimizer("test_random", **attack_args))
+
+
+def load_logs(load_dir):
+    logs = []
+    for dir in glob.glob(load_dir):
+        log = parse_log(dir, export_test_params=True)
+        logs.append(log)
+    df = pd.concat(logs, ignore_index=True)
+    return df
 
 
 @cleanflags
@@ -257,21 +268,14 @@ def pgd_config(norm, seed=123):
 
     num_images = 1000
     batch_size = 500
-    attack_args = {
-        "norm": norm,
-        "num_batches": num_images // batch_size,
-        "batch_size": batch_size,
-        "seed": seed,
-    }
-
     attack_grid_args = {
         'num_batches': [num_images // batch_size],
         'batch_size': [batch_size],
         'seed': [seed],
         'norm': [norm],
         'attack_loss': ["ce", "cw"],
-        'attack_nb_iter': [200],
-        'attack_nb_restarts': [1, 10, 100]
+        'attack_nb_iter': [500],
+        'attack_nb_restarts': [1]
     }
     if norm == 'l1':
         attack_grid_args.update({
@@ -296,7 +300,7 @@ def pgd_config(norm, seed=123):
                 [1, 2, 5, 10, 25, 50, 100]):
                 attack_args.update({
                     'attack_eps': eps,
-                    'attack_eps_iter': eps / eps_scale
+                    'attack_eps_iter': round(eps / eps_scale, 6)
                 })
                 name = f"""mnist_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
@@ -308,6 +312,65 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                     continue
                 existing_names.append(name)
                 print(generate_test_optimizer('test_pgd', **attack_args))
+
+
+@cleanflags
+def pgd_custom_config(norm, top_k=5, seed=123):
+    """Generate config for PGD with 10, 100 restarts based on the results with 1
+    restart"""
+    import test_pgd
+    from test_pgd import import_flags
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_pgd)
+    import_flags(norm)
+
+    num_images = 1000
+    batch_size = 500
+    default_args = {
+        "norm": norm,
+        "num_batches": num_images // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
+    }
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../{basedir}/test_{type}/{norm}/pgd/*"
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        df_all = load_logs(working_dir)
+        for eps in test_model_thresholds[type][norm]:
+            df = df_all.copy()
+            df = df[df.attack_eps == eps]
+            df = df[df.attack_nb_restarts == 1]
+            df = df.sort_values("acc_adv")
+            lowest_acc = df.head(1).acc_adv.item()
+            i = 0
+            for index, df_row in df.iterrows():
+                # select top-3 attack parameters
+                if df_row.at['acc_adv'] > lowest_acc + 0.01 or i >= top_k:
+                    break
+                else:
+                    attack_args = default_args.copy()
+                    for col in df.columns:
+                        if "attack_" in col:
+                            attack_args[col] = df_row.at[col]
+                    eps_scale = int(
+                        round(eps / attack_args["attack_eps_iter"], 2))
+                    i += 1
+                    for n_restarts in [10]:
+                        attack_args['attack_nb_restarts'] = n_restarts
+                        name = f"""mnist_pgd_{type}_{norm}_{attack_args['attack_loss']}_
+n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
+eps{eps}_epss{eps_scale}_""".replace("\n", "")
+                        if norm == 'l1':
+                            name = f"{name}s{attack_args['attack_grad_sparsity']}_"
+                        attack_args['name'] = name
+                        if name in p or name in existing_names:
+                            continue
+                        existing_names.append(name)
+                        print(
+                            generate_test_optimizer('test_pgd', **attack_args))
 
 
 @cleanflags

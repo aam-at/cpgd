@@ -76,8 +76,13 @@ def parse_log(load_dir, exclude=None, export_test_params=None):
             if test_name not in exclude:
                 test_result[test_name] = float(test_value)
 
-        for param_name in export_test_params:
-            test_result[param_name] = test_params[param_name]
+        if export_test_params is not None:
+            if isinstance(export_test_params, (list, tuple)):
+                for param_name in export_test_params:
+                    test_result[param_name] = test_params[param_name]
+            elif isinstance(export_test_params, bool) and export_test_params:
+                for test_param, test_param_value in test_params.items():
+                    test_result[test_param] = test_param_value
         df = pd.DataFrame.from_dict([test_result])
     except:
         print(f"Failed to parse directory: {load_dir}")
