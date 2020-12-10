@@ -12,6 +12,7 @@ import tensorflow as tf
 from absl import flags
 from cleverhans.attacks import ProjectedGradientDescent, SparseL1Descent
 from cleverhans.model import Model
+from lib.attack_utils import cw_loss
 from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
                           make_input_pipeline)
 from lib.utils import (format_float, import_func_annotations_as_flags,
