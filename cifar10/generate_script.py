@@ -847,4 +847,39 @@ def pixel_attack_config(seed=123):
 
 
 if __name__ == '__main__':
-    pass
+    # our attacks
+    test_our_attack_config("l2g")
+    test_our_attack_config("l2")
+    test_our_attack_config("li")
+    test_our_attack_config("l1")
+    test_our_attack_config("l0")
+    # li attacks
+    deepfool_config("li")
+    foolbox_config("li", "df")
+    bethge_config("li")
+    daa_config()
+    pgd_config("li")
+    fab_config("li")
+    # l2 attacks
+    deepfool_config("l2")
+    foolbox_config("l2", "df")
+    art_config("l2", "df")
+    foolbox_config("l2", "cw")
+    cleverhans_config("l2", "cw")
+    foolbox_config("l2", "ddn")
+    foolbox_config("l2", "newton")
+    bethge_config("l2")
+    pgd_config("l2")
+    fab_config("l2")
+    # l1 attacks
+    sparsefool_config()
+    cleverhans_config("l1", "ead")
+    foolbox_config("l1", "ead")
+    bethge_config("l1")
+    pgd_config("l1")
+    fab_config("l1")
+    # l0 attacks
+    jsma_config()
+    cornersearch_config()
+    pixel_attack_config()
+    bethge_config("l0")
