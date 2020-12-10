@@ -381,6 +381,7 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                             generate_test_optimizer('test_pgd', **attack_args))
 
 
+@count_number_of_lines
 @cleanflags
 def daa_config(seed=123):
     import test_daa
@@ -432,6 +433,72 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                     continue
                 existing_names.append(name)
                 print(generate_test_optimizer('test_daa', **attack_args))
+
+
+@cleanflags
+def daa_custom_config(top_k=1, seed=123):
+    """Generate config for DAA with 10, 100 restarts based on the results with 1
+    restart"""
+    import test_daa
+    from test_daa import import_flags
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_daa)
+    import_flags("blob")
+
+    num_images = 1000
+    batch_size = 200
+    norm = "li"
+    default_args = {
+        "num_batches": num_images // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
+    }
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../{basedir}/test_{type}/{norm}/daa/"
+        default_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+        })
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        df_all = load_logs(working_dir)
+        for eps in test_model_thresholds[type][norm]:
+            df = df_all.copy()
+            df = df[df.attack_eps == eps]
+            df = df[df.attack_nb_restarts == 1]
+            df = df[df.attack_nb_iter == 500]
+            df = df.sort_values("acc_adv")
+            lowest_acc = df.head(1).acc_adv.item()
+            i = 0
+            for index, df_row in df.iterrows():
+                # select top-k attack parameters
+                if df_row.at['acc_adv'] > lowest_acc + 0.01 or i >= top_k:
+                    break
+                else:
+                    attack_args = default_args.copy()
+                    for col in df.columns:
+                        if "attack_" in col or col == 'method':
+                            attack_args[col] = df_row.at[col]
+                    eps_scale = int(
+                        round(eps / attack_args["attack_eps_iter"], 2))
+                    i += 1
+                    for loss, n_restarts in itertools.product(['xent', 'cw'], [10]):
+                        attack_args.update({
+                            'attack_nb_restarts': n_restarts,
+                            'attack_loss_fn': loss
+                        })
+                        name = f"""mnist_daa_{type}_{norm}_
+{attack_args['attack_loss_fn']}_{attack_args['method']}_
+n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
+eps{eps}_epss{eps_scale}_""".replace("\n", "")
+                        attack_args['name'] = name
+                        if name in p or name in existing_names:
+                            continue
+                        existing_names.append(name)
+                        print(
+                            generate_test_optimizer('test_daa', **attack_args))
 
 
 @cleanflags
