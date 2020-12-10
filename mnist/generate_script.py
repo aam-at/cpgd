@@ -14,8 +14,8 @@ import numpy as np
 import pandas as pd
 from absl import flags
 from lib.attack_lp import ProximalPrimalDualGradientAttack
-from lib.generate_script import (cleanflags, format_name,
-                                 generate_test_optimizer)
+from lib.generate_script import (cleanflags, count_number_of_lines,
+                                 format_name, generate_test_optimizer)
 from lib.parse_logs import parse_log
 from lib.tf_utils import ConstantDecay, ExpDecay, LinearDecay
 from lib.utils import (import_func_annotations_as_flags,
@@ -65,7 +65,7 @@ def test_random(runs=1, master_seed=1):
 
 def load_logs(load_dir):
     logs = []
-    for dir in glob.glob(load_dir):
+    for dir in glob.glob(load_dir + "*"):
         log = parse_log(dir, export_test_params=True)
         logs.append(log)
     df = pd.concat(logs, ignore_index=True)
@@ -257,6 +257,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                 print(generate_test_optimizer(script_name, **attack_args))
 
 
+@count_number_of_lines
 @cleanflags
 def pgd_config(norm, seed=123):
     import test_pgd
@@ -336,18 +337,23 @@ def pgd_custom_config(norm, top_k=5, seed=123):
     existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../{basedir}/test_{type}/{norm}/pgd/*"
+        working_dir = f"../{basedir}/test_{type}/{norm}/pgd/"
+        default_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+        })
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         df_all = load_logs(working_dir)
         for eps in test_model_thresholds[type][norm]:
             df = df_all.copy()
             df = df[df.attack_eps == eps]
             df = df[df.attack_nb_restarts == 1]
+            df = df[df.attack_nb_iter == 500]
             df = df.sort_values("acc_adv")
             lowest_acc = df.head(1).acc_adv.item()
             i = 0
             for index, df_row in df.iterrows():
-                # select top-3 attack parameters
+                # select top-k attack parameters
                 if df_row.at['acc_adv'] > lowest_acc + 0.01 or i >= top_k:
                     break
                 else:
@@ -359,7 +365,9 @@ def pgd_custom_config(norm, top_k=5, seed=123):
                         round(eps / attack_args["attack_eps_iter"], 2))
                     i += 1
                     for n_restarts in [10]:
-                        attack_args['attack_nb_restarts'] = n_restarts
+                        attack_args.update({
+                            'attack_nb_restarts': n_restarts
+                        })
                         name = f"""mnist_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
 eps{eps}_epss{eps_scale}_""".replace("\n", "")

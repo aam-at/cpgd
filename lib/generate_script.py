@@ -3,6 +3,8 @@ from __future__ import absolute_import, division, print_function
 import ast
 import functools
 import importlib
+import sys
+from io import StringIO
 from pathlib import Path
 
 import six
@@ -102,5 +104,25 @@ def cleanflags(fn):
     def wrapper(*args, **kwargs):
         flags.FLAGS._flags().clear()
         fn(*args, **kwargs)
+
+    return wrapper
+
+
+def count_number_of_lines(fn):
+    @functools.wraps(fn)
+    def wrapper(*args, **kwargs):
+        out = ''
+        try:
+            sys.stdout = StringIO()
+            fn(*args, **kwargs)
+            out = sys.stdout.getvalue()
+            lines = [l for l in out.split("\n") if l != '']
+        finally:
+            sys.stdout.close()
+            sys.stdout = sys.__stdout__
+            if len(lines) > 0:
+                print("\n".join(lines))
+
+        return len(lines)
 
     return wrapper
