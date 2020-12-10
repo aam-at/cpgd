@@ -411,7 +411,7 @@ def fab_config(norm, seed=123):
 
         # params
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/fab"
+        working_dir = f"../{basedir}/test_{type}/{norm}/fab"
         attack_args.update({
             "attack_n_iter": n_iter,
             "attack_n_restarts": n_restarts,
@@ -488,7 +488,7 @@ def cleverhans_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index("load_from")]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/{attack}"
+        working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             "working_dir": working_dir,
@@ -589,7 +589,7 @@ def foolbox_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index("load_from")]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/{attack}"
+        working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             "working_dir": working_dir,
@@ -625,7 +625,7 @@ def bethge_config(norm, seed=123):
     for model, steps, lr, num_decay in itertools.product(
             models, [1000], [1.0, 0.1, 0.01], [20, 100]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/bethge"
+        working_dir = f"../{basedir}/test_{type}/{norm}/bethge"
         attack_args.update({
             "norm": norm,
             "load_from": model,
@@ -663,14 +663,13 @@ def deepfool_config(norm, seed=123):
     existing_names = []
     for model, max_iter in itertools.product(models, [50, 100, 1000]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/df"
+        working_dir = f"../{basedir}/test_{type}/{norm}/df"
         attack_args.update({
             "load_from": model,
             "working_dir": working_dir,
             "attack_overshoot": 0.02,
             "attack_max_iter": max_iter,
         })
-        name = f"mnist_df_orig_"
         name = f"mnist_{type}_df_orig_n{attack_args['attack_max_iter']}_os{attack_args['attack_overshoot']}_"
         attack_args["name"] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
@@ -699,7 +698,7 @@ def sparsefool_config(seed=123):
     existing_names = []
     for model, lambda_ in itertools.product(models, [1.0, 2.0, 3.0]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/sparsefool"
+        working_dir = f"../{basedir}/test_{type}/{norm}/sparsefool"
         attack_args.update({
             "load_from": model,
             "working_dir": working_dir,
@@ -735,11 +734,11 @@ def cornersearch_config(seed=123):
     existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/cornersearch"
+        working_dir = f"../{basedir}/test_{type}/{norm}/cornersearch"
         attack_args.update({
             "load_from": model,
             "working_dir": working_dir,
-            "attack_sparsity": 784
+            "attack_sparsity": 28 ** 2
         })
         name = f"mnist_cs_{type}_{norm}_"
         attack_args["name"] = name
@@ -823,7 +822,7 @@ def art_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index("load_from")]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/{attack}"
+        working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             "working_dir": working_dir,
@@ -852,7 +851,7 @@ def jsma_config(seed=123):
             models, ["all", "random", "second"], [1.0, 0.1],
         ["cleverhans", "art"]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/jsma"
+        working_dir = f"../{basedir}/test_{type}/{norm}/jsma"
         attack_args.update({
             "load_from": model,
             "working_dir": working_dir,
@@ -884,7 +883,7 @@ def pixel_attack_config(seed=123):
     existing_names = []
     for model, iters, es in itertools.product(models, [100], [1]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_mnist/test_{type}/{norm}/one_pixel"
+        working_dir = f"../{basedir}/test_{type}/{norm}/one_pixel"
         attack_args.update({
             "load_from": model,
             "working_dir": working_dir,
@@ -905,6 +904,11 @@ def pixel_attack_config(seed=123):
 
 
 if __name__ == '__main__':
+    # our attacks
+    test_our_attack_config("li")
+    test_our_attack_config("l2g")
+    test_our_attack_config("l1")
+    test_our_attack_config("l0")
     # li attacks
     deepfool_config("li")
     foolbox_config("li", "df")

@@ -235,7 +235,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                     "attack_loop_finetune_dual_lr_config":
                     finetune_dlr_config,
                 })
-                base_name = f"mnist_{type}"
+                base_name = f"cifar10_{type}"
                 name = format_name(base_name, attack_args) + "_"
                 attack_args["name"] = name
                 if name in p or name in existing_names:
@@ -263,7 +263,7 @@ def pgd_config(norm, seed=123):
         'norm': [norm],
         'attack_loss': ["ce", "cw"],
         'attack_nb_iter': [200],
-        'attack_nb_restarts': [1]
+        'attack_nb_restarts': [1, 10, 100]
     }
     if norm == 'l1':
         attack_grid_args.update({
@@ -319,9 +319,9 @@ def daa_config(seed=123):
         'batch_size': [batch_size],
         'seed': [seed],
         'attack_loss_fn': ["xent", "cw"],
-        'attack_nb_iter': [200, 500],
-        'attack_nb_restarts': [1],
-        'method': ["dgf", "blob"]
+        'attack_nb_iter': [500],
+        'attack_nb_restarts': [1, 50],
+        'method': ["blob"]
     }
 
     attack_arg_names = list(attack_grid_args.keys())
@@ -355,7 +355,7 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                 print(generate_test_optimizer('test_daa', **attack_args))
 
 
-# fab attack
+@cleanflags
 def fab_config(norm, seed=123):
     from lib.fab import FABAttack
 
@@ -375,10 +375,11 @@ def fab_config(norm, seed=123):
     }
 
     existing_names = []
-    for model, n_restarts in itertools.product(models, [1, 10, 100]):
+    for model, n_iter, n_restarts in itertools.product(models, [100, 500],
+                                                       [1, 10, 100]):
         # default params for cifar10
         # see page 12: https://openreview.net/pdf?id=HJlzxgBtwH
-        n_iter = 100
+        n_iter = 200
         alpha_max = 0.1
         eta = 1.05
         beta = 0.9
@@ -390,7 +391,7 @@ def fab_config(norm, seed=123):
 
         # params
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/fab"
+        working_dir = f"../{basedir}/test_{type}/{norm}/fab"
         attack_args.update(
         {
             'attack_n_iter': n_iter,
@@ -413,8 +414,9 @@ def fab_config(norm, seed=123):
         print(generate_test_optimizer('test_fab', **attack_args))
 
 
-# cleverhans attacks
+@cleanflags
 def cleverhans_config(norm, attack, seed=123):
+    """Cleverhans attacks config"""
     import test_cleverhans
     from test_cleverhans import import_flags
 
@@ -446,7 +448,7 @@ def cleverhans_config(norm, attack, seed=123):
     elif attack == 'ead':
         # default params
         attack_grid_args.update({
-            'attack_max_iterations': [1000],
+            'attack_max_iterations': [1000, 10000],
             'attack_learning_rate': [0.01],
             'attack_initial_const': [0.01],
             'attack_binary_search_steps': [9],
@@ -463,7 +465,7 @@ def cleverhans_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/{attack}"
+        working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -477,8 +479,9 @@ def cleverhans_config(norm, attack, seed=123):
         print(generate_test_optimizer('test_cleverhans', **attack_args))
 
 
-# foolbox attacks
+@cleanflags
 def foolbox_config(norm, attack, seed=123):
+    """Foobox attacks"""
     import test_foolbox
     from test_foolbox import import_flags
 
@@ -547,7 +550,7 @@ def foolbox_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/{attack}"
+        working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -561,6 +564,7 @@ def foolbox_config(norm, attack, seed=123):
         print(generate_test_optimizer('test_foolbox', **attack_args))
 
 
+@cleanflags
 def bethge_config(norm, seed=123):
     import test_bethge
     from test_bethge import import_flags
@@ -581,7 +585,7 @@ def bethge_config(norm, seed=123):
     existing_names = []
     for model, lr, num_decay in itertools.product(models, [1.0, 0.1, 0.01], [20, 100]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/bethge"
+        working_dir = f"../{basedir}/test_{type}/{norm}/bethge"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
@@ -597,6 +601,7 @@ def bethge_config(norm, seed=123):
         print(generate_test_optimizer('test_bethge', **attack_args))
 
 
+@cleanflags
 def deepfool_config(norm, seed=123):
     import test_deepfool
 
@@ -616,14 +621,14 @@ def deepfool_config(norm, seed=123):
     existing_names = []
     for model in models:
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/df"
+        working_dir = f"../{basedir}/test_{type}/{norm}/df"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
             'attack_overshoot': 0.02,
             'attack_max_iter': 50,
         })
-        name = f"cifar10_deepfool_{type}_{norm}_"
+        name = f"cifar10_{type}_df_orig_n{attack_args['attack_max_iter']}_os{attack_args['attack_overshoot']}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
@@ -632,6 +637,7 @@ def deepfool_config(norm, seed=123):
         print(generate_test_optimizer('test_deepfool', **attack_args))
 
 
+@cleanflags
 def sparsefool_config(seed=123):
     import test_sparsefool
 
@@ -650,7 +656,7 @@ def sparsefool_config(seed=123):
     existing_names = []
     for model, lambda_ in itertools.product(models, [1.0, 2.0, 3.0]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/sparsefool"
+        working_dir = f"../{basedir}/test_{type}/{norm}/sparsefool"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
@@ -667,8 +673,43 @@ def sparsefool_config(seed=123):
         print(generate_test_optimizer('test_sparsefool', **attack_args))
 
 
-# ibm art attacks
+@cleanflags
+def cornersearch_config(seed=123):
+    import test_cornersearch
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_cornersearch)
+
+    norm = "l0"
+    num_images = 1000
+    batch_size = 500
+    attack_args = {
+        "num_batches": num_images // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
+    }
+
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../{basedir}/test_{type}/{norm}/cornersearch"
+        attack_args.update({
+            "load_from": model,
+            "working_dir": working_dir,
+            "attack_sparsity": 32 ** 2
+        })
+        name = f"cifar10_cs_{type}_{norm}_"
+        attack_args["name"] = name
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        if name in p or name in existing_names:
+            continue
+        existing_names.append(name)
+        print(generate_test_optimizer("test_cornersearch", **attack_args))
+
+
+@cleanflags
 def art_config(norm, attack, seed=123):
+    """IBM art toolbox attacks"""
     import test_art
     from test_foolbox import import_flags
 
@@ -723,7 +764,7 @@ def art_config(norm, attack, seed=123):
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
         model = attack_arg_value[attack_arg_names.index('load_from')]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/{attack}"
+        working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
             'working_dir': working_dir,
@@ -739,6 +780,7 @@ def art_config(norm, attack, seed=123):
         print(generate_test_optimizer('test_art', **attack_args))
 
 
+@cleanflags
 def jsma_config(seed=123):
     num_images = 1000
     batch_size = 250
@@ -753,7 +795,7 @@ def jsma_config(seed=123):
             models, ["all", "random", "second"],
             [1.0, 0.1], ["cleverhans", "art"]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/jsma"
+        working_dir = f"../{basedir}/test_{type}/{norm}/jsma"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
@@ -771,7 +813,8 @@ def jsma_config(seed=123):
         print(generate_test_optimizer('test_jsma', **attack_args))
 
 
-def one_pixel_attack_config(seed=123):
+@cleanflags
+def pixel_attack_config(seed=123):
     num_images = 1000
     batch_size = 100
     attack_args = {
@@ -783,7 +826,7 @@ def one_pixel_attack_config(seed=123):
     existing_names = []
     for model, iters, es in itertools.product(models, [100], [1]):
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_cifar10/test_{type}/{norm}/one_pixel"
+        working_dir = f"../{basedir}/test_{type}/{norm}/one_pixel"
         attack_args.update({
             'load_from': model,
             'working_dir': working_dir,
