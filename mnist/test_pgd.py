@@ -98,8 +98,8 @@ def main(unused_args):
     # attack arguments
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
-        for kwarg in dir(FLAGS)
-        if kwarg.startswith("attack_") and kwarg not in ['attack_loss']
+        for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
+        and kwarg not in ['attack_loss', 'attack_nb_restarts']
     }
     if FLAGS.norm != 'l1':
         attack_kwargs['ord'] = 2 if FLAGS.norm == 'l2' else np.inf
