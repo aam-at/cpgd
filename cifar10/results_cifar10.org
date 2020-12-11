@@ -25,7 +25,7 @@
       sort_column = f"{norm}_corr"
 
   model_thresholds = [
-      format_float(th) for th in np.array(test_model_thresholds[type][norm])
+      format_float(th, 4) for th in np.array(test_model_thresholds[type][norm])
   ]
   base_dir = "results_cifar10"
   dirs = glob.glob(f"../{base_dir}/test_{type}/{norm}/{attack}/*")
