@@ -16,7 +16,8 @@ from foolbox.attacks import (DatasetAttack, L0BrendelBethgeAttack,
                              LinfinityBrendelBethgeAttack)
 from foolbox.models import TensorFlowModel
 from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric, make_input_pipeline)
+                          l1_metric, l2_metric, li_metric, limit_gpu_growth,
+                          make_input_pipeline)
 from lib.utils import (format_float, import_klass_annotations_as_flags,
                        log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
@@ -223,6 +224,7 @@ def main(unused_args):
 
 
 if __name__ == "__main__":
+    limit_gpu_growth()
     parser = argparse.ArgumentParser()
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()
