@@ -28,13 +28,14 @@ from tensorboard.plugins.hparams import api as hp
 
 from config import test_thresholds
 from data import load_cifar10
-from models import MadryCNN
+from models import MadryCNNTf
 from utils import load_madry
 
 # general experiment parameters
 register_experiment_flags(working_dir="../results/cifar10/test_lp")
 flags.DEFINE_string("attack", None,
                     "choice of the attack ('l0', 'l1', 'l2', 'l2g', 'li')")
+flags.DEFINE_bool("attack_save", False, "True if save results of the attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
@@ -90,7 +91,7 @@ def main(unused_args):
     # models
     num_classes = 10
     model_type = Path(FLAGS.load_from).stem.split("_")[-1]
-    classifier = MadryCNN(model_type=model_type)
+    classifier = MadryCNNTf(model_type=model_type)
 
     def test_classifier(x, **kwargs):
         return classifier(x, training=False, **kwargs)
