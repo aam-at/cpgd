@@ -628,7 +628,7 @@ def foolbox_config(norm, attack, seed=123):
         # default params for cifar10
         # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
         attack_grid_args.update({
-            "attack_steps": [1000, 10000],
+            "attack_steps": [1000],
             "attack_init_epsilon": [1.0, 0.1],
             "attack_gamma": [0.1, 0.05, 0.01],
         })

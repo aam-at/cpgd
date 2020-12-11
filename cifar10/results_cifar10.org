@@ -68,6 +68,7 @@
 
 #+NAME: output_results
 #+BEGIN_SRC python :noweb yes
+  from datetime import datetime
   from openpyxl import load_workbook
   from openpyxl.utils import get_column_letter
 
@@ -124,6 +125,10 @@
       return 100
   book._sheets.sort(key=lambda ws: sort_by_title(ws.title))
   writer.save()
+
+  now = datetime.now()
+  current_time = now.strftime("%H:%M:%S")
+  print(f"Timestamp [{current_time}]")
 #+END_SRC
 
 * Init
