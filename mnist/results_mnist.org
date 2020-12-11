@@ -1,5 +1,5 @@
 #+options: tex:verbatim
-#+TITLE: Results on mnist dataset
+#+TITLE: Results on MNIST dataset
 
 * General
 #+NAME: parse_results
