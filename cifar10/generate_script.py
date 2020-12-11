@@ -273,8 +273,8 @@ def pgd_config(norm, seed=123):
         'seed': [seed],
         'norm': [norm],
         'attack_loss': ["ce", "cw"],
-        'attack_nb_iter': [200],
-        'attack_nb_restarts': [1, 10, 100]
+        'attack_nb_iter': [500],
+        'attack_nb_restarts': [1]
     }
     if norm == 'l1':
         attack_grid_args.update({
@@ -453,11 +453,10 @@ def fab_config(norm, seed=123):
     }
 
     existing_names = []
-    for model, n_iter, n_restarts in itertools.product(models, [100, 500],
-                                                       [1, 10, 100]):
+    for model, n_iter, n_restarts in itertools.product(models, [100],
+                                                       [1, 10]):
         # default params for cifar10
         # see page 12: https://openreview.net/pdf?id=HJlzxgBtwH
-        n_iter = 200
         alpha_max = 0.1
         eta = 1.05
         beta = 0.9
@@ -570,68 +569,84 @@ def foolbox_config(norm, attack, seed=123):
     num_images = 1000
     batch_size = 500
     attack_grid_args = {
-        'num_batches': [num_images // batch_size],
-        'batch_size': [batch_size],
-        'load_from': models,
-        'attack': [attack],
-        'norm': [norm],
-        'seed': [seed]
+        "num_batches": [num_images // batch_size],
+        "batch_size": [batch_size],
+        "load_from": models,
+        "attack": [attack],
+        "norm": [norm],
+        "seed": [seed],
     }
-    if attack == 'df':
+    if attack == "df":
         # default params
         attack_grid_args.update({
-            'attack_steps': [50],
-            'attack_overshoot': [0.02],
+            "attack_steps": [50, 100, 1000],
+            "attack_overshoot": [0.02],
+            "attack_candidates": [10],
         })
-        name_fn = lambda: f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
-    elif attack == 'cw':
+        name_fn = (
+            lambda:
+            f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
+        )
+    elif attack == "cw":
         # default params
         attack_grid_args.update({
-            'attack_steps': [10000],
-            'attack_stepsize': [0.01],
-            'attack_initial_const': [0.01],
-            'attack_binary_search_steps': [9],
-            'attack_abort_early': [False],
+            "attack_steps": [10000],
+            "attack_stepsize": [0.01],
+            "attack_initial_const": [0.01],
+            "attack_binary_search_steps": [9],
+            "attack_abort_early": [False],
         })
-        name_fn = lambda: f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
-    elif attack == 'newton':
+        name_fn = (
+            lambda:
+            f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
+        )
+    elif attack == "newton":
         # default params
         attack_grid_args.update({
-            'attack_steps': [1000],
-            'attack_stepsize': [0.01],
+            "attack_steps": [1000],
+            "attack_stepsize": [0.01],
         })
-        name_fn = lambda: f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_"
-    elif attack == 'ead':
+        name_fn = (
+            lambda:
+            f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_"
+        )
+    elif attack == "ead":
         # default params
         attack_grid_args.update({
-            'attack_steps': [1000],
-            'attack_initial_const': [0.01],
-            'attack_binary_search_steps': [9],
-            'attack_decision_rule': ['L1'],
-            'attack_regularization': [0.05],
-            'attack_abort_early': [False],
+            "attack_steps": [1000, 10000],
+            "attack_initial_const": [0.01],
+            "attack_binary_search_steps": [9],
+            "attack_decision_rule": ["L1"],
+            "attack_regularization": [0.05],
+            "attack_abort_early": [False],
         })
-        name_fn = lambda: f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
-    elif attack == 'ddn':
+        name_fn = (
+            lambda:
+            f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
+        )
+    elif attack == "ddn":
         # default params for cifar10
         # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
         attack_grid_args.update({
-            'attack_steps': [1000],
-            'attack_init_epsilon': [1.0],
-            'attack_gamma': [0.05],
+            "attack_steps": [1000, 10000],
+            "attack_init_epsilon": [1.0, 0.1],
+            "attack_gamma": [0.1, 0.05, 0.01],
         })
-        name_fn = lambda: f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_"
+        name_fn = (
+            lambda:
+            f"cifar10_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_gamma{attack_args['attack_gamma']}_"
+        )
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
 
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
-        model = attack_arg_value[attack_arg_names.index('load_from')]
+        model = attack_arg_value[attack_arg_names.index("load_from")]
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
-            'working_dir': working_dir,
+            "working_dir": working_dir,
         })
         name = name_fn()
         attack_args["name"] = name
@@ -639,7 +654,7 @@ def foolbox_config(norm, attack, seed=123):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_foolbox', **attack_args))
+        print(generate_test_optimizer("test_foolbox", **attack_args))
 
 
 @cleanflags
@@ -654,29 +669,32 @@ def bethge_config(norm, seed=123):
     num_images = 1000
     batch_size = 250
     attack_args = {
-        'norm': norm,
-        'num_batches': num_images // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+        "norm": norm,
+        "num_batches": num_images // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
     }
 
     existing_names = []
-    for model, lr, num_decay in itertools.product(models, [1.0, 0.1, 0.01], [20, 100]):
+    for model, steps, lr, num_decay in itertools.product(
+            models, [1000], [1.0, 0.1, 0.01], [20, 100]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../{basedir}/test_{type}/{norm}/bethge"
         attack_args.update({
-            'load_from': model,
-            'working_dir': working_dir,
-            'attack_lr': lr,
-            'attack_lr_num_decay': num_decay,
+            "norm": norm,
+            "load_from": model,
+            "working_dir": working_dir,
+            "attack_steps": steps,
+            "attack_lr": lr,
+            "attack_lr_num_decay": num_decay,
         })
-        name = f"cifar10_bethge_{type}_{norm}_lr{lr}_nd{num_decay}_"
-        attack_args['name'] = name
+        name = f"cifar10_bethge_{type}_{norm}_n{steps}_lr{lr}_nd{num_decay}_"
+        attack_args["name"] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_bethge', **attack_args))
+        print(generate_test_optimizer("test_bethge", **attack_args))
 
 
 @cleanflags
@@ -706,7 +724,7 @@ def deepfool_config(norm, seed=123):
             "attack_overshoot": 0.02,
             "attack_max_iter": max_iter,
         })
-        name = f"mnist_{type}_df_orig_n{attack_args['attack_max_iter']}_os{attack_args['attack_overshoot']}_"
+        name = f"cifar10_{type}_df_orig_n{attack_args['attack_max_iter']}_os{attack_args['attack_overshoot']}_"
         attack_args["name"] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
