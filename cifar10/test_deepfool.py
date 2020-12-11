@@ -16,8 +16,8 @@ from lib.pt_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
                           l1_metric, l2_metric, li_metric, setup_torch,
                           to_torch)
 from lib.tf_utils import limit_gpu_growth, make_input_pipeline
-from lib.utils import (import_func_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
+from lib.utils import (format_float, import_func_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
 
 from config import test_thresholds
