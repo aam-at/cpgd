@@ -189,6 +189,8 @@ def setup_experiment(default_name, snapshot_files=None):
                                for k, v in FLAGS._flags().items()},
                               sort_keys=True)
     logging.info(train_params)
+    hostname = subprocess.getoutput("hostname")
+    logging.info(f"Host: {hostname}")
 
     if snapshot_files is not None:
         for snapshot_file in snapshot_files:
