@@ -255,6 +255,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                 print(generate_test_optimizer(script_name, **attack_args))
 
 
+@count_number_of_lines
 @cleanflags
 def pgd_config(norm, seed=123):
     import test_pgd
@@ -311,6 +312,74 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                     continue
                 existing_names.append(name)
                 print(generate_test_optimizer('test_pgd', **attack_args))
+
+
+@cleanflags
+def pgd_custom_config(norm, top_k=1, seed=123):
+    """Generate config for PGD with 10, 100 restarts based on the results with 1
+    restart"""
+    import test_pgd
+    from test_pgd import import_flags
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_pgd)
+    import_flags(norm)
+
+    num_images = 1000
+    batch_size = 500
+    default_args = {
+        "norm": norm,
+        "num_batches": num_images // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
+    }
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../{basedir}/test_{type}/{norm}/pgd/"
+        default_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+        })
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        df_all = load_logs(working_dir)
+        for eps in test_model_thresholds[type][norm]:
+            df = df_all.copy()
+            df = df[df.attack_eps == eps]
+            df = df[df.attack_nb_restarts == 1]
+            df = df[df.attack_nb_iter == 500]
+            acc_col = f"acc_{norm}_{format_float(eps)}"
+            df = df.sort_values(acc_col)
+            lowest_acc = df.head(1)[acc_col].item()
+            i = 0
+            for index, df_row in df.iterrows():
+                # select top-k attack parameters
+                if df_row.at[acc_col] > lowest_acc + 0.01 or i >= top_k:
+                    break
+                else:
+                    attack_args = default_args.copy()
+                    for col in df.columns:
+                        if "attack_" in col:
+                            attack_args[col] = df_row.at[col]
+                    eps_scale = int(
+                        round(eps / attack_args["attack_eps_iter"], 2))
+                    i += 1
+                    for loss, n_restarts in itertools.product(["cw", "ce"], [10, 100]):
+                        attack_args.update({
+                            'attack_nb_restarts': n_restarts,
+                            'attack_loss': loss
+                        })
+                        name = f"""cifar10_pgd_{type}_{norm}_{attack_args['attack_loss']}_
+n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
+eps{eps}_epss{eps_scale}_""".replace("\n", "")
+                        if norm == 'l1':
+                            name = f"{name}s{attack_args['attack_grad_sparsity']}_"
+                        attack_args['name'] = name
+                        if name in p or name in existing_names:
+                            continue
+                        existing_names.append(name)
+                        print(
+                            generate_test_optimizer('test_pgd', **attack_args))
 
 
 @count_number_of_lines
