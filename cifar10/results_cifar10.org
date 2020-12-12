@@ -127,8 +127,9 @@
   writer.save()
 
   now = datetime.now()
+  today = datetime.today()
   current_time = now.strftime("%H:%M:%S")
-  print(f"Timestamp [{current_time}]")
+  print(f"Timestamp [{today} {current_time}]")
 #+END_SRC
 
 * Init
