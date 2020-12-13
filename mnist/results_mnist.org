@@ -2,128 +2,15 @@
 #+TITLE: Results on MNIST dataset
 
 * General
-#+NAME: parse_results
+#+NAME: init_script
 #+BEGIN_SRC python
   import numpy as np
-  from pathlib import Path
-  import pandas as pd
-  import glob
+  from parse_results import parse_results, output_excel
+  from functools import partial
 
-  from config import test_model_thresholds
-  from lib.parse_logs import (parse_log, org_table)
-  from lib.utils import format_float
-
-  try:
-      export_params = [group_param]
-  except:
-      group_param = None
-      export_params = []
-
-  try:
-      len(sort_column)
-  except:
-      sort_column = f"{norm}_corr"
-
-  model_thresholds = [
-      format_float(th) for th in np.array(test_model_thresholds[type][norm])
-  ]
-  base_dir = "results_mnist"
-  dirs = glob.glob(f"../{base_dir}/test_{type}/{norm}/{attack}/*")
-  df_logs = []
-  for load_dir in dirs:
-      df_logs.append(
-          parse_log(load_dir,
-                    exclude=["nll_loss", "conf"],
-                    export_test_params=["num_batches", "batch_size"] +
-                    export_params))
-  df = pd.concat(df_logs, ignore_index=True)
-  df = df.sort_values(sort_column)
-  df["total"] = df["num_batches"] * df["batch_size"]
-  df = df.drop(columns=["num_batches", "batch_size"])
-
-  def col_sort(k):
-      if k == "name":
-          return 1000
-      elif k.startswith("acc"):
-          return 100
-      elif k.startswith(f"{norm}"):
-          return 10
-      else:
-          return 0
-
-
-  df = df[sorted(df.columns, key=col_sort, reverse=True)]
-
-  if len(model_thresholds) > 0:
-      for col in df.columns:
-          if col.startswith(f"acc_{norm}_"):
-              threshold = col.replace(f"acc_{norm}_", "")
-              if threshold not in model_thresholds:
-                  df = df.drop(columns=[col])
-
-  for col in df.columns:
-      if col.startswith(f"acc_{norm}_"):
-          df[col] = df[col] * 100
-#+END_SRC
-
-#+NAME: output_results
-#+BEGIN_SRC python :noweb yes
-  from openpyxl import load_workbook
-  from openpyxl.utils import get_column_letter
-
-  #df_org = org_table(df, decimals=6)
-  df_list = {}
-  if group_param is None:
-      df_list[attack] = df
-  else:
-      df_gr = df.groupby(by=group_param)
-      for gr_key, gr_df in df_gr:
-          gr_df = gr_df.drop(columns=group_param)
-          df_list[f"{attack}-{gr_key}"] = gr_df
-
-  output_file = f"../{base_dir}/{type}_{norm}.xlsx"
-  if Path(output_file).exists():
-      writer = pd.ExcelWriter(output_file, mode='a')
-      book = load_workbook(output_file)
-      if attack in book.sheetnames:
-          del book[attack]
-      writer.book = book
-  else:
-      writer = pd.ExcelWriter(output_file, mode='w')
-
-  book = writer.book
-  for name, df in df_list.items():
-      if name in book.sheetnames:
-          del book[name]
-      df.to_excel(writer, sheet_name=name)
-      # autoresize columns
-      ws = writer.sheets[name]
-      dims = {}
-      for row in ws.rows:
-          for cell in row:
-              if cell.value:
-                  dims[cell.column] = max((dims.get(cell.column,
-                                                    0), len(str(cell.value))))
-      for col, value in dims.items():
-          ws.column_dimensions[get_column_letter(col)].width = value
-
-  def sort_by_title(title):
-      if norm == 'li':
-          index = {'df': 0, 'bethge': 1, 'daa': 2, 'pgd': 3, 'fab': 4}
-      elif norm == 'l2':
-          index = {'df': 0, 'cw': 1, 'ddn': 2, 'bethge': 3, 'pgd': 4, 'fab': 5}
-      elif norm == 'l1':
-          index = {'sparsefool': 0, 'ead': 1, 'bethge': 2, 'pgd': 3, 'fab': 4}
-      elif norm == 'l0':
-          index = {'jsma': 0, 'pixel': 1, 'bethge': 2, 'cornersearch': 3}
-      else:
-          raise ValueError
-      for n, v in index.items():
-          if n in title:
-              return v
-      return 100
-  book._sheets.sort(key=lambda ws: sort_by_title(ws.title))
-  writer.save()
+  base_dir = "../results_mnist"
+  parse_results = partial(parse_results, base_dir=base_dir)
+  output_excel = partial(output_excel, base_dir=base_dir)
 #+END_SRC
 
 * Init
@@ -170,462 +57,198 @@
 
 * Li
 ** DF attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="df" :var type="plain" :var norm="li" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="df" :var type="linf" :var norm="li" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="df" :var type="l2" :var norm="li" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "li", "df", sort_column="li_corr")
+      output_excel(df, model_type, "li", "df")
 #+END_SRC
 
 ** Bethge attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var type="plain" :var norm="li" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var type="linf" :var norm="li" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var type="l2" :var norm="li" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "li", "daa", sort_column="li_corr")
+      output_excel(df, model_type, "li", "daa")
 #+END_SRC
 
 ** DAA attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="daa" :var type="plain" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="daa" :var type="linf" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="daa" :var type="l2" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "li", "daa", sort_column="acc_adv", group_by="attack_eps")
+      output_excel(df, model_type, "li", "daa", group_by="attack_eps")
 #+END_SRC
 
 ** PGD attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="plain" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="linf" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="l2" :var norm="li" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "li", "pgd", sort_column="acc_adv", group_by="attack_eps")
+      output_excel(df, model_type, "li", "pgd", group_by="attack_eps")
 #+END_SRC
 
 ** Fab attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="fab" :var type="plain" :var norm="li" :var group_param="attack_n_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="fab" :var type="linf" :var norm="li" :var group_param="attack_n_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="fab" :var type="l2" :var norm="li" :var group_param="attack_n_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "li", "fab", sort_column="li_corr", group_by="attack_n_restarts")
+      output_excel(df, model_type, "li", "fab", group_by="attack_n_restarts")
 #+END_SRC
 
 ** PDPGD attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="our_li" :var type="plain" :var norm="li" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="our_li" :var type="linf" :var norm="li" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="our_li" :var type="l2" :var norm="li" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "li", "our_li", group_by="attack_loop_number_restarts")
+      output_excel(df, model_type, "li", "our_li", group_by="attack_loop_number_restarts")
 #+END_SRC
 
 * L2
 ** DF attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="df" :var type="plain" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="df" :var type="linf" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="df" :var type="l2" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l2", "df")
+      output_excel(df, model_type, "l2", "df")
 #+END_SRC
 
 ** CW attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="cw" :var type="plain" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="cw" :var type="linf" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="cw" :var type="l2" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l2", "cw")
+      output_excel(df, model_type, "l2", "cw")
 #+END_SRC
 
 ** DDN attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="ddn" :var type="plain" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="ddn" :var type="linf" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="ddn" :var type="l2" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l2", "ddn")
+      output_excel(df, model_type, "l2", "ddn")
 #+END_SRC
 
 ** Bethge attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var type="plain" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var type="linf" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var type="l2" :var norm="l2" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l2", "bethge")
+      output_excel(df, model_type, "l2", "bethge")
 #+END_SRC
 
 ** PGD attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="plain" :var norm="l2" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="linf" :var norm="l2" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="l2" :var norm="l2" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l2", "pgd", sort_column="acc_adv", group_by="attack_eps")
+      output_excel(df, model_type, "l2", "pgd", group_by="attack_eps")
 #+END_SRC
 
 ** FAB attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="fab" :var type="plain" :var norm="l2" :var group_param="attack_n_restarts" :results output
-<<parse_results>>
-<<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="fab" :var type="linf" :var norm="l2" :var group_param="attack_n_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="fab" :var type="l2" :var norm="l2" :var group_param="attack_n_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l2", "fab", group_by="attack_n_restarts")
+      output_excel(df, model_type, "l2", "fab", group_by="attack_n_restarts")
 #+END_SRC
 
 ** PDGD attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="our_l2" :var type="plain" :var norm="l2" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="our_l2" :var type="linf" :var norm="l2" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="our_l2" :var type="l2" :var norm="l2" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l2", "our_l2", group_by="attack_loop_number_restarts")
+      output_excel(df, model_type, "l2", "our_l2", group_by="attack_loop_number_restarts")
 #+END_SRC
 
 * L1
 ** Sparesfool attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="sparsefool" :var type="plain" :var norm="l1" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="sparsefool" :var type="linf" :var norm="l1" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="sparsefool" :var type="l2" :var norm="l1" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l1", "sparsefool")
+      output_excel(df, model_type, "l1", "sparsefool")
 #+END_SRC
 
 ** EAD attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="ead" :var type="plain" :var norm="l1" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="ead" :var type="linf" :var norm="l1" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="ead" :var type="l2" :var norm="l1" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l1", "ead")
+      output_excel(df, model_type, "l1", "ead")
 #+END_SRC
 
 ** Bethge attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var norm="l1" :var type="plain" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var norm="l1" :var type="linf" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var norm="l1" :var type="l2" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l1", "bethge")
+      output_excel(df, model_type, "l1", "bethge")
 #+END_SRC
 
 ** PGD attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="plain" :var norm="l1" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="linf" :var norm="l1" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="pgd" :var type="l2" :var norm="l1" :var group_param="attack_eps" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l1", "pgd", sort_column="acc_adv", group_by="attack_eps")
+      output_excel(df, model_type, "l1", "pgd", group_by="attack_eps")
 #+END_SRC
 
 ** FAB attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="fab" :var norm="l1" :var type="plain" :var group_param="attack_n_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="fab" :var norm="l1" :var type="linf" :var group_param="attack_n_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="fab" :var norm="l1" :var type="l2" :var group_param="attack_n_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l1", "fab", group_by="attack_n_restarts")
+      output_excel(df, model_type, "l1", "fab", group_by="attack_n_restarts")
 #+END_SRC
 
 ** PDPGD attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="our_l1" :var norm="l1" :var type="plain" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="our_l1" :var norm="l1" :var type="linf" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="our_l1" :var norm="l1" :var type="l2" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l1", "our_l1", group_by="attack_loop_number_restarts")
+      output_excel(df, model_type, "l1", "our_l1", group_by="attack_loop_number_restarts")
 #+END_SRC
 
 * L0
 ** JSMA attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="jsma" :var norm="l0" :var type="plain" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="jsma" :var norm="l0" :var type="linf" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="jsma" :var norm="l0" :var type="l2" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l0", "jsma")
+      output_excel(df, model_type, "l0", "jsma")
 #+END_SRC
 
 ** Pixel attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="one_pixel" :var norm="l0" :var type="plain" :var group_param="attack_threshold" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="one_pixel" :var norm="l0" :var type="linf" :var group_param="attack_threshold" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="one_pixel" :var norm="l0" :var type="l2" :var group_param="attack_threshold" :var sort_column="acc_adv" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l0", "one_pixel")
+      output_excel(df, model_type, "l0", "one_pixel")
 #+END_SRC
 
 ** Bethge attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var norm="l0" :var type="plain" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var norm="l0" :var type="linf" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="bethge" :var norm="l0" :var type="l2" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l0", "bethge")
+      output_excel(df, model_type, "l0", "bethge")
 #+END_SRC
 
 ** Cornersearch attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="cornersearch" :var norm="l0" :var type="plain" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="cornersearch" :var norm="l0" :var type="linf" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="cornersearch" :var norm="l0" :var type="l2" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l0", "cornersearch")
+      output_excel(df, model_type, "l0", "cornersearch")
 #+END_SRC
 
 ** PDPGD attack
-*** Plain
-#+BEGIN_SRC python :async :noweb yes :var attack="our_l0" :var norm="l0" :var type="plain" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** Linf
-#+BEGIN_SRC python :async :noweb yes :var attack="our_l0" :var norm="l0" :var type="linf" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
-#+END_SRC
-
-*** L2
-#+BEGIN_SRC python :async :noweb yes :var attack="our_l0" :var norm="l0" :var type="l2" :var group_param="attack_loop_number_restarts" :results output
-  <<parse_results>>
-  <<output_results>>
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l0", "our_l0", group_by="attack_loop_number_restarts")
+      output_excel(df, model_type, "l0", "our_l0", group_by="attack_loop_number_restarts")
 #+END_SRC
 
 * COMMENT Local Variables
