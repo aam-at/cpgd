@@ -4,12 +4,12 @@ from pathlib import Path
 
 import numpy as np
 import pandas as pd
-from lib.parse_logs import parse_log
-from lib.utils import format_float
+from config import test_model_thresholds
 from openpyxl import load_workbook
 from openpyxl.utils import get_column_letter
 
-from config import test_model_thresholds
+from .parse_logs import parse_log
+from .utils import format_float
 
 
 def parse_results(model_type,
@@ -146,25 +146,3 @@ def output_excel(df,
     now = datetime.now()
     today = datetime.today()
     print(f"Wrote {attack}-{norm} on {model_type} at {today}")
-
-
-if __name__ == '__main__':
-    base_dir = "../results_mnist"
-    df = parse_results(base_dir, "plain", "li", "our_li", base_dir=base_dir)
-    output_excel(df, "plain", "li", "our_li", base_dir=base_dir)
-    # for model in models:
-    #     type = Path(model).stem.split("_")[-1]
-    #     for norm in ["li", "l2", "l1", "l0"]:
-    #         if norm == "li":
-    #             attacks = ['df', 'bethge', 'daa', 'pgd', 'fab', 'our_li']
-    #         elif norm == "l2":
-    #             attacks = ['df', 'cw', 'ddn', 'bethge', 'pgd', 'fab', 'our_l2']
-    #         elif norm == "l1":
-    #             attacks = [
-    #                 'sparsefool', 'ead', 'bethge', 'pgd', 'fab', 'our_l1'
-    #             ]
-    #         elif norm == "l0":
-    #             attacks = ['jsma', 'pixel', 'bethge', 'cornersearch', 'our_l0']
-    #         for attack in [f"our_{norm}"]:
-    #             df = parse_results(base_dir, "plain", "li", "our_li")
-    #             output_excel(df, base_dir, "plain", "li", "our_li")
