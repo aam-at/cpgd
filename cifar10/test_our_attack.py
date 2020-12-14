@@ -172,10 +172,6 @@ def main(unused_args):
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
             test_metrics[f"acc_{norm}_%s" %
                          format_float(threshold, 4)](~is_adv_at_th)
-            if norm == "l0":
-                is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
-                test_metrics["acc_l0p_%s" %
-                             format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
