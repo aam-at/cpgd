@@ -49,13 +49,14 @@ class ProximalL0Attack(ProximalPrimalDualGradientAttack):
         operator = operators[self.operator]
         if self.pixel_attack:
             # apply operator on the largest channel
-            # 1) if the largest channel becomes zero, zero the rest of the elements
-            # 2) else set the elements to the original values unless it is maximum
             max_indices = tf.argmax(tf.abs(u), axis=self.channel_dim)
             u_c = tf.expand_dims(tf.gather(u, max_indices, batch_dims=3), -1)
             pu_c = operator(u_c, l)
-            o = tf.where(tf.abs(pu_c) > 0, u, 0.0)
-            out = tf.where(o == u_c, pu_c, o)
+            # if the largest channel after the proximal operator is zero, zero
+            # the rest of the elements for other channels
+            out = tf.where(tf.abs(pu_c) > 0, u, 0.0)
+            # set the elements to the original values unless it is max element
+            out = tf.where(out == u_c, pu_c, out)
             return out
         else:
             return operator(u, l)
