@@ -160,14 +160,14 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
             if (attack_args["attack_loop_r0_ods_init"]
                     and attack_args["attack_loop_multitargeted"]):
                 continue
-            for lr, decay_factor, lr_decay in itertools.product([1.0], [0.01],
-                                                                [True]):
+            for lr, decay_factor, dlr_decay_factor, lr_decay, lr_schedule in itertools.product(
+                [0.1], [0.01], [0.1], [True], ['linear', 'exp', 'cosine']):
                 min_lr = round(lr * decay_factor, 6)
                 dlr = attack_args["attack_dual_lr"]
-                min_dlr = round(dlr * decay_factor, 6)
+                min_dlr = round(dlr * dlr_decay_factor, 6)
                 if lr_decay and min_lr < lr:
                     lr_config = {
-                        "schedule": "exp",
+                        "schedule": lr_schedule,
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=lr,
@@ -177,7 +177,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                         },
                     }
                     dlr_config = {
-                        "schedule": "exp",
+                        "schedule": lr_schedule,
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=dlr,
@@ -201,7 +201,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                     }
                 if lr_decay:
                     finetune_lr_config = {
-                        "schedule": "exp",
+                        "schedule": lr_schedule,
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=min_lr,
@@ -212,12 +212,12 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                         },
                     }
                     finetune_dlr_config = {
-                        "schedule": "exp",
+                        "schedule": lr_schedule,
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=min_dlr,
                                 minimal_learning_rate=round(
-                                    min_dlr * decay_factor, 8),
+                                    min_dlr * dlr_decay_factor, 8),
                                 decay_steps=attack_args["attack_iterations"],
                             ).get_config()
                         },

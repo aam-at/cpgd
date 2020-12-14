@@ -16,11 +16,9 @@ def format_lr_config(lr_config):
         lr_config = ast.literal_eval(lr_config)
     if lr_config["schedule"] == "constant":
         s = f"{lr_config['config']['learning_rate']}"
-    elif lr_config["schedule"] == "linear":
-        s = (f"linear_init{lr_config['config']['initial_learning_rate']}_"
-             f"min{lr_config['config']['minimal_learning_rate']}")
-    elif lr_config["schedule"] == "exp":
-        s = (f"exp_init{lr_config['config']['initial_learning_rate']}_"
+    elif lr_config["schedule"] in ["linear", "exp", "cosine"]:
+        s = (f"{lr_config['schedule']}_"
+             f"init{lr_config['config']['initial_learning_rate']}_"
              f"min{lr_config['config']['minimal_learning_rate']}")
     return s
 
