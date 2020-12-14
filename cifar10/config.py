@@ -22,7 +22,7 @@ test_model_thresholds = {
 }
 
 test_thresholds = {
-    "l0": list(np.linspace(1, 100, 100)),
+    "l0": [],
     "l1": [],
     "l2": [],
     "li": []
