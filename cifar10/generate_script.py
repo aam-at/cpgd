@@ -17,7 +17,7 @@ from lib.generate_script import (cleanflags, count_number_of_lines,
                                  format_name, generate_test_optimizer)
 from lib.parse_logs import parse_log
 from lib.tf_utils import ConstantDecay, ExpDecay, LinearDecay
-from lib.utils import (import_func_annotations_as_flags,
+from lib.utils import (format_float, import_func_annotations_as_flags,
                        import_klass_annotations_as_flags)
 
 from config import test_model_thresholds
@@ -160,14 +160,14 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
             if (attack_args["attack_loop_r0_ods_init"]
                     and attack_args["attack_loop_multitargeted"]):
                 continue
-            for lr, decay_factor, dlr_decay_factor, lr_decay, lr_schedule in itertools.product(
-                [0.1], [0.01], [0.1], [True], ['linear', 'exp', 'cosine']):
+            for lr, decay_factor, dlr_decay_factor, lr_decay in itertools.product(
+                [0.1], [0.01], [0.1], [True]):
                 min_lr = round(lr * decay_factor, 6)
                 dlr = attack_args["attack_dual_lr"]
                 min_dlr = round(dlr * dlr_decay_factor, 6)
                 if lr_decay and min_lr < lr:
                     lr_config = {
-                        "schedule": lr_schedule,
+                        "schedule": "exp",
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=lr,
@@ -177,7 +177,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                         },
                     }
                     dlr_config = {
-                        "schedule": lr_schedule,
+                        "schedule": "linear",
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=dlr,
@@ -201,7 +201,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                     }
                 if lr_decay:
                     finetune_lr_config = {
-                        "schedule": lr_schedule,
+                        "schedule": "exp",
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=min_lr,
@@ -212,7 +212,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                         },
                     }
                     finetune_dlr_config = {
-                        "schedule": lr_schedule,
+                        "schedule": "linear",
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=min_dlr,
@@ -437,7 +437,7 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
 
 
 @cleanflags
-def daa_custom_config(top_k=5, seed=123):
+def daa_custom_config(top_k=1, seed=123):
     """Generate config for DAA with 10, 100 restarts based on the results with 1
     restart"""
     import test_daa
@@ -485,7 +485,7 @@ def daa_custom_config(top_k=5, seed=123):
                     eps_scale = int(
                         round(eps / attack_args["attack_eps_iter"], 2))
                     i += 1
-                    for loss, n_restarts in itertools.product(['xent', 'cw'], [10]):
+                    for loss, n_restarts in itertools.product(['xent', 'cw'], [10, 100]):
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
                             'attack_loss_fn': loss
@@ -510,20 +510,20 @@ def fab_config(norm, seed=123):
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_fab)
-    import_klass_annotations_as_flags(FABAttack, 'attack_')
+    import_klass_annotations_as_flags(FABAttack, "attack_")
 
     num_images = 1000
     batch_size = 250
     attack_args = {
-        'attack_norm': norm,
-        'num_batches': num_images // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+        "attack_norm": norm,
+        "num_batches": num_images // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
     }
 
     existing_names = []
     for model, n_iter, n_restarts in itertools.product(models, [100],
-                                                       [1, 10]):
+                                                       [1, 10, 100]):
         # default params for cifar10
         # see page 12: https://openreview.net/pdf?id=HJlzxgBtwH
         alpha_max = 0.1
@@ -538,26 +538,23 @@ def fab_config(norm, seed=123):
         # params
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../{basedir}/test_{type}/{norm}/fab"
-        attack_args.update(
-        {
-            'attack_n_iter': n_iter,
-            'attack_n_restarts': n_restarts,
-            'attack_alpha_max': alpha_max,
-            'attack_eta': eta,
-            'attack_beta': beta,
-            'attack_eps': eps[type][norm],
-            'working_dir': working_dir,
-            'load_from': model
+        attack_args.update({
+            "attack_n_iter": n_iter,
+            "attack_n_restarts": n_restarts,
+            "attack_alpha_max": alpha_max,
+            "attack_eta": eta,
+            "attack_beta": beta,
+            "attack_eps": eps[type][norm],
+            "working_dir": working_dir,
+            "load_from": model,
         })
         name = f"cifar10_fab_{type}_{norm}_n{n_iter}_N{n_restarts}_"
         attack_args["name"] = name
-        p = [
-            s.name[:-1] for s in list(Path(working_dir).glob("*"))
-        ]
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_fab', **attack_args))
+        print(generate_test_optimizer("test_fab", **attack_args))
 
 
 @cleanflags
