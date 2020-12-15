@@ -236,7 +236,7 @@ def reset_metrics(metrics):
 
 def format_float(v, digits=8):
     v = round(v, digits)
-    v_fmt = ("%f" % v).rstrip('0').rstrip('.')
+    v_fmt = (f"%.{digits}f" % v).rstrip('0').rstrip('.')
     return v_fmt
 
 
