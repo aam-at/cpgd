@@ -27,10 +27,7 @@ def parse_results(model_type,
         extra_params.append(group_by)
     extra_params.extend(["num_batches", "batch_size"])
 
-    model_thresholds = [
-        format_float(th)
-        for th in np.array(test_model_thresholds[model_type][norm])
-    ]
+    model_thresholds = np.array(test_model_thresholds[model_type][norm])
     dirs = glob.glob(f"{base_dir}/test_{model_type}/{norm}/{attack}/*")
     df_logs = []
     for load_dir in dirs:
@@ -58,11 +55,12 @@ def parse_results(model_type,
     df = df[sorted(df.columns, key=col_sort, reverse=True)]
 
     if len(model_thresholds) > 0:
-        for col in df.columns:
-            if col.startswith(f"acc_{norm}_"):
-                threshold = col.replace(f"acc_{norm}_", "")
-                if threshold not in model_thresholds:
-                    df = df.drop(columns=[col])
+        for norm in [norm] if norm != "l0" else [norm, "l0p"]:
+            for col in df.columns:
+                if col.startswith(f"acc_{norm}_"):
+                    threshold = float(col.replace(f"acc_{norm}_", ""))
+                    if not np.any((model_thresholds - threshold) ** 2 < 1e-6):
+                        df = df.drop(columns=[col])
 
     for col in df.columns:
         if col.startswith(f"acc_{norm}_"):
