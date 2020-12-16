@@ -48,7 +48,9 @@ def main(unused_args):
     classifier = MadryCNNPt(model_type=model_type, wrap_outputs=False)
 
     # load classifier
-    load_madry_pt(FLAGS.load_from, classifier.parameters())
+    load_madry_pt(FLAGS.load_from,
+                  classifier.parameters(),
+                  model_type=model_type)
     classifier.cuda()
     classifier.eval()
 
@@ -129,8 +131,9 @@ def main(unused_args):
 
         # robust accuracy at threshold
         for threshold in test_thresholds["l0"]:
-            is_adv_at_th = torch.logical_and(l1 <= threshold, is_adv)
+            is_adv_at_th = torch.logical_and(l0 <= threshold, is_adv)
             test_metrics["acc_l0_%s" % format_float(threshold, 4)](~is_adv_at_th)
+            is_adv_at_th = torch.logical_and(l0p <= threshold, is_adv)
             test_metrics["acc_l0p_%s" %
                          format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
