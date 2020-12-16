@@ -123,7 +123,7 @@ def main(unused_args):
 
         # robust accuracy at threshold
         for threshold in test_thresholds["l0"]:
-            is_adv_at_th = torch.logical_and(l1 <= threshold, is_adv)
+            is_adv_at_th = torch.logical_and(l0 <= threshold, is_adv)
             test_metrics["acc_l0_%s" % format_float(threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
