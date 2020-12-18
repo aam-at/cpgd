@@ -95,7 +95,7 @@ def main(unused_args):
             return tf_jsma_generate(x, y_target=y_target)
 
     elif FLAGS.attack_impl == 'art':
-        from art.attacks import SaliencyMapMethod
+        from art.attacks.evasion import SaliencyMapMethod
         from art.classifiers import TensorFlowV2Classifier
 
         def art_classifier(x):

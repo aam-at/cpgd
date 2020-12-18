@@ -896,7 +896,7 @@ def art_config(norm, attack, seed=123):
     if attack == 'df':
         # default params
         attack_grid_args.update({
-            'attack_max_iter': [100],
+            'attack_max_iter': [50, 100, 1000],
             'attack_nb_grads': [10],
             'attack_epsilon': [0.02],
         })
@@ -946,6 +946,7 @@ def art_config(norm, attack, seed=123):
 def jsma_config(seed=123):
     num_images = 1000
     batch_size = 250
+    norm = "l0"
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
@@ -1019,8 +1020,12 @@ if __name__ == '__main__':
     deepfool_config("li")
     foolbox_config("li", "df")
     bethge_config("li")
-    daa_config()
-    pgd_config("li")
+    to_execute_cmds = daa_config()
+    if to_execute_cmds == 0:
+        daa_custom_config()
+    to_execute_cmds = pgd_config("li")
+    if to_execute_cmds == 0:
+        pgd_custom_config("li")
     fab_config("li")
     # l2 attacks
     deepfool_config("l2")
@@ -1029,9 +1034,10 @@ if __name__ == '__main__':
     foolbox_config("l2", "cw")
     cleverhans_config("l2", "cw")
     foolbox_config("l2", "ddn")
-    foolbox_config("l2", "newton")
     bethge_config("l2")
-    pgd_config("l2")
+    to_execute_cmds = pgd_config("l2")
+    if to_execute_cmds == 0:
+        pgd_custom_config("l2")
     fab_config("l2")
     # l1 attacks
     sparsefool_config()
