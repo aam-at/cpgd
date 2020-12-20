@@ -311,7 +311,7 @@ def pgd_config(norm, seed=123):
                 [1, 2, 5, 10, 25, 50, 100]):
                 attack_args.update({
                     'attack_eps': eps,
-                    'attack_eps_iter': round(eps / eps_scale, 6)
+                    'attack_eps_iter': eps / eps_scale
                 })
                 name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
@@ -432,24 +432,28 @@ def daa_config(seed=123):
 
 
 # fab attacks
+@cleanflags
 def fab_config(norm, seed=123):
-    import test_fab
     from lib.fab import FABAttack
+
+    import test_fab
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_fab)
-    import_klass_annotations_as_flags(FABAttack, 'attack_')
+    import_klass_annotations_as_flags(FABAttack, "attack_")
 
+    num_images = 1000
     batch_size = 50
     attack_args = {
-        'attack_norm': norm,
-        'num_batches': NUM_IMAGES // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+        "attack_norm": norm,
+        "num_batches": num_images // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
     }
 
     existing_names = []
-    for type, n_restarts in itertools.product(models.keys(), [1, 10]):
+    for type, n_iter, n_restarts in itertools.product(models.keys(), [100],
+                                                       [1, 10]):
         # default params for imagenet
         # see page 12: https://openreview.net/pdf?id=HJlzxgBtwH
         n_iter = 100
@@ -463,27 +467,24 @@ def fab_config(norm, seed=123):
         }
 
         # params
-        working_dir = f"../results_imagenet/test_{type}/{norm}/fab"
-        attack_args.update(
-        {
-            'attack_n_iter': n_iter,
-            'attack_n_restarts': n_restarts,
-            'attack_alpha_max': alpha_max,
-            'attack_eta': eta,
-            'attack_beta': beta,
-            'attack_eps': eps[type][norm],
-            'working_dir': working_dir,
-            'load_from': models[type]
+        working_dir = f"../{basedir}/test_{type}/{norm}/fab"
+        attack_args.update({
+            "attack_n_iter": n_iter,
+            "attack_n_restarts": n_restarts,
+            "attack_alpha_max": alpha_max,
+            "attack_eta": eta,
+            "attack_beta": beta,
+            "attack_eps": eps[type][norm],
+            "working_dir": working_dir,
+            "load_from": models[type]
         })
         name = f"imagenet_fab_{type}_{norm}_n{n_iter}_N{n_restarts}_"
         attack_args["name"] = name
-        p = [
-            s.name[:-1] for s in list(Path(working_dir).glob("*"))
-        ]
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_fab', **attack_args))
+        print(generate_test_optimizer("test_fab", **attack_args))
 
 
 # foolbox attacks
