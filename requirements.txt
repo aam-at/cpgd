@@ -5,10 +5,12 @@ foolbox==3.2.1
 git+git://github.com/aam-at/cleverhans_tf2@master#egg=cleverhans
 numba==0.51.2
 numpy>=1.18.2
+opencv-contrib-python==4.4.0.46
 openpyxl>=3.0.5
 pytorch-ignite>=0.3.0
 tensorboard>=2.2.0
 tensorflow-gpu>=2.2.0
 tensorflow-probability>=0.9.0
+tensorpack==0.10.1
 torch>=1.5.0
 torchvision>=0.6.0
