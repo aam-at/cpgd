@@ -13,14 +13,15 @@ import tensorflow as tf
 from absl import flags
 from cleverhans.attacks import ProjectedGradientDescent, SparseL1Descent
 from cleverhans.model import Model
+from lib.attack_utils import cw_loss
+from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
+                          make_input_pipeline)
+from lib.utils import (format_float, import_func_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
-                          make_input_pipeline)
-from lib.utils import (import_func_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
-                       setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
@@ -29,13 +30,14 @@ register_experiment_flags(working_dir="../results/imagenet/test_pgd")
 flags.DEFINE_string("norm", "lp", "lp-norm attack")
 flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
-# test paramrs
+# test params
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
 flags.DEFINE_integer("attack_nb_restarts", "1", "number of attack restarts")
+flags.DEFINE_string("attack_loss", "ce", "loss for the attack")
 
 FLAGS = flags.FLAGS
 
@@ -52,11 +54,9 @@ def import_flags(norm):
     exclude_args = ['clip_min', 'clip_max', 'rand_init']
     if norm != 'l1':
         exclude_args.append('ord')
-    import_func_annotations_as_flags(
-        lp_attacks[norm].parse_params,
-        prefix="attack_",
-        exclude_args=exclude_args,
-        include_kwargs_with_defaults=True)
+    import_func_annotations_as_flags(lp_attacks[norm].parse_params,
+                                     prefix="attack_",
+                                     exclude_args=exclude_args)
 
 
 def main(unused_args):
@@ -70,9 +70,10 @@ def main(unused_args):
 
     # data
     augmentors = fbresnet_augmentor(224, training=False)
-    val_ds = get_imagenet_dataflow(
-        FLAGS.data_dir, FLAGS.batch_size,
-        augmentors, mode='val')
+    val_ds = get_imagenet_dataflow(FLAGS.data_dir,
+                                   FLAGS.batch_size,
+                                   augmentors,
+                                   mode='val')
     val_ds.reset_state()
 
     # models
@@ -98,19 +99,24 @@ def main(unused_args):
 
     pgd = lp_attacks[FLAGS.norm](MadryModel())
 
-    lp_metrics = {
-        "l1": l1_metric,
-        "l2": l2_metric,
-        "li": li_metric
-    }
+    lp_metrics = {"l1": l1_metric, "l2": l2_metric, "li": li_metric}
 
     # attack arguments
     attack_kwargs = {
         kwarg.replace("attack_", ""): getattr(FLAGS, kwarg)
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
+        and kwarg not in ['attack_loss', 'attack_nb_restarts']
     }
     if FLAGS.norm != 'l1':
         attack_kwargs['ord'] = 2 if FLAGS.norm == 'l2' else np.inf
+    # select loss
+    if FLAGS.attack_loss == "cw":
+        attack_kwargs["loss_fn"] = lambda labels, logits: -cw_loss(
+            labels, logits)
+    elif FLAGS.attack_loss == "ce":
+        pass
+    else:
+        raise ValueError(f"Invalid loss {FLAGS.attack_loss}")
     pgd.parse_params(**attack_kwargs)
 
     nll_loss_fn = tf.keras.metrics.sparse_categorical_crossentropy
@@ -169,7 +175,8 @@ def main(unused_args):
         # add small constant eps = 1e-6
         for threshold in test_thresholds[f"{FLAGS.norm}"]:
             is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv

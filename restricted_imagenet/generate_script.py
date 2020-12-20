@@ -10,13 +10,15 @@ from pathlib import Path
 
 import numpy as np
 from absl import flags
+from lib.attack_lp import ProximalPrimalDualGradientAttack
+from lib.generate_script import (cleanflags, count_number_of_lines,
+                                 format_name, generate_test_optimizer)
+from lib.parse_logs import parse_log
+from lib.tf_utils import ConstantDecay, ExpDecay, LinearDecay
+from lib.utils import (format_float, import_func_annotations_as_flags,
+                       import_klass_annotations_as_flags)
 
 from config import test_model_thresholds
-from lib.attack_lp import ProximalGradientOptimizerAttack
-from lib.generate_script import format_name, generate_test_optimizer
-from lib.parse_logs import parse_log
-from lib.tf_utils import ConstantDecay, LinearDecay
-from lib.utils import import_klass_annotations_as_flags
 
 models = {
     'plain': './models/train_224_nat_slim',
@@ -24,16 +26,9 @@ models = {
     'l2': './models/train_224_robust_eps_1.0_lp_2_slim'
 }
 hostname = subprocess.getoutput('hostname')
+basedir = "results_imagenet"
 
 NUM_IMAGES = 1000
-
-def generate_test_random(**kwargs):
-    return generate_test_optimizer('test_random', **kwargs)
-
-
-def generate_test_optimizer_lp(**kwargs):
-    return generate_test_optimizer('test_optimizer_lp_madry', **kwargs)
-
 
 def test_random(runs=1, master_seed=1):
     existing_names = []
@@ -64,6 +59,15 @@ def test_random(runs=1, master_seed=1):
             seed = np.random.randint(1000)
             attack_args["seed"] = seed
             print(generate_test_random(**attack_args))
+
+
+def load_logs(load_dir):
+    logs = []
+    for dir in glob.glob(load_dir + "*"):
+        log = parse_log(dir, export_test_params=True)
+        logs.append(log)
+    df = pd.concat(logs, ignore_index=True)
+    return df
 
 
 def test_lp_config(attack, runs=1, master_seed=1):
@@ -264,6 +268,8 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
                                                 **attack_args))
 
 
+@count_number_of_lines
+@cleanflags
 def pgd_config(norm, seed=123):
     import test_pgd
     from test_pgd import import_flags
@@ -272,38 +278,119 @@ def pgd_config(norm, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    batch_size = 50
-    attack_args = {
-        'norm': norm,
-        'num_batches': NUM_IMAGES // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+    num_images = 1000
+    batch_size = 500
+    attack_grid_args = {
+        'num_batches': [num_images // batch_size],
+        'batch_size': [batch_size],
+        'seed': [seed],
+        'norm': [norm],
+        'attack_loss': ["ce", "cw"],
+        'attack_nb_iter': [500],
+        'attack_nb_restarts': [1]
     }
+    if norm == 'l1':
+        attack_grid_args.update({
+            'attack_grad_sparsity': [95, 99]
+        })
 
+    attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
-    for type in models.keys():
-        for nb_iter, nb_restarts, eps, eps_scale in itertools.product(
-                [100], [1, 10], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
-            working_dir = f"../results_imagenet/test_{type}/{norm}/pgd"
+
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../{basedir}/test_{type}/{norm}/pgd"
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        for attack_arg_value in itertools.product(*attack_grid_args.values()):
+            attack_args = dict(zip(attack_arg_names, attack_arg_value))
             attack_args.update({
-                'load_from': models[type],
+                'load_from': model,
                 'working_dir': working_dir,
-                'attack_nb_restarts': nb_restarts,
-                'attack_nb_iter': nb_iter,
-                'attack_eps': eps,
-                'attack_eps_iter': eps / eps_scale
             })
-            name = f"imagenet_pgd_{type}_{norm}_n{nb_iter}_N{nb_restarts}_eps{eps}_epss{eps_scale}_"
-            if norm == 'l1':
-                grad_sparsity = 99
-                attack_args['attack_grad_sparsity'] = grad_sparsity
-                name = f"{name}sp{grad_sparsity}_"
-            attack_args['name'] = name
-            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-            if name in p or name in existing_names:
-                continue
-            existing_names.append(name)
-            print(generate_test_optimizer('test_pgd', **attack_args))
+            for eps, eps_scale in itertools.product(
+                    test_model_thresholds[type][norm],
+                [1, 2, 5, 10, 25, 50, 100]):
+                attack_args.update({
+                    'attack_eps': eps,
+                    'attack_eps_iter': round(eps / eps_scale, 6)
+                })
+                name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
+n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
+eps{format_float(eps, 4)}_epss{eps_scale}_""".replace("\n", "")
+                if norm == 'l1':
+                    name = f"{name}s{attack_args['attack_grad_sparsity']}_"
+                attack_args['name'] = name
+                if name in p or name in existing_names:
+                    continue
+                existing_names.append(name)
+                print(generate_test_optimizer('test_pgd', **attack_args))
+
+
+@cleanflags
+def pgd_custom_config(norm, top_k=1, seed=123):
+    """Generate config for PGD with 10, 100 restarts based on the results with 1
+    restart"""
+    import test_pgd
+    from test_pgd import import_flags
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_pgd)
+    import_flags(norm)
+
+    num_images = 1000
+    batch_size = 500
+    default_args = {
+        "norm": norm,
+        "num_batches": num_images // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
+    }
+    existing_names = []
+    for model in models:
+        type = Path(model).stem.split("_")[-1]
+        working_dir = f"../{basedir}/test_{type}/{norm}/pgd/"
+        default_args.update({
+            'load_from': model,
+            'working_dir': working_dir,
+        })
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        df_all = load_logs(working_dir)
+        for eps in test_model_thresholds[type][norm]:
+            df = df_all.copy()
+            df = df[df.attack_eps == eps]
+            df = df[df.attack_nb_restarts == 1]
+            df = df[df.attack_nb_iter == 500]
+            df = df.sort_values("acc_adv")
+            lowest_acc = df.head(1).acc_adv.item()
+            i = 0
+            for index, df_row in df.iterrows():
+                # select top-k attack parameters
+                if df_row.at['acc_adv'] > lowest_acc + 0.01 or i >= top_k:
+                    break
+                else:
+                    attack_args = default_args.copy()
+                    for col in df.columns:
+                        if "attack_" in col:
+                            attack_args[col] = df_row.at[col]
+                    eps_scale = int(
+                        round(eps / attack_args["attack_eps_iter"], 2))
+                    i += 1
+                    for loss, n_restarts in itertools.product(["cw", "ce"], [10, 100]):
+                        attack_args.update({
+                            'attack_nb_restarts': n_restarts,
+                            'attack_loss': loss
+                        })
+                        name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
+n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
+eps{eps}_epss{eps_scale}_""".replace("\n", "")
+                        if norm == 'l1':
+                            name = f"{name}s{attack_args['attack_grad_sparsity']}_"
+                        attack_args['name'] = name
+                        if name in p or name in existing_names:
+                            continue
+                        existing_names.append(name)
+                        print(
+                            generate_test_optimizer('test_pgd', **attack_args))
 
 
 def daa_config(seed=123):

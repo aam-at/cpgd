@@ -91,7 +91,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
     norm, attack_klass = lp_attacks[attack]
 
     num_images = 1000
-    batch_size = 500
+    batch_size = 250
     attack_grid_args = {
         "num_batches": [num_images // batch_size],
         "batch_size": [batch_size],
@@ -980,6 +980,7 @@ def jsma_config(seed=123):
 def pixel_attack_config(seed=123):
     num_images = 1000
     batch_size = 100
+    norm = "l0"
     attack_args = {
         'num_batches': num_images // batch_size,
         'batch_size': batch_size,
@@ -1005,7 +1006,7 @@ def pixel_attack_config(seed=123):
                 continue
             existing_names.append(name)
             print(
-                generate_test_optimizer('test_one_pixel_attack',
+                generate_test_optimizer('test_pixel_attack',
                                         **attack_args))
 
 
@@ -1044,7 +1045,9 @@ if __name__ == '__main__':
     cleverhans_config("l1", "ead")
     foolbox_config("l1", "ead")
     bethge_config("l1")
-    pgd_config("l1")
+    to_execute_cmds = pgd_config("l1")
+    if to_execute_cmds == 0:
+        pgd_custom_config("l1")
     fab_config("l1")
     # l0 attacks
     jsma_config()
