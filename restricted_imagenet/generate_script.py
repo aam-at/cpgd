@@ -279,7 +279,7 @@ def pgd_config(norm, seed=123):
     import_flags(norm)
 
     num_images = 1000
-    batch_size = 500
+    batch_size = 250
     attack_grid_args = {
         'num_batches': [num_images // batch_size],
         'batch_size': [batch_size],
@@ -297,14 +297,13 @@ def pgd_config(norm, seed=123):
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
 
-    for model in models:
-        type = Path(model).stem.split("_")[-1]
+    for type in models.keys():
         working_dir = f"../{basedir}/test_{type}/{norm}/pgd"
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         for attack_arg_value in itertools.product(*attack_grid_args.values()):
             attack_args = dict(zip(attack_arg_names, attack_arg_value))
             attack_args.update({
-                'load_from': model,
+                'load_from': models[type],
                 'working_dir': working_dir,
             })
             for eps, eps_scale in itertools.product(
