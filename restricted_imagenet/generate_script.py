@@ -508,9 +508,9 @@ def foolbox_config(norm, attack, seed=123):
 
     batch_size = 50
     attack_grid_args = {
+        "type": models.keys(),
         "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
-        "load_from": models,
         "attack": [attack],
         "norm": [norm],
         "seed": [seed],
@@ -580,12 +580,13 @@ def foolbox_config(norm, attack, seed=123):
     existing_names = []
 
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
-        model = attack_arg_value[attack_arg_names.index("load_from")]
-        type = Path(model).stem.split("_")[-1]
+        type = attack_arg_value[attack_arg_names.index("type")]
         working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
+        del attack_args["type"]
         attack_args.update({
             "working_dir": working_dir,
+            "load_from": models[type]
         })
         name = name_fn()
         attack_args["name"] = name
@@ -634,6 +635,7 @@ def bethge_config(norm, seed=123):
         print(generate_test_optimizer('test_bethge', **attack_args))
 
 
+@cleanflags
 def deepfool_config(norm, seed=123):
     import test_deepfool
 
@@ -650,21 +652,21 @@ def deepfool_config(norm, seed=123):
     }
 
     existing_names = []
-    for type in models.keys():
-        working_dir = f"../results_imagenet/test_{type}/{norm}/df"
+    for type, max_iter in itertools.product(models.keys(), [50, 100, 1000]):
+        working_dir = f"../{basedir}/test_{type}/{norm}/df"
         attack_args.update({
-            'load_from': models[type],
-            'working_dir': working_dir,
-            'attack_overshoot': 0.02,
-            'attack_max_iter': 50,
+            "load_from": models[type],
+            "working_dir": working_dir,
+            "attack_overshoot": 0.02,
+            "attack_max_iter": max_iter,
         })
-        name = f"imagenet_deepfool_{type}_{norm}_"
-        attack_args['name'] = name
+        name = f"imagenet_{type}_df_orig_n{attack_args['attack_max_iter']}_os{attack_args['attack_overshoot']}_"
+        attack_args["name"] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_deepfool', **attack_args))
+        print(generate_test_optimizer("test_deepfool", **attack_args))
 
 
 def sparsefool_config(seed=123):
