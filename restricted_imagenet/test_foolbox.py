@@ -14,14 +14,14 @@ from foolbox.attacks import (DDNAttack, EADAttack, L2CarliniWagnerAttack,
                              L2DeepFoolAttack, LinfDeepFoolAttack,
                              NewtonFoolAttack)
 from foolbox.models import TensorFlowModel
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric)
+from lib.utils import (format_float, import_klass_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric)
-from lib.utils import (import_klass_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
-                       setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
@@ -60,7 +60,8 @@ def import_flags(norm, attack):
     assert norm in lp_attacks
     assert attack in lp_attacks[norm]
     import_klass_annotations_as_flags(lp_attacks[norm][attack],
-                                      prefix="attack_")
+                                      prefix="attack_",
+                                      exclude_args=["loss", "decision_rule"])
     if attack == 'ead':
         flags.DEFINE_string("attack_decision_rule", "L1", "")
 
@@ -167,7 +168,8 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
