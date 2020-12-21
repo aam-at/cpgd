@@ -15,14 +15,15 @@ from foolbox.attacks import (DatasetAttack, L0BrendelBethgeAttack,
                              LinearSearchBlendedUniformNoiseAttack,
                              LinfinityBrendelBethgeAttack)
 from foolbox.models import TensorFlowModel
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric, limit_gpu_growth,
+                          make_input_pipeline)
+from lib.utils import (format_float, import_klass_annotations_as_flags,
+                       log_metrics, register_experiment_flags, reset_metrics,
+                       setup_experiment)
 
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric)
-from lib.utils import (import_klass_annotations_as_flags, log_metrics,
-                       register_experiment_flags, reset_metrics,
-                       setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
@@ -49,7 +50,10 @@ lp_attacks = {
 def import_flags(norm):
     global lp_attacks
     assert norm in lp_attacks
-    import_klass_annotations_as_flags(lp_attacks[norm], "attack_")
+    import_klass_annotations_as_flags(
+        lp_attacks[norm],
+        "attack_",
+        exclude_args=['init_attack', 'tensorboard'])
 
 
 def main(unused_args):
@@ -178,10 +182,12 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds[FLAGS.norm]:
             is_adv_at_th = tf.logical_and(lp <= threshold, is_adv)
-            test_metrics[f"acc_{FLAGS.norm}_%.4f" % threshold](~is_adv_at_th)
+            test_metrics[f"acc_{FLAGS.norm}_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
             if FLAGS.norm == "l0":
                 is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
-                test_metrics[f"acc_l0p_%.2f" % threshold](~is_adv_at_th)
+                test_metrics["acc_l0p_%s" %
+                             format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
@@ -212,9 +218,12 @@ def main(unused_args):
                 "Test results [{:.2f}s, {}]:".format(time.time() - start_time,
                                                      batch_index),
             )
+        else:
+            logging.info(e)
 
 
 if __name__ == "__main__":
+    limit_gpu_growth()
     parser = argparse.ArgumentParser()
     parser.add_argument("--norm", default=None, type=str)
     args, _ = parser.parse_known_args()

@@ -278,10 +278,9 @@ def pgd_config(norm, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    num_images = 1000
-    batch_size = 250
+    batch_size = 50
     attack_grid_args = {
-        'num_batches': [num_images // batch_size],
+        'num_batches': [NUM_IMAGES // batch_size],
         'batch_size': [batch_size],
         'seed': [seed],
         'norm': [norm],
@@ -291,7 +290,7 @@ def pgd_config(norm, seed=123):
     }
     if norm == 'l1':
         attack_grid_args.update({
-            'attack_grad_sparsity': [95, 99]
+            'attack_grad_sparsity': [90, 95, 99]
         })
 
     attack_arg_names = list(attack_grid_args.keys())
@@ -392,6 +391,7 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                             generate_test_optimizer('test_pgd', **attack_args))
 
 
+@cleanflags
 def daa_config(seed=123):
     import test_daa
     from test_daa import import_flags
@@ -402,36 +402,45 @@ def daa_config(seed=123):
 
     batch_size = 50
     norm = 'li'
-    attack_args = {
-        'num_batches': NUM_IMAGES // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+    attack_grid_args = {
+        'num_batches': [NUM_IMAGES // batch_size],
+        'batch_size': [batch_size],
+        'seed': [seed],
+        'attack_loss_fn': ["xent", "cw"],
+        'attack_nb_iter': [500],
+        'attack_nb_restarts': [1],
+        'method': ["blob"]
     }
 
+    attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
     for type in models.keys():
-        for nb_iter, nb_restarts, method, eps, eps_scale in itertools.product(
-                [200], [1, 5], ['dgf', 'blob'], test_model_thresholds[type][norm], [1, 2, 5, 10, 25, 50, 100]):
-            working_dir = f"../results_imagenet/test_{type}/{norm}/daa"
+        working_dir = f"../{basedir}/test_{type}/{norm}/daa"
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        for attack_arg_value in itertools.product(*attack_grid_args.values()):
+            attack_args = dict(zip(attack_arg_names, attack_arg_value))
             attack_args.update({
                 'load_from': models[type],
                 'working_dir': working_dir,
-                'method': method,
-                'attack_nb_restarts': nb_restarts,
-                'attack_nb_iter': nb_iter,
-                'attack_eps': eps,
-                'attack_eps_iter': eps / eps_scale
             })
-            name = f"imagenet_daa_{method}_{type}_n{nb_iter}_N{nb_restarts}_eps{eps}_epss{eps_scale}_"
-            attack_args['name'] = name
-            p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
-            if name in p or name in existing_names:
-                continue
-            existing_names.append(name)
-            print(generate_test_optimizer('test_daa', **attack_args))
+            for eps, eps_scale in itertools.product(
+                    test_model_thresholds[type][norm],
+                [1, 2, 5, 10, 25, 50, 100]):
+                attack_args.update({
+                    'attack_eps': eps,
+                    'attack_eps_iter': eps / eps_scale
+                })
+                name = f"""imagenet_daa_{type}_{norm}_
+{attack_args['attack_loss_fn']}_{attack_args['method']}_
+n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
+eps{eps}_epss{eps_scale}_""".replace("\n", "")
+                attack_args['name'] = name
+                if name in p or name in existing_names:
+                    continue
+                existing_names.append(name)
+                print(generate_test_optimizer('test_daa', **attack_args))
 
 
-# fab attacks
 @cleanflags
 def fab_config(norm, seed=123):
     from lib.fab import FABAttack
@@ -487,8 +496,9 @@ def fab_config(norm, seed=123):
         print(generate_test_optimizer("test_fab", **attack_args))
 
 
-# foolbox attacks
+@cleanflags
 def foolbox_config(norm, attack, seed=123):
+    """Foobox attacks"""
     import test_foolbox
     from test_foolbox import import_flags
 
@@ -498,68 +508,84 @@ def foolbox_config(norm, attack, seed=123):
 
     batch_size = 50
     attack_grid_args = {
-        'num_batches': [NUM_IMAGES // batch_size],
-        'batch_size': [batch_size],
-        'load_from': models,
-        'attack': [attack],
-        'norm': [norm],
-        'seed': [seed]
+        "num_batches": [NUM_IMAGES // batch_size],
+        "batch_size": [batch_size],
+        "load_from": models,
+        "attack": [attack],
+        "norm": [norm],
+        "seed": [seed],
     }
-    if attack == 'df':
+    if attack == "df":
         # default params
         attack_grid_args.update({
-            'attack_steps': [50],
-            'attack_overshoot': [0.02],
+            "attack_steps": [50, 100, 1000],
+            "attack_overshoot": [0.02],
+            "attack_candidates": [10],
         })
-        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
-    elif attack == 'cw':
+        name_fn = (
+            lambda:
+            f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_os{attack_args['attack_overshoot']}_"
+        )
+    elif attack == "cw":
         # default params
         attack_grid_args.update({
-            'attack_steps': [10000],
-            'attack_stepsize': [0.01],
-            'attack_initial_const': [0.01],
-            'attack_binary_search_steps': [9],
-            'attack_abort_early': [False],
+            "attack_steps": [10000],
+            "attack_stepsize": [0.01],
+            "attack_initial_const": [0.01],
+            "attack_binary_search_steps": [9],
+            "attack_abort_early": [False],
         })
-        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
-    elif attack == 'newton':
+        name_fn = (
+            lambda:
+            f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_C{attack_args['attack_initial_const']}_"
+        )
+    elif attack == "newton":
         # default params
         attack_grid_args.update({
-            'attack_steps': [1000],
-            'attack_stepsize': [0.01],
+            "attack_steps": [1000],
+            "attack_stepsize": [0.01],
         })
-        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_"
-    elif attack == 'ead':
+        name_fn = (
+            lambda:
+            f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_lr{attack_args['attack_stepsize']}_"
+        )
+    elif attack == "ead":
         # default params
         attack_grid_args.update({
-            'attack_steps': [1000],
-            'attack_initial_const': [0.01],
-            'attack_binary_search_steps': [9],
-            'attack_decision_rule': ['L1'],
-            'attack_regularization': [0.05],
-            'attack_abort_early': [False],
+            "attack_steps": [1000],
+            "attack_initial_const": [0.01],
+            "attack_binary_search_steps": [9],
+            "attack_decision_rule": ["L1"],
+            "attack_regularization": [0.05],
+            "attack_abort_early": [False],
         })
-        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
-    elif attack == 'ddn':
+        name_fn = (
+            lambda:
+            f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_b{attack_args['attack_regularization']}_C{attack_args['attack_initial_const']}_"
+        )
+    elif attack == "ddn":
         # default params for imagenet
         # see: http://openaccess.thecvf.com/content_CVPR_2019/papers/Rony_Decoupling_Direction_and_Norm_for_Efficient_Gradient-Based_L2_Adversarial_Attacks_CVPR_2019_paper.pdf
         attack_grid_args.update({
-            'attack_steps': [1000],
-            'attack_init_epsilon': [1.0],
-            'attack_gamma': [0.05],
+            "attack_steps": [1000],
+            "attack_init_epsilon": [1.0, 0.1],
+            "attack_gamma": [0.1, 0.05, 0.01],
         })
-        name_fn = lambda: f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_"
+        name_fn = (
+            lambda:
+            f"imagenet_{type}_{attack}_foolbox_n{attack_args['attack_steps']}_eps{attack_args['attack_init_epsilon']}_gamma{attack_args['attack_gamma']}_"
+        )
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
 
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
-        model = attack_arg_value[attack_arg_names.index('load_from')]
+        model = attack_arg_value[attack_arg_names.index("load_from")]
         type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_imagenet/test_{type}/{norm}/{attack}"
+        working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
         attack_args.update({
-            'working_dir': working_dir,
+            "working_dir": working_dir,
         })
         name = name_fn()
         attack_args["name"] = name
@@ -567,9 +593,10 @@ def foolbox_config(norm, attack, seed=123):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_foolbox', **attack_args))
+        print(generate_test_optimizer("test_foolbox", **attack_args))
 
 
+@cleanflags
 def bethge_config(norm, seed=123):
     import test_bethge
     from test_bethge import import_flags
@@ -587,15 +614,18 @@ def bethge_config(norm, seed=123):
     }
 
     existing_names = []
-    for type, lr, num_decay in itertools.product(models.keys(), [1.0], [20]):
+    for type, steps, lr, num_decay in itertools.product(
+            models.keys(), [1000], [1.0, 0.1, 0.01], [20, 100]):
         working_dir = f"../results_imagenet/test_{type}/{norm}/bethge"
         attack_args.update({
-            'load_from': models[type],
-            'working_dir': working_dir,
-            'attack_lr': lr,
-            'attack_lr_num_decay': num_decay
+            "norm": norm,
+            "load_from": models[type],
+            "working_dir": working_dir,
+            "attack_steps": steps,
+            "attack_lr": lr,
+            "attack_lr_num_decay": num_decay,
         })
-        name = f"imagenet_bethge_{type}_{norm}_lr{lr}_nd{num_decay}_"
+        name = f"imagenet_bethge_{type}_{norm}_n{steps}_lr{lr}_nd{num_decay}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
