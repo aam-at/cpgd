@@ -21,14 +21,15 @@ from lib.utils import (format_float, import_func_annotations_as_flags,
 from config import test_model_thresholds
 
 models = {
-    'plain': './models/train_224_nat_slim',
-    'linf': './models/train_224_robust_eps_0.005_lp_inf_slim',
-    'l2': './models/train_224_robust_eps_1.0_lp_2_slim'
+    "plain": "./models/train_224_nat_slim",
+    "linf": "./models/train_224_robust_eps_0.005_lp_inf_slim",
+    "l2": "./models/train_224_robust_eps_1.0_lp_2_slim",
 }
-hostname = subprocess.getoutput('hostname')
+hostname = subprocess.getoutput("hostname")
 basedir = "results_imagenet"
 
 NUM_IMAGES = 1000
+
 
 def test_random(runs=1, master_seed=1):
     existing_names = []
@@ -280,18 +281,16 @@ def pgd_config(norm, seed=123):
 
     batch_size = 50
     attack_grid_args = {
-        'num_batches': [NUM_IMAGES // batch_size],
-        'batch_size': [batch_size],
-        'seed': [seed],
-        'norm': [norm],
-        'attack_loss': ["ce", "cw"],
-        'attack_nb_iter': [500],
-        'attack_nb_restarts': [1]
+        "num_batches": [NUM_IMAGES // batch_size],
+        "batch_size": [batch_size],
+        "seed": [seed],
+        "norm": [norm],
+        "attack_loss": ["ce", "cw"],
+        "attack_nb_iter": [500],
+        "attack_nb_restarts": [1],
     }
-    if norm == 'l1':
-        attack_grid_args.update({
-            'attack_grad_sparsity': [90, 95, 99]
-        })
+    if norm == "l1":
+        attack_grid_args.update({"attack_grad_sparsity": [90, 95, 99]})
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
@@ -302,26 +301,27 @@ def pgd_config(norm, seed=123):
         for attack_arg_value in itertools.product(*attack_grid_args.values()):
             attack_args = dict(zip(attack_arg_names, attack_arg_value))
             attack_args.update({
-                'load_from': models[type],
-                'working_dir': working_dir,
+                "load_from": models[type],
+                "working_dir": working_dir,
             })
             for eps, eps_scale in itertools.product(
                     test_model_thresholds[type][norm],
                 [1, 2, 5, 10, 25, 50, 100]):
                 attack_args.update({
-                    'attack_eps': eps,
-                    'attack_eps_iter': eps / eps_scale
+                    "attack_eps": eps,
+                    "attack_eps_iter": eps / eps_scale
                 })
                 name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
 eps{format_float(eps, 4)}_epss{eps_scale}_""".replace("\n", "")
                 if norm == 'l1':
+                if norm == "l1":
                     name = f"{name}s{attack_args['attack_grad_sparsity']}_"
-                attack_args['name'] = name
+                attack_args["name"] = name
                 if name in p or name in existing_names:
                     continue
                 existing_names.append(name)
-                print(generate_test_optimizer('test_pgd', **attack_args))
+                print(generate_test_optimizer("test_pgd", **attack_args))
 
 
 @cleanflags
@@ -401,15 +401,15 @@ def daa_config(seed=123):
     import_flags("blob")
 
     batch_size = 50
-    norm = 'li'
+    norm = "li"
     attack_grid_args = {
-        'num_batches': [NUM_IMAGES // batch_size],
-        'batch_size': [batch_size],
-        'seed': [seed],
-        'attack_loss_fn': ["xent", "cw"],
-        'attack_nb_iter': [500],
-        'attack_nb_restarts': [1],
-        'method': ["blob"]
+        "num_batches": [NUM_IMAGES // batch_size],
+        "batch_size": [batch_size],
+        "seed": [seed],
+        "attack_loss_fn": ["xent", "cw"],
+        "attack_nb_iter": [500],
+        "attack_nb_restarts": [1],
+        "method": ["blob"],
     }
 
     attack_arg_names = list(attack_grid_args.keys())
@@ -420,15 +420,15 @@ def daa_config(seed=123):
         for attack_arg_value in itertools.product(*attack_grid_args.values()):
             attack_args = dict(zip(attack_arg_names, attack_arg_value))
             attack_args.update({
-                'load_from': models[type],
-                'working_dir': working_dir,
+                "load_from": models[type],
+                "working_dir": working_dir,
             })
             for eps, eps_scale in itertools.product(
                     test_model_thresholds[type][norm],
                 [1, 2, 5, 10, 25, 50, 100]):
                 attack_args.update({
-                    'attack_eps': eps,
-                    'attack_eps_iter': eps / eps_scale
+                    "attack_eps": eps,
+                    "attack_eps_iter": eps / eps_scale
                 })
                 name = f"""imagenet_daa_{type}_{norm}_
 {attack_args['attack_loss_fn']}_{attack_args['method']}_
@@ -485,7 +485,7 @@ def fab_config(norm, seed=123):
             "attack_beta": beta,
             "attack_eps": eps[type][norm],
             "working_dir": working_dir,
-            "load_from": models[type]
+            "load_from": models[type],
         })
         name = f"imagenet_fab_{type}_{norm}_n{n_iter}_N{n_restarts}_"
         attack_args["name"] = name
@@ -608,10 +608,10 @@ def bethge_config(norm, seed=123):
 
     batch_size = 50
     attack_args = {
-        'norm': norm,
-        'num_batches': NUM_IMAGES // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+        "norm": norm,
+        "num_batches": NUM_IMAGES // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
     }
 
     existing_names = []
@@ -627,12 +627,12 @@ def bethge_config(norm, seed=123):
             "attack_lr_num_decay": num_decay,
         })
         name = f"imagenet_bethge_{type}_{norm}_n{steps}_lr{lr}_nd{num_decay}_"
-        attack_args['name'] = name
+        attack_args["name"] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_bethge', **attack_args))
+        print(generate_test_optimizer("test_bethge", **attack_args))
 
 
 @cleanflags
@@ -642,13 +642,13 @@ def deepfool_config(norm, seed=123):
     flags.FLAGS._flags().clear()
     importlib.reload(test_deepfool)
 
-    assert norm in ['l2', 'li']
+    assert norm in ["l2", "li"]
     batch_size = 50
     attack_args = {
-        'num_batches': NUM_IMAGES // batch_size,
-        'batch_size': batch_size,
-        'norm': norm,
-        'seed': seed
+        "num_batches": NUM_IMAGES // batch_size,
+        "batch_size": batch_size,
+        "norm": norm,
+        "seed": seed,
     }
 
     existing_names = []
@@ -669,41 +669,43 @@ def deepfool_config(norm, seed=123):
         print(generate_test_optimizer("test_deepfool", **attack_args))
 
 
+@cleanflags
 def sparsefool_config(seed=123):
     import test_sparsefool
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_sparsefool)
 
-    norm = 'l1'
+    norm = "l1"
     batch_size = 50
     attack_args = {
-        'num_batches': NUM_IMAGES // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+        "num_batches": NUM_IMAGES // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
     }
 
     existing_names = []
     for type, lambda_ in itertools.product(models.keys(), [1.0, 2.0, 3.0]):
         working_dir = f"../results_imagenet/test_{type}/{norm}/sparsefool"
         attack_args.update({
-            'load_from': models[type],
-            'working_dir': working_dir,
-            'attack_epsilon': 0.02,
-            'attack_max_iter': 20,
-            'attack_lambda_': lambda_,
+            "load_from": models[type],
+            "working_dir": working_dir,
+            "attack_epsilon": 0.02,
+            "attack_max_iter": 20,
+            "attack_lambda_": lambda_,
         })
         name = f"imagenet_sparsefool_{type}_{norm}_l{lambda_}_"
-        attack_args['name'] = name
+        attack_args["name"] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_sparsefool', **attack_args))
+        print(generate_test_optimizer("test_sparsefool", **attack_args))
 
 
-# ibm art attacks
+@cleanflags
 def art_config(norm, attack, seed=123):
+    """IBM art toolbox attacks"""
     import test_art
     from test_foolbox import import_flags
 
@@ -772,45 +774,45 @@ def art_config(norm, attack, seed=123):
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_art', **attack_args))
+        print(generate_test_optimizer("test_art", **attack_args))
 
 
 def jsma_config(seed=123):
     batch_size = 50
     attack_args = {
-        'num_batches': NUM_IMAGES // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+        "num_batches": NUM_IMAGES // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
     }
 
     existing_names = []
     for type, targets, theta, lib in itertools.product(
-            models.keys(), ["all", "random", "second"],
-            [1.0], ["cleverhans", "art"]):
+            models.keys(), ["all", "random", "second"], [1.0],
+        ["cleverhans", "art"]):
         working_dir = f"../results_imagenet/test_{type}/{norm}/jsma"
         attack_args.update({
-            'load_from': models[type],
-            'working_dir': working_dir,
-            'attack_targets': targets,
-            'attack_theta': theta,
-            'attack_gamma': 1.0,
-            'attack_impl': lib
+            "load_from": models[type],
+            "working_dir": working_dir,
+            "attack_targets": targets,
+            "attack_theta": theta,
+            "attack_gamma": 1.0,
+            "attack_impl": lib,
         })
         name = f"imagenet_jsma_{type}_{targets}_t{theta}_g1.0_lib{lib}_"
-        attack_args['name'] = name
+        attack_args["name"] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
-        print(generate_test_optimizer('test_jsma', **attack_args))
+        print(generate_test_optimizer("test_jsma", **attack_args))
 
 
 def one_pixel_attack_config(seed=123):
     batch_size = 50
     attack_args = {
-        'num_batches': NUM_IMAGES // batch_size,
-        'batch_size': batch_size,
-        'seed': seed
+        "num_batches": NUM_IMAGES // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
     }
     norm = "l0"
 
