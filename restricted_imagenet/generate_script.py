@@ -314,7 +314,6 @@ def pgd_config(norm, seed=123):
                 name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
 eps{format_float(eps, 4)}_epss{eps_scale}_""".replace("\n", "")
-                if norm == 'l1':
                 if norm == "l1":
                     name = f"{name}s{attack_args['attack_grad_sparsity']}_"
                 attack_args["name"] = name
@@ -434,11 +433,11 @@ def daa_config(seed=123):
 {attack_args['attack_loss_fn']}_{attack_args['method']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
 eps{eps}_epss{eps_scale}_""".replace("\n", "")
-                attack_args['name'] = name
+                attack_args["name"] = name
                 if name in p or name in existing_names:
                     continue
                 existing_names.append(name)
-                print(generate_test_optimizer('test_daa', **attack_args))
+                print(generate_test_optimizer("test_daa", **attack_args))
 
 
 @cleanflags
@@ -462,18 +461,16 @@ def fab_config(norm, seed=123):
 
     existing_names = []
     for type, n_iter, n_restarts in itertools.product(models.keys(), [100],
-                                                       [1, 10]):
+                                                      [1, 10]):
         # default params for imagenet
         # see page 12: https://openreview.net/pdf?id=HJlzxgBtwH
         n_iter = 100
         alpha_max = 0.05
         eta = 1.3
         beta = 0.9
-        eps = {
-            'plain' : {'li' : 0.02, 'l2' : 5.0, 'l1' : 100.0},
-            'linf'  : {'li' : 0.08, 'l2' : 5.0, 'l1' : 250.0},
-            'l2'    : {'li' : 0.08, 'l2' : 5.0, 'l1' : 250.0}
-        }
+        eps = {"plain": {"li": 0.02, "l2": 5.0, "l1": 100.0},
+               "linf": {"li": 0.08, "l2": 5.0, "l1": 250.0},
+               "l2": {"li": 0.08, "l2": 5.0, "l1": 250.0},}
 
         # params
         working_dir = f"../{basedir}/test_{type}/{norm}/fab"
@@ -715,58 +712,61 @@ def art_config(norm, attack, seed=123):
 
     batch_size = 50
     attack_grid_args = {
-        'num_batches': [NUM_IMAGES // batch_size],
-        'batch_size': [batch_size],
-        'attack_batch_size': [batch_size],
-        'load_from': models,
-        'attack': [attack],
-        'norm': [norm],
-        'seed': [seed]
+        "type": models.type,
+        "num_batches": [NUM_IMAGES // batch_size],
+        "batch_size": [batch_size],
+        "attack_batch_size": [batch_size],
+        "attack": [attack],
+        "norm": [norm],
+        "seed": [seed],
     }
-    if attack == 'df':
+    if attack == "df":
         # default params
         attack_grid_args.update({
-            'attack_max_iter': [100, 1000],
-            'attack_nb_grads': [10],
-            'attack_epsilon': [0.02],
+            "attack_max_iter": [50, 100, 1000],
+            "attack_nb_grads": [10],
+            "attack_epsilon": [0.02],
         })
-        name_fn = lambda: f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_os{attack_args['attack_epsilon']}_"
-    elif attack == 'cw':
-        # default params
-        if norm == "l2":
-            attack_grid_args.update({
-                'attack_max_iter': [10000],
-                'attack_initial_const': [0.01],
-                'attack_binary_search_steps': [9],
-            })
-            name_fn = lambda: f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
-        else:
-            attack_grid_args.update({
-                'attack_max_iter': [10000],
-                'attack_eps': [0.3],
-            })
-            name_fn = lambda: f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_eps{attack_args['attack_eps']}_"
-    elif attack == 'ead':
+        name_fn = (
+            lambda:
+            f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_os{attack_args['attack_epsilon']}_"
+        )
+    elif attack == "cw":
         # default params
         attack_grid_args.update({
-            'attack_max_iter': [1000],
-            'attack_initial_const': [0.01],
-            'attack_binary_search_steps': [9],
-            'attack_decision_rule': ['L1'],
-            'attack_beta': [0.05],
+            "attack_max_iter": [10000],
+            "attack_initial_const": [1.0, 0.01],
+            "attack_binary_search_steps": [9],
         })
-        name_fn = lambda: f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
+        name_fn = (
+            lambda:
+            f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
+        )
+    elif attack == "ead":
+        # default params
+        attack_grid_args.update({
+            "attack_max_iter": [1000],
+            "attack_initial_const": [1.0, 0.01],
+            "attack_binary_search_steps": [9],
+            "attack_decision_rule": ["L1"],
+            "attack_beta": [0.05],
+        })
+        name_fn = (
+            lambda:
+            f"imagenet_{type}_{attack}_art_n{attack_args['attack_max_iter']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
+        )
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
 
     for attack_arg_value in itertools.product(*attack_grid_args.values()):
-        model = attack_arg_value[attack_arg_names.index('load_from')]
-        type = Path(model).stem.split("_")[-1]
-        working_dir = f"../results_imagenet/test_{type}/{norm}/{attack}"
         attack_args = dict(zip(attack_arg_names, attack_arg_value))
+        type = attack_args["type"]
+        del attack_args["type"]
+        working_dir = f"../{basedir}/test_{type}/{norm}/{attack}"
         attack_args.update({
-            'working_dir': working_dir,
+            "working_dir": working_dir,
+            "load_from": models[type]
         })
         name = name_fn()
         attack_args["name"] = name
