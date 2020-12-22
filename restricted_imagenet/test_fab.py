@@ -6,13 +6,10 @@ import sys
 import time
 
 import absl
+import lib
 import torch
 import torch.nn.functional as F
 from absl import flags
-
-import lib
-from config import test_thresholds
-from data import fbresnet_augmentor, get_imagenet_dataflow
 from lib.fab import FABAttack, FABPtModelAdapter
 from lib.pt_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
                           l1_metric, l2_metric, li_metric, to_torch)
@@ -20,6 +17,9 @@ from lib.tf_utils import limit_gpu_growth
 from lib.utils import (import_klass_annotations_as_flags, log_metrics,
                        register_experiment_flags, reset_metrics,
                        setup_experiment)
+
+from config import test_thresholds
+from data import fbresnet_augmentor, get_imagenet_dataflow
 from models import TsiprasCNNPt
 from utils import load_tsipras_pt
 
@@ -33,7 +33,9 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_klass_annotations_as_flags(FABAttack, "attack_")
+import_klass_annotations_as_flags(FABAttack,
+                                  "attack_",
+                                  exclude_args=["seed", "verbose"])
 
 FLAGS = flags.FLAGS
 
@@ -56,7 +58,7 @@ def main(unused_args):
 
     # models
     num_classes = len(TsiprasCNNPt.LABEL_RANGES)
-    classifier = TsiprasCNNPt(wrap_outputs=False)
+    classifier = TsiprasCNNPt(wrap_outputs=True)
 
     # load classifier
     all_params = dict(classifier.named_parameters())
