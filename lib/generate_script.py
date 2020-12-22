@@ -111,13 +111,14 @@ def count_number_of_lines(fn):
     def wrapper(*args, **kwargs):
         out = ''
         try:
+            oldstdout = sys.stdout
             sys.stdout = StringIO()
             fn(*args, **kwargs)
             out = sys.stdout.getvalue()
             lines = [l for l in out.split("\n") if l != '']
         finally:
             sys.stdout.close()
-            sys.stdout = sys.__stdout__
+            sys.stdout = oldstdout
             if len(lines) > 0:
                 print("\n".join(lines))
 
