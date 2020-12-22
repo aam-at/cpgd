@@ -68,8 +68,8 @@
 #+BEGIN_SRC python :async :noweb yes :results output :tangle yes
   <<init_script>>
   for model_type in ["plain", "linf", "l2"]:
-      df = parse_results(model_type, "li", "daa", sort_column="li_corr")
-      output_excel(df, model_type, "li", "daa")
+      df = parse_results(model_type, "li", "bethge", sort_column="li_corr")
+      output_excel(df, model_type, "li", "bethge")
 #+END_SRC
 
 ** DAA attack
