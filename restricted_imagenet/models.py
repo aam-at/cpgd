@@ -59,6 +59,8 @@ class ResnetCNN(tf.keras.Model):
                                        7,
                                        strides=2,
                                        use_bias=False,
+                                       padding="SAME",
+                                       activation=None,
                                        name="conv0")(x)
             z = tf.keras.layers.BatchNormalization(axis=bn_axis,
                                                    epsilon=1e-5,
