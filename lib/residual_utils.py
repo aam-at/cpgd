@@ -84,40 +84,34 @@ class BottleNeckTf(tf.keras.layers.Layer):
         return output
 
 
-def make_bottleneck_layer(filter_num,
-                          blocks,
-                          stride=1,
-                          use_bias=True,
-                          activation=tf.nn.relu,
-                          name=None):
-    res_block = tf.keras.Sequential(name=name)
-    res_block.add(
-        BottleNeckTf(
-            filter_num,
-            stride=stride,
-            conv_shortcut=True,
-            use_bias=use_bias,
-            activation=activation,
-            name="block0",
-        ))
-
-    for i in range(1, blocks):
-        res_block.add(
-            BottleNeckTf(
-                filter_num,
-                stride=1,
-                conv_shortcut=False,
-                use_bias=use_bias,
-                activation=activation,
-                name=f"block{i}",
-            ))
-
-    return res_block
-
-
 class ResnetCNNTf(tf.keras.Model):
     def __init__(self):
         super(ResnetCNNTf, self).__init__()
+
+    def _make_block(self, planes, blocks, stride=1, name=None):
+        block = tf.keras.Sequential(name=name)
+        block.add(
+            BottleNeckTf(
+                planes,
+                stride=stride,
+                conv_shortcut=True,
+                use_bias=False,
+                activation=tf.nn.relu,
+                name="block0",
+            ))
+
+        for i in range(1, blocks):
+            block.add(
+                BottleNeckTf(
+                    planes,
+                    stride=1,
+                    conv_shortcut=False,
+                    use_bias=False,
+                    activation=tf.nn.relu,
+                    name=f"block{i}",
+                ))
+
+        return block
 
     def build(self, inputs_shape):
         # configure inputs
@@ -139,29 +133,13 @@ class ResnetCNNTf(tf.keras.Model):
             z = tf.keras.layers.MaxPool2D(pool_size=3,
                                           strides=2,
                                           padding="SAME")(z)
-            block1 = make_bottleneck_layer(64,
-                                           3,
-                                           use_bias=False,
-                                           stride=1,
-                                           name="group0")
+            block1 = self._make_block(64, 3, stride=1, name="group0")
             z = block1(z)
-            block2 = make_bottleneck_layer(128,
-                                           4,
-                                           use_bias=False,
-                                           stride=2,
-                                           name="group1")
+            block2 = self._make_block(128, 4, stride=2, name="group1")
             z = block2(z)
-            block3 = make_bottleneck_layer(256,
-                                           6,
-                                           use_bias=False,
-                                           stride=2,
-                                           name="group2")
+            block3 = self._make_block(256, 6, stride=2, name="group2")
             z = block3(z)
-            block4 = make_bottleneck_layer(512,
-                                           3,
-                                           use_bias=False,
-                                           stride=2,
-                                           name="group3")
+            block4 = self._make_block(512, 3, stride=2, name="group3")
             z = block4(z)
             z = tf.keras.layers.GlobalAveragePooling2D()(z)
             logits = tf.keras.layers.Dense(1000)(z)
