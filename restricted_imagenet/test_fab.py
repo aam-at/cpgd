@@ -12,7 +12,8 @@ import torch.nn.functional as F
 from absl import flags
 from lib.fab import FABAttack, FABPtModelAdapter
 from lib.pt_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric, to_torch)
+                          l1_metric, l2_metric, li_metric, setup_torch,
+                          to_torch)
 from lib.tf_utils import limit_gpu_growth
 from lib.utils import (format_float, import_klass_annotations_as_flags,
                        log_metrics, register_experiment_flags, reset_metrics,
@@ -46,6 +47,7 @@ def main(unused_args):
     assert FLAGS.data_dir is not None
     if FLAGS.data_dir.startswith("$"):
         FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
+    setup_torch(FLAGS.seed)
     setup_experiment(f"madry_fab_test", [__file__, lib.fab.__file__])
 
     # data
