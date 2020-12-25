@@ -48,6 +48,7 @@ def main(unused_args):
     assert FLAGS.norm in ["l2", "li"]
     if FLAGS.data_dir.startswith("$"):
         FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
+    setup_torch(FLAGS.seed)
     setup_experiment(f"madry_deepfool_{FLAGS.norm}_test",
                      [__file__, lib.deepfool.__file__])
 
