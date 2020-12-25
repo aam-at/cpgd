@@ -347,8 +347,8 @@ def pgd_custom_config(norm, top_k=1, seed=123):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../{basedir}/test_{type}/{norm}/pgd/"
         default_args.update({
-            'load_from': model,
-            'working_dir': working_dir,
+            "load_from": model,
+            "working_dir": working_dir,
         })
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         df_all = load_logs(working_dir)
@@ -362,7 +362,7 @@ def pgd_custom_config(norm, top_k=1, seed=123):
             i = 0
             for index, df_row in df.iterrows():
                 # select top-k attack parameters
-                if df_row.at['acc_adv'] > lowest_acc + 0.01 or i >= top_k:
+                if df_row.at["acc_adv"] > lowest_acc + 0.01 or i >= top_k:
                     break
                 else:
                     attack_args = default_args.copy()
@@ -372,22 +372,23 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                     eps_scale = int(
                         round(eps / attack_args["attack_eps_iter"], 2))
                     i += 1
-                    for loss, n_restarts in itertools.product(["cw", "ce"], [10, 100]):
+                    for loss, n_restarts in itertools.product(["cw", "ce"],
+                                                              [10, 100]):
                         attack_args.update({
-                            'attack_nb_restarts': n_restarts,
-                            'attack_loss': loss
+                            "attack_nb_restarts": n_restarts,
+                            "attack_loss": loss
                         })
                         name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
 eps{eps}_epss{eps_scale}_""".replace("\n", "")
-                        if norm == 'l1':
+                        if norm == "l1":
                             name = f"{name}s{attack_args['attack_grad_sparsity']}_"
-                        attack_args['name'] = name
+                        attack_args["name"] = name
                         if name in p or name in existing_names:
                             continue
                         existing_names.append(name)
                         print(
-                            generate_test_optimizer('test_pgd', **attack_args))
+                            generate_test_optimizer("test_pgd", **attack_args))
 
 
 @cleanflags
@@ -450,11 +451,10 @@ def fab_config(norm, seed=123):
     importlib.reload(test_fab)
     import_klass_annotations_as_flags(FABAttack, "attack_")
 
-    num_images = 1000
-    batch_size = 50
+    batch_size = 25
     attack_args = {
         "attack_norm": norm,
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -820,21 +820,21 @@ def one_pixel_attack_config(seed=123):
     for type, iters, es in itertools.product(models.keys(), [100], [1]):
         working_dir = f"../results_imagenet/test_{type}/{norm}/one_pixel"
         attack_args.update({
-            'load_from': models[type],
-            'working_dir': working_dir,
-            'attack_iters': iters,
-            'attack_es': es,
+            "load_from": models[type],
+            "working_dir": working_dir,
+            "attack_iters": iters,
+            "attack_es": es,
         })
         for threshold in test_model_thresholds[type]["l0"]:
-            attack_args['attack_threshold'] = threshold
+            attack_args["attack_threshold"] = threshold
             name = f"imagenet_one_pixel_{type}_es{es}_i{iters}_t{threshold}_"
-            attack_args['name'] = name
+            attack_args["name"] = name
             p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
             if name in p or name in existing_names:
                 continue
             existing_names.append(name)
             print(
-                generate_test_optimizer('test_one_pixel_attack',
+                generate_test_optimizer("test_one_pixel_attack",
                                         **attack_args))
 
 
