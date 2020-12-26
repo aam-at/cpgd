@@ -526,7 +526,7 @@ def foolbox_config(norm, attack, seed=123):
     elif attack == "cw":
         # default params
         attack_grid_args.update({
-            "attack_steps": [10000],
+            "attack_steps": [1000],
             "attack_stepsize": [0.01],
             "attack_initial_const": [0.01],
             "attack_binary_search_steps": [9],
@@ -777,8 +777,10 @@ def art_config(norm, attack, seed=123):
         print(generate_test_optimizer("test_art", **attack_args))
 
 
+@cleanflags
 def jsma_config(seed=123):
     batch_size = 50
+    norm = "l0"
     attack_args = {
         "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
@@ -789,7 +791,7 @@ def jsma_config(seed=123):
     for type, targets, theta, lib in itertools.product(
             models.keys(), ["all", "random", "second"], [1.0],
         ["cleverhans", "art"]):
-        working_dir = f"../results_imagenet/test_{type}/{norm}/jsma"
+        working_dir = f"../{basedir}/test_{type}/{norm}/jsma"
         attack_args.update({
             "load_from": models[type],
             "working_dir": working_dir,
