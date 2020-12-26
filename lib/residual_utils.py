@@ -216,14 +216,14 @@ class ResNetCNNPt(nn.Module):
         self.bn1 = BatchNorm2dPt(self.inplanes)
         self.relu = nn.ReLU(inplace=True)
         self.maxpool = nn.MaxPool2d(kernel_size=3, stride=2, padding=0)
-        self.layer1 = self._make_layer(64, 3)
-        self.layer2 = self._make_layer(128, 4, stride=2)
-        self.layer3 = self._make_layer(256, 6, stride=2)
-        self.layer4 = self._make_layer(512, 3, stride=2)
+        self.layer1 = self._make_block(64, 3)
+        self.layer2 = self._make_block(128, 4, stride=2)
+        self.layer3 = self._make_block(256, 6, stride=2)
+        self.layer4 = self._make_block(512, 3, stride=2)
         self.avgpool = nn.AdaptiveAvgPool2d((1, 1))
         self.fc = nn.Linear(512 * 4, 1000)
 
-    def _make_layer(self, planes, blocks, stride=1):
+    def _make_block(self, planes, blocks, stride=1):
         conv_shortcut = nn.Sequential(
             nn.Conv2d(self.inplanes,
                       planes * 4,
