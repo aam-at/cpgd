@@ -4,19 +4,18 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 
 import absl
 import numpy as np
 import tensorflow as tf
 from absl import flags
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, random_targets)
+from lib.utils import (format_float, log_metrics, register_experiment_flags,
+                       reset_metrics, setup_experiment)
 
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, make_input_pipeline, random_targets)
-from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
-                       save_images, setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
@@ -30,10 +29,13 @@ flags.DEFINE_integer("batch_size", 50, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-flags.DEFINE_string("attack_impl", "cleverhans", "JSMA implementation (cleverhans or art)")
+flags.DEFINE_string("attack_impl", "cleverhans",
+                    "JSMA implementation (cleverhans or art)")
 flags.DEFINE_float("attack_theta", 1.0, "theta for jsma")
 flags.DEFINE_float("attack_gamma", 1.0, "gamma for jsma")
-flags.DEFINE_string("attack_targets", "second", "how to select attack target? (choice: 'random', 'second', 'all')")
+flags.DEFINE_string(
+    "attack_targets", "second",
+    "how to select attack target? (choice: 'random', 'second', 'all')")
 
 FLAGS = flags.FLAGS
 
@@ -93,14 +95,13 @@ def main(unused_args):
             return tf_jsma_generate(x, y_target=y_target)
 
     elif FLAGS.attack_impl == 'art':
-        from art.attacks import SaliencyMapMethod
+        from art.attacks.evasion import SaliencyMapMethod
         from art.classifiers import TensorFlowV2Classifier
 
         def art_classifier(x):
             return test_classifier(x)['logits']
 
         class PatchedTensorflowClassifier(TensorFlowV2Classifier):
-
             def class_gradient(self, x, label=None, **kwargs):
                 import tensorflow as tf
 
@@ -229,9 +230,11 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds["l0"]:
             is_adv_at_th = tf.logical_and(l0 <= threshold, is_adv)
-            test_metrics["acc_l0_%.2f" % threshold](~is_adv_at_th)
+            test_metrics["acc_l0_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
             is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
-            test_metrics["acc_l0p_%.2f" % threshold](~is_adv_at_th)
+            test_metrics["acc_l0p_%s" %
+                         format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
