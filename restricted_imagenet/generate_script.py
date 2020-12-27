@@ -704,7 +704,7 @@ def sparsefool_config(seed=123):
 def art_config(norm, attack, seed=123):
     """IBM art toolbox attacks"""
     import test_art
-    from test_foolbox import import_flags
+    from test_art import import_flags
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_art)
@@ -712,7 +712,7 @@ def art_config(norm, attack, seed=123):
 
     batch_size = 50
     attack_grid_args = {
-        "type": models.type,
+        "type": models.keys(),
         "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
         "attack_batch_size": [batch_size],
@@ -734,7 +734,7 @@ def art_config(norm, attack, seed=123):
     elif attack == "cw":
         # default params
         attack_grid_args.update({
-            "attack_max_iter": [10000],
+            "attack_max_iter": [1000],
             "attack_initial_const": [1.0, 0.01],
             "attack_binary_search_steps": [9],
         })
