@@ -104,11 +104,11 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         "attack_dual_opt": ["sgd"],
         "attack_dual_opt_kwargs": ["{}"],
         "attack_dual_lr": [1e-1],
-        "attack_dual_ema": [False],
-        "attack_loop_number_restarts": [10],
+        "attack_dual_ema": [False, True],
+        "attack_loop_number_restarts": [1],
         "attack_loop_finetune": [True],
         "attack_loop_r0_sampling_algorithm": ["uniform"],
-        "attack_loop_r0_sampling_epsilon": [0.5],
+        "attack_loop_r0_sampling_epsilon": [0.25],
         "attack_loop_r0_ods_init": [False],
         "attack_loop_multitargeted": [False],
         "attack_loop_c0_initial_const": [0.1, 0.01],
@@ -348,7 +348,7 @@ def pgd_custom_config(norm, top_k=1, seed=123):
             df = df[df.attack_eps == eps]
             df = df[df.attack_nb_restarts == 1]
             df = df[df.attack_nb_iter == 500]
-            acc_col = f"acc_{norm}_{format_float(eps)}"
+            acc_col = f"acc_{norm}_{format_float(eps, 4)}"
             df = df.sort_values(acc_col)
             lowest_acc = df.head(1)[acc_col].item()
             i = 0
@@ -407,7 +407,6 @@ def daa_config(seed=123):
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
-
     for model in models:
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../{basedir}/test_{type}/{norm}/daa"
@@ -513,7 +512,7 @@ def fab_config(norm, seed=123):
     import_klass_annotations_as_flags(FABAttack, "attack_")
 
     num_images = 1000
-    batch_size = 250
+    batch_size = 100
     attack_args = {
         "attack_norm": norm,
         "num_batches": num_images // batch_size,
@@ -1012,9 +1011,8 @@ def pixel_attack_config(seed=123):
 
 if __name__ == '__main__':
     # our attacks
-    test_our_attack_config("l2g")
-    test_our_attack_config("l2")
     test_our_attack_config("li")
+    test_our_attack_config("l2g")
     test_our_attack_config("l1")
     test_our_attack_config("l0")
     # li attacks
@@ -1031,7 +1029,6 @@ if __name__ == '__main__':
     # l2 attacks
     deepfool_config("l2")
     foolbox_config("l2", "df")
-    art_config("l2", "df")
     foolbox_config("l2", "cw")
     cleverhans_config("l2", "cw")
     foolbox_config("l2", "ddn")
