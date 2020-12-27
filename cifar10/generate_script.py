@@ -873,7 +873,7 @@ def cornersearch_config(seed=123):
 def art_config(norm, attack, seed=123):
     """IBM art toolbox attacks"""
     import test_art
-    from test_foolbox import import_flags
+    from test_art import import_flags
 
     flags.FLAGS._flags().clear()
     importlib.reload(test_art)
@@ -945,7 +945,7 @@ def art_config(norm, attack, seed=123):
 @cleanflags
 def jsma_config(seed=123):
     num_images = 1000
-    batch_size = 250
+    batch_size = 100
     norm = "l0"
     attack_args = {
         'num_batches': num_images // batch_size,
