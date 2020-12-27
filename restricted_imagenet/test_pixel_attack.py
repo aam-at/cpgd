@@ -4,7 +4,6 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 
 import absl
 import numpy as np
@@ -12,12 +11,12 @@ import tensorflow as tf
 from absl import flags
 from art.attacks import PixelAttack
 from art.classifiers import TensorFlowV2Classifier
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, limit_gpu_growth)
+from lib.utils import (format_float, log_metrics, register_experiment_flags,
+                       reset_metrics, setup_experiment)
 
 from data import fbresnet_augmentor, get_imagenet_dataflow
-from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, make_input_pipeline, random_targets)
-from lib.utils import (log_metrics, register_experiment_flags, reset_metrics,
-                       save_images, setup_experiment)
 from models import TsiprasCNN
 from utils import load_tsipras
 
@@ -136,9 +135,11 @@ def main(unused_args):
         test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
 
         is_adv_at_th = tf.logical_and(l0 <= FLAGS.attack_threshold, is_adv)
-        test_metrics["acc_l0_%.2f" % FLAGS.attack_threshold](~is_adv_at_th)
+        test_metrics["acc_l0_%s" %
+                     format_float(FLAGS.attack_threshold)](~is_adv_at_th)
         is_adv_at_th = tf.logical_and(l0p <= FLAGS.attack_threshold, is_adv)
-        test_metrics["acc_l0p_%.2f" % FLAGS.attack_threshold](~is_adv_at_th)
+        test_metrics["acc_l0p_%s" %
+                     format_float(FLAGS.attack_threshold)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
@@ -172,4 +173,5 @@ def main(unused_args):
 
 
 if __name__ == "__main__":
+    limit_gpu_growth()
     absl.app.run(main)
