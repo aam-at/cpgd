@@ -1,6 +1,5 @@
 import tensorflow as tf
 import torch
-from lib.residual_utils import make_wide_bottleneck_layer
 from torch import nn
 from torch.nn import functional as F
 
@@ -106,60 +105,3 @@ class MadryCNNPt(torch.nn.Module):
             return add_default_end_points({'logits': logits})
         else:
             return logits
-
-
-class MadryWideResnetTf(tf.keras.Model):
-    def __init__(self):
-        super(MadryWideResnetTf, self).__init__()
-
-    def build(self, inputs_shape):
-        # configure inputs
-        x_shape = inputs_shape
-        x = tf.keras.layers.Input(shape=x_shape[1:], name="x")
-        act = tf.keras.layers.LeakyReLU(alpha=0.1)
-
-        # define functional computation graph
-        with tf.init_scope():
-            z = tf.keras.layers.Conv2D(16,
-                                       3,
-                                       strides=1,
-                                       padding="SAME",
-                                       use_bias=False,
-                                       name="conv0")(x)
-            block1 = make_wide_bottleneck_layer(160,
-                                                5,
-                                                use_bias=False,
-                                                stride=1,
-                                                activate_before_residual=True,
-                                                activation=act,
-                                                name="group0")
-            z = block1(z)
-            block2 = make_wide_bottleneck_layer(320,
-                                                5,
-                                                use_bias=False,
-                                                stride=2,
-                                                activate_before_residual=False,
-                                                activation=act,
-                                                name="group1")
-            z = block2(z)
-            block3 = make_wide_bottleneck_layer(640,
-                                                5,
-                                                use_bias=False,
-                                                stride=2,
-                                                activate_before_residual=False,
-                                                activation=act,
-                                                name="group2")
-            z = block3(z)
-            z = tf.keras.layers.BatchNormalization(name="unit_last/bn")(z)
-            z = act(z)
-            z = tf.keras.layers.GlobalAveragePooling2D()(z)
-            logits = tf.keras.layers.Dense(10)(z)
-        self.model = tf.keras.Model(inputs=x, outputs=logits)
-
-    def call(self, inputs, training=True):
-        from lib.tf_utils import add_default_end_points
-
-        inputs = tf.map_fn(lambda img: tf.image.per_image_standardization(img),
-                           inputs)
-        logits = self.model(inputs, training=training)
-        return add_default_end_points({"logits": logits})
