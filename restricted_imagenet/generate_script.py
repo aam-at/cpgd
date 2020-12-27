@@ -3,12 +3,14 @@
 from __future__ import absolute_import, division, print_function
 
 import ast
+import glob
 import importlib
 import itertools
 import subprocess
 from pathlib import Path
 
 import numpy as np
+import pandas as pd
 from absl import flags
 from lib.attack_lp import ProximalPrimalDualGradientAttack
 from lib.generate_script import (cleanflags, count_number_of_lines,
@@ -271,7 +273,7 @@ def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
 
 @count_number_of_lines
 @cleanflags
-def pgd_config(norm, seed=123):
+def pgd_config(norm, num_images=NUM_IMAGES, seed=123):
     import test_pgd
     from test_pgd import import_flags
 
@@ -281,7 +283,7 @@ def pgd_config(norm, seed=123):
 
     batch_size = 50
     attack_grid_args = {
-        "num_batches": [NUM_IMAGES // batch_size],
+        "num_batches": [num_images // batch_size],
         "batch_size": [batch_size],
         "seed": [seed],
         "norm": [norm],
@@ -334,20 +336,18 @@ def pgd_custom_config(norm, top_k=1, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    num_images = 1000
-    batch_size = 500
+    batch_size = 50
     default_args = {
         "norm": norm,
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
     existing_names = []
-    for model in models:
-        type = Path(model).stem.split("_")[-1]
+    for type in models.keys():
         working_dir = f"../{basedir}/test_{type}/{norm}/pgd/"
         default_args.update({
-            "load_from": model,
+            "load_from": models[type],
             "working_dir": working_dir,
         })
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
@@ -373,7 +373,7 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                         round(eps / attack_args["attack_eps_iter"], 2))
                     i += 1
                     for loss, n_restarts in itertools.product(["cw", "ce"],
-                                                              [10, 100]):
+                                                              [10]):
                         attack_args.update({
                             "attack_nb_restarts": n_restarts,
                             "attack_loss": loss
@@ -391,8 +391,9 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                             generate_test_optimizer("test_pgd", **attack_args))
 
 
+@count_number_of_lines
 @cleanflags
-def daa_config(seed=123):
+def daa_config(num_images=NUM_IMAGES, seed=123):
     import test_daa
     from test_daa import import_flags
 
@@ -403,7 +404,7 @@ def daa_config(seed=123):
     batch_size = 50
     norm = "li"
     attack_grid_args = {
-        "num_batches": [NUM_IMAGES // batch_size],
+        "num_batches": [num_images // batch_size],
         "batch_size": [batch_size],
         "seed": [seed],
         "attack_loss_fn": ["xent", "cw"],
@@ -439,6 +440,70 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                     continue
                 existing_names.append(name)
                 print(generate_test_optimizer("test_daa", **attack_args))
+
+
+@cleanflags
+def daa_custom_config(top_k=1, seed=123):
+    """Generate config for DAA with 10, 100 restarts based on the results with 1
+    restart"""
+    import test_daa
+    from test_daa import import_flags
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_daa)
+    import_flags("blob")
+
+    batch_size = 50
+    norm = "li"
+    default_args = {
+        "num_batches": NUM_IMAGES // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
+    }
+    existing_names = []
+    for type in models.keys():
+        working_dir = f"../{basedir}/test_{type}/{norm}/daa/"
+        default_args.update({
+            'load_from': models[type],
+            'working_dir': working_dir,
+        })
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*2b*"))]
+        df_all = load_logs(working_dir)
+        for eps in test_model_thresholds[type][norm]:
+            df = df_all.copy()
+            df = df[df.attack_eps == eps]
+            df = df[df.attack_nb_restarts == 1]
+            df = df[df.attack_nb_iter == 500]
+            df = df.sort_values("acc_adv")
+            lowest_acc = df.head(1).acc_adv.item()
+            i = 0
+            for index, df_row in df.iterrows():
+                # select top-k attack parameters
+                if df_row.at['acc_adv'] > lowest_acc + 0.01 or i >= top_k:
+                    break
+                else:
+                    attack_args = default_args.copy()
+                    for col in df.columns:
+                        if "attack_" in col or col == 'method':
+                            attack_args[col] = df_row.at[col]
+                    eps_scale = int(
+                        round(eps / attack_args["attack_eps_iter"], 2))
+                    i += 1
+                    for loss, n_restarts in itertools.product(['xent', 'cw'], [1]):
+                        attack_args.update({
+                            'attack_nb_restarts': n_restarts,
+                            'attack_loss_fn': loss
+                        })
+                        name = f"""imagenet_daa_{type}_{norm}_
+{attack_args['attack_loss_fn']}_{attack_args['method']}_
+n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
+eps{format_float(eps, 4)}_epss{eps_scale}_""".replace("\n", "")
+                        attack_args['name'] = name
+                        if name in p or name in existing_names:
+                            continue
+                        existing_names.append(name)
+                        print(
+                            generate_test_optimizer('test_daa', **attack_args))
 
 
 @cleanflags
