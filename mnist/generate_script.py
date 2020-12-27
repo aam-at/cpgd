@@ -106,14 +106,14 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         "attack_dual_opt": ["sgd"],
         "attack_dual_opt_kwargs": ["{}"],
         "attack_dual_lr": [1e-1],
-        "attack_dual_ema": [False],
-        "attack_loop_number_restarts": [10],
+        "attack_dual_ema": [True, False],
+        "attack_loop_number_restarts": [1, 10, 100],
         "attack_loop_finetune": [True],
         "attack_loop_r0_sampling_algorithm": ["uniform"],
         "attack_loop_r0_sampling_epsilon": [0.5],
         "attack_loop_r0_ods_init": [False],
         "attack_loop_multitargeted": [False],
-        "attack_loop_c0_initial_const": [0.1, 0.01],
+        "attack_loop_c0_initial_const": [0.1],
         "attack_save": [False],
     }
     if epsilon is not None:
@@ -142,8 +142,8 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
 
     if norm == "l0":
         attack_grid_args.update({
-            "attack_operator": ["l0", "l1", "l1/2", "l2/3"],
-            "attack_has_ecc": [False, True],
+            "attack_operator": ["l2/3"],
+            "attack_has_ecc": [False],
         })
 
     attack_arg_names = list(attack_grid_args.keys())
@@ -162,11 +162,11 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
             if (attack_args["attack_loop_r0_ods_init"]
                     and attack_args["attack_loop_multitargeted"]):
                 continue
-            for lr, decay_factor, lr_decay in itertools.product([1.0], [0.01],
-                                                                [True]):
+            for lr, decay_factor, dlr_decay_factor, lr_decay in itertools.product(
+                [1.0], [0.01], [0.1], [True]):
                 min_lr = round(lr * decay_factor, 6)
                 dlr = attack_args["attack_dual_lr"]
-                min_dlr = round(dlr * decay_factor, 6)
+                min_dlr = round(dlr * dlr_decay_factor, 6)
                 if lr_decay and min_lr < lr:
                     lr_config = {
                         "schedule": "exp",
@@ -179,7 +179,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                         },
                     }
                     dlr_config = {
-                        "schedule": "exp",
+                        "schedule": "linear",
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=dlr,
@@ -214,12 +214,12 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                         },
                     }
                     finetune_dlr_config = {
-                        "schedule": "exp",
+                        "schedule": "linear",
                         "config": {
                             **ExpDecay(
                                 initial_learning_rate=min_dlr,
                                 minimal_learning_rate=round(
-                                    min_dlr * decay_factor, 8),
+                                    min_dlr * dlr_decay_factor, 8),
                                 decay_steps=attack_args["attack_iterations"],
                             ).get_config()
                         },
@@ -316,7 +316,7 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
 
 
 @cleanflags
-def pgd_custom_config(norm, top_k=5, seed=123):
+def pgd_custom_config(norm, top_k=1, seed=123):
     """Generate config for PGD with 10, 100 restarts based on the results with 1
     restart"""
     import test_pgd
@@ -364,9 +364,10 @@ def pgd_custom_config(norm, top_k=5, seed=123):
                     eps_scale = int(
                         round(eps / attack_args["attack_eps_iter"], 2))
                     i += 1
-                    for n_restarts in [10]:
+                    for loss, n_restarts in itertools.product(["cw", "ce"], [10, 100]):
                         attack_args.update({
-                            'attack_nb_restarts': n_restarts
+                            'attack_nb_restarts': n_restarts,
+                            'attack_loss': loss
                         })
                         name = f"""mnist_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
@@ -1011,12 +1012,12 @@ def jsma_config(seed=123):
 def pixel_attack_config(seed=123):
     num_images = 1000
     batch_size = 200
+    norm = "l0"
     attack_args = {
         "num_batches": num_images // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
-    norm = "l0"
 
     existing_names = []
     for model, iters, es in itertools.product(models, [100], [1]):
@@ -1051,26 +1052,33 @@ if __name__ == '__main__':
     deepfool_config("li")
     foolbox_config("li", "df")
     bethge_config("li")
-    daa_config()
-    pgd_config("li")
+    to_execute_cmds = daa_config()
+    if to_execute_cmds == 0:
+        daa_custom_config()
+    to_execute_cmds = pgd_config("li")
+    if to_execute_cmds == 0:
+        pgd_custom_config("li")
     fab_config("li")
     # l2 attacks
     deepfool_config("l2")
     foolbox_config("l2", "df")
-    art_config("l2", "df")
     foolbox_config("l2", "cw")
     cleverhans_config("l2", "cw")
     foolbox_config("l2", "ddn")
     foolbox_config("l2", "newton")
     bethge_config("l2")
-    pgd_config("l2")
+    to_execute_cmds = pgd_config("l2")
+    if to_execute_cmds == 0:
+        pgd_custom_config("l2")
     fab_config("l2")
     # l1 attacks
     sparsefool_config()
     cleverhans_config("l1", "ead")
     foolbox_config("l1", "ead")
     bethge_config("l1")
-    pgd_config("l1")
+    to_execute_cmds = pgd_config("l1")
+    if to_execute_cmds == 0:
+        pgd_custom_config("l1")
     fab_config("l1")
     # l0 attacks
     jsma_config()
