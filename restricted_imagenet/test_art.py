@@ -28,6 +28,7 @@ register_experiment_flags(working_dir="../results/imagenet/test_art")
 flags.DEFINE_string("attack", None, "attack class")
 flags.DEFINE_string("norm", "l2", "lp-norm attack")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
+flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 # test parameters
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
