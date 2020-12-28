@@ -31,8 +31,7 @@ models = [
 hostname = subprocess.getoutput("hostname")
 basedir = "results_mnist"
 
-FLAGS = flags.FLAGS
-
+NUM_IMAGES = 1000
 
 def test_random(runs=1, master_seed=1):
     existing_names = []
@@ -92,10 +91,9 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
     import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
 
-    num_images = 1000
     batch_size = 500
     attack_grid_args = {
-        "num_batches": [num_images // batch_size],
+        "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
         "seed": [seed],
         "attack": [attack],
@@ -267,10 +265,9 @@ def pgd_config(norm, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    num_images = 1000
     batch_size = 500
     attack_grid_args = {
-        'num_batches': [num_images // batch_size],
+        'num_batches': [NUM_IMAGES // batch_size],
         'batch_size': [batch_size],
         'seed': [seed],
         'norm': [norm],
@@ -326,11 +323,10 @@ def pgd_custom_config(norm, top_k=1, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    num_images = 1000
     batch_size = 500
     default_args = {
         "norm": norm,
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -392,11 +388,10 @@ def daa_config(seed=123):
     importlib.reload(test_daa)
     import_flags("blob")
 
-    num_images = 1000
     batch_size = 200
     norm = "li"
     attack_grid_args = {
-        'num_batches': [num_images // batch_size],
+        'num_batches': [NUM_IMAGES // batch_size],
         'batch_size': [batch_size],
         'seed': [seed],
         'attack_loss_fn': ["xent", "cw"],
@@ -447,11 +442,10 @@ def daa_custom_config(top_k=1, seed=123):
     importlib.reload(test_daa)
     import_flags("blob")
 
-    num_images = 1000
     batch_size = 200
     norm = "li"
     default_args = {
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -512,11 +506,10 @@ def fab_config(norm, seed=123):
     importlib.reload(test_fab)
     import_klass_annotations_as_flags(FABAttack, "attack_")
 
-    num_images = 1000
     batch_size = 500
     attack_args = {
         "attack_norm": norm,
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -580,10 +573,9 @@ def cleverhans_config(norm, attack, seed=123):
     importlib.reload(test_cleverhans)
     import_flags(norm, attack)
 
-    num_images = 1000
     batch_size = 500
     attack_grid_args = {
-        "num_batches": [num_images // batch_size],
+        "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
         "load_from": models,
         "attack": [attack],
@@ -651,10 +643,9 @@ def foolbox_config(norm, attack, seed=123):
     importlib.reload(test_foolbox)
     import_flags(norm, attack)
 
-    num_images = 1000
     batch_size = 500
     attack_grid_args = {
-        "num_batches": [num_images // batch_size],
+        "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
         "load_from": models,
         "attack": [attack],
@@ -751,11 +742,10 @@ def bethge_config(norm, seed=123):
     importlib.reload(test_bethge)
     import_flags(norm)
 
-    num_images = 1000
     batch_size = 500
     attack_args = {
         "norm": norm,
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -790,10 +780,9 @@ def deepfool_config(norm, seed=123):
     importlib.reload(test_deepfool)
 
     assert norm in ["l2", "li"]
-    num_images = 1000
     batch_size = 500
     attack_args = {
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "norm": norm,
         "seed": seed,
@@ -826,10 +815,9 @@ def sparsefool_config(seed=123):
     importlib.reload(test_sparsefool)
 
     norm = "l1"
-    num_images = 1000
     batch_size = 500
     attack_args = {
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -862,10 +850,9 @@ def cornersearch_config(seed=123):
     importlib.reload(test_cornersearch)
 
     norm = "l0"
-    num_images = 1000
     batch_size = 500
     attack_args = {
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -898,10 +885,9 @@ def art_config(norm, attack, seed=123):
     importlib.reload(test_art)
     import_flags(norm, attack)
 
-    num_images = 1000
     batch_size = 500
     attack_grid_args = {
-        "num_batches": [num_images // batch_size],
+        "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
         "attack_batch_size": [batch_size],
         "load_from": models,
@@ -977,11 +963,10 @@ def art_config(norm, attack, seed=123):
 
 @cleanflags
 def jsma_config(seed=123):
-    num_images = 1000
     batch_size = 500
     norm = "l0"
     attack_args = {
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -1010,11 +995,10 @@ def jsma_config(seed=123):
 
 @cleanflags
 def pixel_attack_config(seed=123):
-    num_images = 1000
     batch_size = 200
     norm = "l0"
     attack_args = {
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }

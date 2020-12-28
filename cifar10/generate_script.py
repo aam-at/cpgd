@@ -29,7 +29,7 @@ models = [
 hostname = subprocess.getoutput('hostname')
 basedir = "results_cifar10"
 
-FLAGS = flags.FLAGS
+NUM_IMAGES = 1000
 
 
 def test_random(runs=1, master_seed=1):
@@ -90,10 +90,9 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
     import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
 
-    num_images = 1000
     batch_size = 250
     attack_grid_args = {
-        "num_batches": [num_images // batch_size],
+        "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
         "seed": [seed],
         "attack": [attack],
@@ -105,7 +104,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         "attack_dual_opt_kwargs": ["{}"],
         "attack_dual_lr": [1e-1],
         "attack_dual_ema": [False, True],
-        "attack_loop_number_restarts": [1],
+        "attack_loop_number_restarts": [1, 10],
         "attack_loop_finetune": [True],
         "attack_loop_r0_sampling_algorithm": ["uniform"],
         "attack_loop_r0_sampling_epsilon": [0.25],
@@ -265,11 +264,9 @@ def pgd_config(norm, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    num_images = 1000
     batch_size = 500
-
     attack_grid_args = {
-        'num_batches': [num_images // batch_size],
+        'num_batches': [NUM_IMAGES // batch_size],
         'batch_size': [batch_size],
         'seed': [seed],
         'norm': [norm],
@@ -278,9 +275,7 @@ def pgd_config(norm, seed=123):
         'attack_nb_restarts': [1]
     }
     if norm == 'l1':
-        attack_grid_args.update({
-            'attack_grad_sparsity': [95, 99]
-        })
+        attack_grid_args.update({'attack_grad_sparsity': [90, 95, 99]})
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
@@ -325,11 +320,10 @@ def pgd_custom_config(norm, top_k=1, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    num_images = 1000
     batch_size = 500
     default_args = {
         "norm": norm,
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -364,7 +358,8 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                     eps_scale = int(
                         round(eps / attack_args["attack_eps_iter"], 2))
                     i += 1
-                    for loss, n_restarts in itertools.product(["cw", "ce"], [10, 100]):
+                    for loss, n_restarts in itertools.product(["cw", "ce"],
+                                                              [10, 100]):
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
                             'attack_loss': loss
@@ -392,11 +387,10 @@ def daa_config(seed=123):
     importlib.reload(test_daa)
     import_flags("blob")
 
-    num_images = 1000
     batch_size = 200
     norm = "li"
     attack_grid_args = {
-        'num_batches': [num_images // batch_size],
+        'num_batches': [NUM_IMAGES // batch_size],
         'batch_size': [batch_size],
         'seed': [seed],
         'attack_loss_fn': ["xent", "cw"],
@@ -446,11 +440,10 @@ def daa_custom_config(top_k=1, seed=123):
     importlib.reload(test_daa)
     import_flags("blob")
 
-    num_images = 1000
     batch_size = 200
     norm = "li"
     default_args = {
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -484,7 +477,8 @@ def daa_custom_config(top_k=1, seed=123):
                     eps_scale = int(
                         round(eps / attack_args["attack_eps_iter"], 2))
                     i += 1
-                    for loss, n_restarts in itertools.product(['xent', 'cw'], [10, 100]):
+                    for loss, n_restarts in itertools.product(['xent', 'cw'],
+                                                              [10, 100]):
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
                             'attack_loss_fn': loss
@@ -511,11 +505,10 @@ def fab_config(norm, seed=123):
     importlib.reload(test_fab)
     import_klass_annotations_as_flags(FABAttack, "attack_")
 
-    num_images = 1000
     batch_size = 100
     attack_args = {
         "attack_norm": norm,
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -529,9 +522,21 @@ def fab_config(norm, seed=123):
         eta = 1.05
         beta = 0.9
         eps = {
-            'plain': {'li': 0.0, 'l2':  0.5, 'l1': 10.0},
-            'linf':  {'li': 0.02, 'l2': 4.0, 'l1': 10.0},
-            'l2':    {'li': 0.02, 'l2': 4.0, 'l1': 10.0}
+            'plain': {
+                'li': 0.0,
+                'l2': 0.5,
+                'l1': 10.0
+            },
+            'linf': {
+                'li': 0.02,
+                'l2': 4.0,
+                'l1': 10.0
+            },
+            'l2': {
+                'li': 0.02,
+                'l2': 4.0,
+                'l1': 10.0
+            }
         }
 
         # params
@@ -566,10 +571,9 @@ def cleverhans_config(norm, attack, seed=123):
     importlib.reload(test_cleverhans)
     import_flags(norm, attack)
 
-    num_images = 1000
     batch_size = 500
     attack_grid_args = {
-        'num_batches': [num_images // batch_size],
+        'num_batches': [NUM_IMAGES // batch_size],
         'batch_size': [batch_size],
         'load_from': models,
         'attack': [attack],
@@ -631,10 +635,9 @@ def foolbox_config(norm, attack, seed=123):
     importlib.reload(test_foolbox)
     import_flags(norm, attack)
 
-    num_images = 1000
     batch_size = 500
     attack_grid_args = {
-        "num_batches": [num_images // batch_size],
+        "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
         "load_from": models,
         "attack": [attack],
@@ -731,11 +734,10 @@ def bethge_config(norm, seed=123):
     importlib.reload(test_bethge)
     import_flags(norm)
 
-    num_images = 1000
     batch_size = 250
     attack_args = {
         "norm": norm,
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -770,10 +772,9 @@ def deepfool_config(norm, seed=123):
     importlib.reload(test_deepfool)
 
     assert norm in ['l2', 'li']
-    num_images = 1000
     batch_size = 500
     attack_args = {
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
         'norm': norm,
         'seed': seed
@@ -806,10 +807,9 @@ def sparsefool_config(seed=123):
     importlib.reload(test_sparsefool)
 
     norm = 'l1'
-    num_images = 1000
     batch_size = 500
     attack_args = {
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
         'seed': seed
     }
@@ -842,10 +842,9 @@ def cornersearch_config(seed=123):
     importlib.reload(test_cornersearch)
 
     norm = "l0"
-    num_images = 1000
     batch_size = 500
     attack_args = {
-        "num_batches": num_images // batch_size,
+        "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
     }
@@ -857,7 +856,7 @@ def cornersearch_config(seed=123):
         attack_args.update({
             "load_from": model,
             "working_dir": working_dir,
-            "attack_sparsity": 32 ** 2
+            "attack_sparsity": 32**2
         })
         name = f"cifar10_cs_{type}_{norm}_"
         attack_args["name"] = name
@@ -878,16 +877,12 @@ def art_config(norm, attack, seed=123):
     importlib.reload(test_art)
     import_flags(norm, attack)
 
-    num_images = 1000
     batch_size = 250
     attack_grid_args = {
-        'num_batches':
-        [num_images // batch_size],
-        'batch_size':
-        [batch_size],
+        'num_batches': [NUM_IMAGES // batch_size],
+        'batch_size': [batch_size],
         'attack_batch_size': [batch_size],
-        'load_from':
-        models,
+        'load_from': models,
         'attack': [attack],
         'norm': [norm],
         'seed': [seed]
@@ -899,7 +894,7 @@ def art_config(norm, attack, seed=123):
             'attack_nb_grads': [10],
             'attack_epsilon': [0.02],
         })
-        name_fn = lambda : f"cifar10_{type}_{attack}_art_n{attack_args['attack_max_iter']}_os{attack_args['attack_epsilon']}_"
+        name_fn = lambda: f"cifar10_{type}_{attack}_art_n{attack_args['attack_max_iter']}_os{attack_args['attack_epsilon']}_"
     elif attack == 'cw':
         # default params
         attack_grid_args.update({
@@ -907,7 +902,7 @@ def art_config(norm, attack, seed=123):
             'attack_initial_const': [1.0, 0.01],
             'attack_binary_search_steps': [9],
         })
-        name_fn = lambda : f"cifar10_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
+        name_fn = lambda: f"cifar10_{type}_{attack}_art_n{attack_args['attack_max_iter']}_C{attack_args['attack_initial_const']}_"
     elif attack == 'ead':
         # default params
         attack_grid_args.update({
@@ -917,7 +912,7 @@ def art_config(norm, attack, seed=123):
             'attack_decision_rule': ['L1'],
             'attack_beta': [0.05],
         })
-        name_fn = lambda : f"cifar10_{type}_{attack}_art_n{attack_args['attack_max_iter']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
+        name_fn = lambda: f"cifar10_{type}_{attack}_art_n{attack_args['attack_max_iter']}_b{attack_args['attack_beta']}_C{attack_args['attack_initial_const']}_"
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
@@ -932,9 +927,7 @@ def art_config(norm, attack, seed=123):
         })
         name = name_fn()
         attack_args["name"] = name
-        p = [
-            s.name[:-1] for s in list(Path(working_dir).glob("*"))
-        ]
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
             continue
         existing_names.append(name)
@@ -943,19 +936,18 @@ def art_config(norm, attack, seed=123):
 
 @cleanflags
 def jsma_config(seed=123):
-    num_images = 1000
     batch_size = 100
     norm = "l0"
     attack_args = {
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
         'seed': seed
     }
 
     existing_names = []
     for model, targets, theta, lib in itertools.product(
-            models, ["all", "random", "second"],
-            [1.0, 0.1], ["cleverhans", "art"]):
+            models, ["all", "random", "second"], [1.0, 0.1],
+        ["cleverhans", "art"]):
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../{basedir}/test_{type}/{norm}/jsma"
         attack_args.update({
@@ -977,11 +969,10 @@ def jsma_config(seed=123):
 
 @cleanflags
 def pixel_attack_config(seed=123):
-    num_images = 1000
     batch_size = 100
     norm = "l0"
     attack_args = {
-        'num_batches': num_images // batch_size,
+        'num_batches': NUM_IMAGES // batch_size,
         'batch_size': batch_size,
         'seed': seed
     }
@@ -1004,9 +995,7 @@ def pixel_attack_config(seed=123):
             if name in p or name in existing_names:
                 continue
             existing_names.append(name)
-            print(
-                generate_test_optimizer('test_pixel_attack',
-                                        **attack_args))
+            print(generate_test_optimizer('test_pixel_attack', **attack_args))
 
 
 if __name__ == '__main__':
