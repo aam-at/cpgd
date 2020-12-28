@@ -781,11 +781,10 @@ def cornersearch_config(seed=123):
     }
 
     existing_names = []
-    for model in models:
-        type = Path(model).stem.split("_")[-1]
+    for type in models.keys():
         working_dir = f"../{basedir}/test_{type}/{norm}/cornersearch"
         attack_args.update({
-            "load_from": model,
+            "load_from": models[type],
             "working_dir": working_dir,
             "attack_sparsity": 224 ** 2
         })
@@ -908,7 +907,7 @@ def jsma_config(seed=123):
 
 
 @cleanflags
-def one_pixel_attack_config(seed=123):
+def pixel_attack_config(seed=123):
     batch_size = 50
     norm = "l0"
     attack_args = {
@@ -939,5 +938,39 @@ def one_pixel_attack_config(seed=123):
                                         **attack_args))
 
 
-if __name__ == '__main__':
-    pass
+if __name__ == "__main__":
+    # li attacks
+    deepfool_config("li")
+    foolbox_config("li", "df")
+    bethge_config("li")
+    # to_execute_cmds = daa_config(1000)
+    # if to_execute_cmds == 0:
+    #     daa_custom_config()
+    # to_execute_cmds = pgd_config("li")
+    # if to_execute_cmds == 0:
+    #     pgd_custom_config("li")
+    fab_config("li")
+    # l2 attacks
+    deepfool_config("l2")
+    foolbox_config("l2", "df")
+    art_config("l2", "df")
+    foolbox_config("l2", "cw")
+    foolbox_config("l2", "ddn")
+    bethge_config("l2")
+    # # to_execute_cmds = pgd_config("l2")
+    # # if to_execute_cmds == 0:
+    # #     pgd_custom_config("l2")
+    fab_config("l2")
+    # l1 attacks
+    sparsefool_config()
+    foolbox_config("l1", "ead")
+    bethge_config("l1")
+    # # to_execute_cmds = pgd_config("l1")
+    # # if to_execute_cmds == 0:
+    # #     pgd_custom_config("l1")
+    fab_config("l1")
+    # l0 attacks
+    jsma_config()
+    cornersearch_config()
+    # pixel_attack_config()
+    bethge_config("l0")
