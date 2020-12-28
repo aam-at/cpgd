@@ -43,15 +43,15 @@ def test_random(runs=1, master_seed=1):
         name = f"imagenet_{type}_N{N}_{init}_{eps}_"
         working_dir = f"../results/imagenet/test_random_{type}_{norm}"
         attack_args = {
-            'working_dir': working_dir,
-            'data_dir': os.environ['IMAGENET_DIR'],
-            'load_from': models[model],
-            'num_batches': 5,
+            "working_dir": working_dir,
+            "data_dir": os.environ["IMAGENET_DIR"],
+            "load_from": models[model],
+            "num_batches": 5,
             "norm": norm,
             "restarts": N,
             "init": init,
-            'epsilon': eps,
-            'name': name
+            "epsilon": eps,
+            "name": name,
         }
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
