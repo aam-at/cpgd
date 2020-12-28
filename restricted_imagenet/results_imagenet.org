@@ -92,8 +92,8 @@
 #+BEGIN_SRC python :async :noweb yes :results output :tangle yes
   <<init_script>>
   for model_type in ["plain", "linf", "l2"]:
-      df = parse_results(model_type, "li", "fab", sort_column="li_corr", group_by="attack_n_restarts")
-      output_excel(df, model_type, "li", "fab", group_by="attack_n_restarts")
+      df = parse_results(model_type, "li", "fab")
+      output_excel(df, model_type, "li", "fab")
 #+END_SRC
 
 ** PDPGD attack
@@ -149,8 +149,8 @@
 #+BEGIN_SRC python :async :noweb yes :results output :tangle yes
   <<init_script>>
   for model_type in ["plain", "linf", "l2"]:
-      df = parse_results(model_type, "l2", "fab", group_by="attack_n_restarts")
-      output_excel(df, model_type, "l2", "fab", group_by="attack_n_restarts")
+      df = parse_results(model_type, "l2", "fab")
+      output_excel(df, model_type, "l2", "fab")
 #+END_SRC
 
 ** PDGD attack
@@ -198,8 +198,8 @@
 #+BEGIN_SRC python :async :noweb yes :results output :tangle yes
   <<init_script>>
   for model_type in ["plain", "linf", "l2"]:
-      df = parse_results(model_type, "l1", "fab", group_by="attack_n_restarts")
-      output_excel(df, model_type, "l1", "fab", group_by="attack_n_restarts")
+      df = parse_results(model_type, "l1", "fab")
+      output_excel(df, model_type, "l1", "fab")
 #+END_SRC
 
 ** PDPGD attack

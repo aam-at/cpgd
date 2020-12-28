@@ -593,7 +593,7 @@ def cleverhans_config(norm, attack, seed=123):
     if attack == "cw":
         # default params
         attack_grid_args.update({
-            "attack_max_iterations": [10000],
+            "attack_max_iterations": [1000, 10000],
             "attack_learning_rate": [0.01],
             "attack_initial_const": [0.01],
             "attack_binary_search_steps": [9],
@@ -675,7 +675,7 @@ def foolbox_config(norm, attack, seed=123):
     elif attack == "cw":
         # default params
         attack_grid_args.update({
-            "attack_steps": [10000],
+            "attack_steps": [1000, 10000],
             "attack_stepsize": [0.01],
             "attack_initial_const": [0.01],
             "attack_binary_search_steps": [9],
