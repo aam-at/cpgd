@@ -192,6 +192,7 @@ def sparse_l0_descent(x,
     optimal_perturbation = grad / (
         1e-10 + tf.reduce_sum(tf.abs(grad), axis=red_ind, keepdims=True))
     # Add perturbation to original example to obtain adversarial example
+    # NOTE: add small random noise to avoid ties
     adv_x = (x + utils_tf.mul(eps, optimal_perturbation) +
              (tf.random.uniform(tf.shape(x)) - 0.5) * 1e-12)
     return adv_x
