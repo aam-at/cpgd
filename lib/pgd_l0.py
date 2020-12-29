@@ -199,11 +199,11 @@ def sparse_l0_descent(x,
 
 
 def project_l0_box(x, k, lb, ub):
-    dim = tf.reduce_prod(tf.shape(x)[1:])
     p1 = tf.reduce_sum(x**2, axis=-1)
     p2 = tf.minimum(tf.minimum(ub - x, x - lb), 0.0)
     p2 = tf.reduce_sum(p2**2, axis=-1)
-    p3 = tf.sort(tf.reshape(p1 - p2, (-1, dim)))[:, -k]
+    dims = tf.reduce_prod(tf.shape(p1)[1:])
+    p3 = tf.sort(tf.reshape(p1 - p2, (-1, dims)))[:, -k]
     x = tf.clip_by_value(x, lb, ub)
     x *= tf.cast(tf.expand_dims((p1 - p2) >= tf.reshape(p3, (-1, 1, 1)), -1),
                  dtype=x.dtype)
