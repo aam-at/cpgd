@@ -51,7 +51,7 @@ def import_flags(norm):
     global lp_attacks
     assert norm in lp_attacks
     exclude_args = ['clip_min', 'clip_max', 'rand_init']
-    if norm != 'l1':
+    if norm not in ['l0', 'l1']:
         exclude_args.append('ord')
     import_func_annotations_as_flags(lp_attacks[norm].parse_params,
                                      prefix="attack_",
@@ -103,7 +103,7 @@ def main(unused_args):
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
         and kwarg not in ['attack_loss', 'attack_nb_restarts']
     }
-    if FLAGS.norm != 'l1':
+    if FLAGS.norm not in ['l0', 'l1']:
         attack_kwargs['ord'] = 2 if FLAGS.norm == 'l2' else np.inf
     # select loss
     if FLAGS.attack_loss == "cw":
