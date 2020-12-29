@@ -359,7 +359,8 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                         if "attack_" in col:
                             attack_args[col] = df_row.at[col]
                     eps_scale = int(
-                        round((PGD_L0_EPS if norm == "l0" else eps) / attack_args["attack_eps_iter"], 2))
+                        round((PGD_L0_EPS if norm == "l0" else eps) /
+                              attack_args["attack_eps_iter"], 2))
                     i += 1
                     for loss, n_restarts in itertools.product(["cw", "ce"], [10, 100]):
                         attack_args.update({

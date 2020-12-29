@@ -30,6 +30,7 @@ hostname = subprocess.getoutput('hostname')
 basedir = "results_cifar10"
 
 NUM_IMAGES = 1000
+PGD_L0_EPS = 10000
 
 
 def test_random(runs=1, master_seed=1):
@@ -295,7 +296,8 @@ def pgd_config(norm, seed=123):
                 [1, 2, 5, 10, 25, 50, 100]):
                 attack_args.update({
                     'attack_eps': eps,
-                    'attack_eps_iter': eps / eps_scale
+                    'attack_eps_iter':
+                    (PGD_L0_EPS if norm == "l0" else eps) / eps_scale
                 })
                 name = f"""cifar10_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
@@ -356,7 +358,8 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                         if "attack_" in col:
                             attack_args[col] = df_row.at[col]
                     eps_scale = int(
-                        round(eps / attack_args["attack_eps_iter"], 2))
+                        round((PGD_L0_EPS if norm == "l0" else eps) /
+                              attack_args["attack_eps_iter"], 2))
                     i += 1
                     for loss, n_restarts in itertools.product(["cw", "ce"],
                                                               [10, 100]):
@@ -1040,3 +1043,6 @@ if __name__ == '__main__':
     cornersearch_config()
     pixel_attack_config()
     bethge_config("l0")
+    to_execute_cmds = pgd_config("l0")
+    if to_execute_cmds == 0:
+        pgd_custom_config("l0")
