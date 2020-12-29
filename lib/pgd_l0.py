@@ -82,11 +82,7 @@ class SparseL0Descent(Attack):
                                       logits,
                                       y=labels,
                                       eps=self.eps_iter,
-                                      clip_min=self.clip_min,
-                                      clip_max=self.clip_max,
-                                      clip_grad=self.clip_grad,
-                                      targeted=(self.y_target is not None),
-                                      sanity_checks=self.sanity_checks)
+                                      targeted=(self.y_target is not None))
 
             # Clipping perturbation eta to the l1-ball
             eta = adv_x - x
@@ -98,15 +94,6 @@ class SparseL0Descent(Attack):
                 adv_x = utils_tf.clip_by_value(adv_x, self.clip_min,
                                                self.clip_max)
 
-        # Asserts run only on CPU.
-        # When multi-GPU eval code tries to force all PGD ops onto GPU, this
-        # can cause an error.
-        common_dtype = tf.float32
-        asserts.append(
-            utils_tf.assert_less_equal(
-                tf.cast(self.eps_iter, dtype=common_dtype),
-                tf.cast(self.eps, dtype=common_dtype)))
-
         if self.sanity_checks:
             with tf.control_dependencies(asserts):
                 adv_x = tf.identity(adv_x)
@@ -114,7 +101,7 @@ class SparseL0Descent(Attack):
         return adv_x
 
     def parse_params(self,
-                     eps=10.0,
+                     eps=1,
                      eps_iter=1.0,
                      nb_iter=20,
                      y=None,
@@ -161,11 +148,6 @@ class SparseL0Descent(Attack):
         self.clip_max = clip_max
         self.clip_grad = clip_grad
 
-        if isinstance(eps, float) and isinstance(eps_iter, float):
-            # If these are both known at compile time, we can check before anything
-            # is run. If they are tf, we can't check them yet.
-            assert eps_iter <= eps, (eps_iter, eps)
-
         if self.y is not None and self.y_target is not None:
             raise ValueError("Must not set both y and y_target")
 
@@ -187,26 +169,10 @@ def sparse_l0_descent(x,
                       y=None,
                       eps=1.0,
                       loss_fn=softmax_cross_entropy_with_logits,
-                      clip_min=None,
-                      clip_max=None,
-                      clip_grad=False,
-                      targeted=False,
-                      sanity_checks=True):
+                      targeted=False):
     """
     TensorFlow implementation of the L0 Descent Method.
     """
-
-    asserts = []
-
-    # If a data range was specified, check that the input was in that range
-    if clip_min is not None:
-        asserts.append(
-            utils_tf.assert_greater_equal(x, tf.cast(clip_min, x.dtype)))
-
-    if clip_max is not None:
-        asserts.append(
-            utils_tf.assert_less_equal(x, tf.cast(clip_max, x.dtype)))
-
     if y is None:
         # Using model predictions as ground truth to avoid label leaking
         preds_max = tf.reduce_max(logits, 1, keepdims=True)
@@ -222,37 +188,22 @@ def sparse_l0_descent(x,
     # Define gradient of loss wrt input
     grad, = tf.gradients(ys=loss, xs=x)
 
-    if clip_grad:
-        grad = utils_tf.zero_out_clipped_grads(grad, x, clip_min, clip_max)
-
     red_ind = list(range(1, len(grad.get_shape())))
     optimal_perturbation = grad / (
         1e-10 + tf.reduce_sum(tf.abs(grad), axis=red_ind, keepdims=True))
     # Add perturbation to original example to obtain adversarial example
-    t = utils_tf.mul(eps, optimal_perturbation)
-    adv_x = (x + t)
-
-    # If clipping is needed, reset all values outside of [clip_min, clip_max]
-    if (clip_min is not None) or (clip_max is not None):
-        # We don't currently support one-sided clipping
-        assert clip_min is not None and clip_max is not None
-        adv_x = utils_tf.clip_by_value(adv_x, clip_min, clip_max)
-
-    if sanity_checks:
-        with tf.control_dependencies(asserts):
-            adv_x = tf.identity(adv_x)
-
+    adv_x = (x + utils_tf.mul(eps, optimal_perturbation) +
+             (tf.random.uniform(tf.shape(x)) - 0.5) * 1e-12)
     return adv_x
 
 
 def project_l0_box(x, k, lb, ub):
-    k = tf.cast(k, tf.int64)
+    dim = tf.reduce_prod(tf.shape(x)[1:])
     p1 = tf.reduce_sum(x**2, axis=-1)
-    p2 = tf.minimum(tf.minimum(ub - x, x - lb), 0)
+    p2 = tf.minimum(tf.minimum(ub - x, x - lb), 0.0)
     p2 = tf.reduce_sum(p2**2, axis=-1)
-    p3 = tf.sort(tf.reshape(p1 - p2, (x.shape[0], -1)))[:, -k]
+    p3 = tf.sort(tf.reshape(p1 - p2, (-1, dim)))[:, -k]
     x = tf.clip_by_value(x, lb, ub)
-    x *= tf.cast(
-        tf.expand_dims((p1 - p2) >= tf.reshape(p3, (-1, 1, 1), -1), -1),
-        x.dtype)
+    x *= tf.cast(tf.expand_dims((p1 - p2) >= tf.reshape(p3, (-1, 1, 1)), -1),
+                 dtype=x.dtype)
     return x
