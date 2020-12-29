@@ -207,9 +207,6 @@ def sparse_l0_descent(x,
         asserts.append(
             utils_tf.assert_less_equal(x, tf.cast(clip_max, x.dtype)))
 
-    # Make sure the caller has not passed probs by accident
-    assert logits.op.type != 'Softmax'
-
     if y is None:
         # Using model predictions as ground truth to avoid label leaking
         preds_max = tf.reduce_max(logits, 1, keepdims=True)
@@ -232,8 +229,8 @@ def sparse_l0_descent(x,
     optimal_perturbation = grad / (
         1e-10 + tf.reduce_sum(tf.abs(grad), axis=red_ind, keepdims=True))
     # Add perturbation to original example to obtain adversarial example
-    adv_x = (x + utils_tf.mul(eps, optimal_perturbation) + 1e-12 *
-             (tf.random.uniform(grad.shape) - 0.5))
+    t = utils_tf.mul(eps, optimal_perturbation)
+    adv_x = (x + t)
 
     # If clipping is needed, reset all values outside of [clip_min, clip_max]
     if (clip_min is not None) or (clip_max is not None):
@@ -249,16 +246,13 @@ def sparse_l0_descent(x,
 
 
 def project_l0_box(x, k, lb, ub):
-    k = tf.convert_to_tensor(k)
-    k_i = tf.cast(k, tf.int64)
-    assert_op = tf.Assert(tf.cast(k_i, k.dtype) - k == 0, k)
-    with tf.control_dependencies([assert_op]):
-        p1 = tf.reduce_sum(x**2, axis=-1)
-        p2 = tf.minimum(tf.minimum(ub - x, x - lb), 0)
-        p2 = tf.reduce_sum(p2**2, axis=-1)
-        p3 = tf.sort(tf.reshape(p1 - p2, (x.shape[0], -1)))[:, -k_i]
-        x = tf.clip_by_value(x, lb, ub)
-        x *= tf.cast(
-            tf.expand_dims((p1 - p2) >= tf.reshape(p3, (-1, 1, 1), -1), -1),
-            x.dtype)
-        return x
+    k = tf.cast(k, tf.int64)
+    p1 = tf.reduce_sum(x**2, axis=-1)
+    p2 = tf.minimum(tf.minimum(ub - x, x - lb), 0)
+    p2 = tf.reduce_sum(p2**2, axis=-1)
+    p3 = tf.sort(tf.reshape(p1 - p2, (x.shape[0], -1)))[:, -k]
+    x = tf.clip_by_value(x, lb, ub)
+    x *= tf.cast(
+        tf.expand_dims((p1 - p2) >= tf.reshape(p3, (-1, 1, 1), -1), -1),
+        x.dtype)
+    return x

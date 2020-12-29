@@ -277,7 +277,7 @@ def pgd_config(norm, seed=123):
     }
     if norm == 'l1':
         attack_grid_args.update({
-            'attack_grad_sparsity': [95, 99]
+            'attack_grad_sparsity': [90, 95, 99]
         })
 
     attack_arg_names = list(attack_grid_args.keys())
