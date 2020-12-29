@@ -12,8 +12,9 @@ from absl import flags
 from cleverhans.attacks import ProjectedGradientDescent, SparseL1Descent
 from cleverhans.model import Model
 from lib.attack_utils import cw_loss
-from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
-                          make_input_pipeline)
+from lib.pgd_l0 import SparseL0Descent
+from lib.tf_utils import (MetricsDictionary, l0_metric, l1_metric, l2_metric,
+                          li_metric, make_input_pipeline)
 from lib.utils import (format_float, import_func_annotations_as_flags,
                        log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
@@ -39,6 +40,7 @@ flags.DEFINE_string("attack_loss", "ce", "loss for the attack")
 FLAGS = flags.FLAGS
 
 lp_attacks = {
+    "l0": SparseL0Descent,
     "l1": SparseL1Descent,
     "l2": ProjectedGradientDescent,
     "li": ProjectedGradientDescent,
@@ -93,7 +95,7 @@ def main(unused_args):
 
     pgd = lp_attacks[FLAGS.norm](MadryModel())
 
-    lp_metrics = {"l1": l1_metric, "l2": l2_metric, "li": li_metric}
+    lp_metrics = {"l1": l1_metric, "l2": l2_metric, "li": li_metric, "l0": l0_metric}
 
     # attack arguments
     attack_kwargs = {
