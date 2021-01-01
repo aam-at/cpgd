@@ -12,7 +12,7 @@ from absl import flags
 from art.attacks.evasion import PixelAttack
 from art.classifiers import TensorFlowV2Classifier
 from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, make_input_pipeline)
+                          l1_metric, limit_gpu_growth, make_input_pipeline)
 from lib.utils import (format_float, log_metrics, register_experiment_flags,
                        reset_metrics, setup_experiment)
 
@@ -172,4 +172,5 @@ def main(unused_args):
 
 
 if __name__ == "__main__":
+    limit_gpu_growth()
     absl.app.run(main)
