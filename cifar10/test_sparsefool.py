@@ -129,10 +129,10 @@ def main(unused_args):
         for threshold in test_thresholds["l0"]:
             is_adv_at_th = torch.logical_and(l0 <= threshold, is_adv)
             test_metrics["acc_l0_%s" %
-                         format_float(threshold, 4)](~is_adv_at_th)
+                         format_float(threshold)](~is_adv_at_th)
             is_adv_at_th = torch.logical_and(l0p <= threshold, is_adv)
             test_metrics["acc_l0p_%s" %
-                         format_float(threshold, 4)](~is_adv_at_th)
+                         format_float(threshold)](~is_adv_at_th)
 
         for threshold in test_thresholds["l1"]:
             is_adv_at_th = torch.logical_and(l1 <= threshold, is_adv)
