@@ -15,6 +15,7 @@ from foolbox.attacks import (DatasetAttack, L0BrendelBethgeAttack,
                              LinearSearchBlendedUniformNoiseAttack,
                              LinfinityBrendelBethgeAttack)
 from foolbox.models import TensorFlowModel
+from lib.attack_utils import margin
 from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
                           l1_metric, l2_metric, li_metric, limit_gpu_growth,
                           make_input_pipeline)
@@ -113,6 +114,7 @@ def main(unused_args):
     test_metrics = MetricsDictionary()
 
     def test_step(image, label):
+        label_onehot = tf.one_hot(label, num_classes)
         outs = test_classifier(image)
         is_corr = outs['pred'] == label
 
@@ -146,7 +148,8 @@ def main(unused_args):
                 tf.reduce_max(image_adv) <= 1.0), [image_adv])
         with tf.control_dependencies([assert_op]):
             outs_adv = test_classifier(image_adv)
-            is_adv = test_classifier(image_adv)['pred'] != label
+            is_adv = (margin(
+                test_classifier(image_adv)['logits'], label_onehot) <= 5e-5)
 
         # metrics
         nll_loss = nll_loss_fn(label, outs["logits"])
