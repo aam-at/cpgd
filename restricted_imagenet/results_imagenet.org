@@ -211,6 +211,14 @@
 #+END_SRC
 
 * L0
+** Sparesfool attack
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l1", "sparsefool", sort_column="l0_corr")
+      output_excel(df, model_type, "l0", "sparsefool")
+#+END_SRC
+
 ** JSMA attack
 #+BEGIN_SRC python :async :noweb yes :results output :tangle yes
   <<init_script>>
@@ -241,6 +249,14 @@
   for model_type in ["plain", "linf", "l2"]:
       df = parse_results(model_type, "l0", "cornersearch")
       output_excel(df, model_type, "l0", "cornersearch")
+#+END_SRC
+
+** PGD attack
+#+BEGIN_SRC python :async :noweb yes :results output :tangle yes
+  <<init_script>>
+  for model_type in ["plain", "linf", "l2"]:
+      df = parse_results(model_type, "l0", "pgd", sort_column="acc_adv", group_by="attack_eps")
+      output_excel(df, model_type, "l0", "pgd", group_by="attack_eps")
 #+END_SRC
 
 ** PDPGD attack
