@@ -229,7 +229,7 @@ def main(unused_args):
                 tf.summary.scalar(f"final_{norm}_corr", final_lp_corr, step=1)
                 tf.summary.flush()
     except KeyboardInterrupt as e:
-        logging.info("Stopping becaues".format(batch_index))
+        logging.info("Stopping after {}".format(batch_index))
     except Exception:
         traceback.print_exc()
     finally:

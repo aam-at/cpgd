@@ -180,7 +180,7 @@ def main(unused_args):
     try:
         is_completed = False
         X_adv = []
-        for batch_index, (image, label) in enumerate(test_ds, 1):
+        for batch_index, (image, label) in enumerate(val_ds, 1):
             X_adv_b = test_step(image, label)
             X_adv.append(X_adv_b)
             log_metrics(
