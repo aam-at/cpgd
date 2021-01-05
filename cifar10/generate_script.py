@@ -2,7 +2,6 @@
 """
 from __future__ import absolute_import, division, print_function
 
-import ast
 import glob
 import importlib
 import itertools
@@ -17,8 +16,7 @@ from lib.generate_script import (cleanflags, count_number_of_lines,
                                  format_name, generate_test_optimizer)
 from lib.parse_logs import parse_log
 from lib.tf_utils import ConstantDecay, ExpDecay, LinearDecay
-from lib.utils import (format_float, import_func_annotations_as_flags,
-                       import_klass_annotations_as_flags)
+from lib.utils import format_float, import_klass_annotations_as_flags
 
 from config import test_model_thresholds
 
@@ -179,7 +177,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                     dlr_config = {
                         "schedule": "linear",
                         "config": {
-                            **ExpDecay(
+                            **LinearDecay(
                                 initial_learning_rate=dlr,
                                 minimal_learning_rate=min_dlr,
                                 decay_steps=attack_args["attack_iterations"],
@@ -214,7 +212,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                     finetune_dlr_config = {
                         "schedule": "linear",
                         "config": {
-                            **ExpDecay(
+                            **LinearDecay(
                                 initial_learning_rate=min_dlr,
                                 minimal_learning_rate=round(
                                     min_dlr * dlr_decay_factor, 8),
@@ -951,6 +949,9 @@ def jsma_config(seed=123):
     for model, targets, theta, lib in itertools.product(
             models, ["all", "random", "second"], [1.0, 0.1],
         ["cleverhans", "art"]):
+        if (lib, targets) == ("cleverhans", "all"):
+            # NOTE: takes too long to run cleverhans with all targets
+            continue
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../{basedir}/test_{type}/{norm}/jsma"
         attack_args.update({

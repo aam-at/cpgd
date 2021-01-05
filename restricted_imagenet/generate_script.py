@@ -16,7 +16,7 @@ from lib.attack_lp import ProximalPrimalDualGradientAttack
 from lib.generate_script import (cleanflags, count_number_of_lines,
                                  format_name, generate_test_optimizer)
 from lib.parse_logs import parse_log
-from lib.tf_utils import ConstantDecay, LinearDecay
+from lib.tf_utils import ConstantDecay, ExpDecay, LinearDecay
 from lib.utils import format_float, import_klass_annotations_as_flags
 
 from config import test_model_thresholds
@@ -60,7 +60,7 @@ def test_random(runs=1, master_seed=1):
         for i in range(runs):
             seed = np.random.randint(1000)
             attack_args["seed"] = seed
-            print(generate_test_random(**attack_args))
+            print(generate_test_optimizer('test_random', **attack_args))
 
 
 def load_logs(load_dir):
@@ -92,7 +92,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
     import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
 
-    batch_size = 250
+    batch_size = 50
     attack_grid_args = {
         "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
@@ -179,7 +179,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                     dlr_config = {
                         "schedule": "linear",
                         "config": {
-                            **ExpDecay(
+                            **LinearDecay(
                                 initial_learning_rate=dlr,
                                 minimal_learning_rate=min_dlr,
                                 decay_steps=attack_args["attack_iterations"],
@@ -214,7 +214,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                     finetune_dlr_config = {
                         "schedule": "linear",
                         "config": {
-                            **ExpDecay(
+                            **LinearDecay(
                                 initial_learning_rate=min_dlr,
                                 minimal_learning_rate=round(
                                     min_dlr * dlr_decay_factor, 8),
@@ -662,7 +662,7 @@ def bethge_config(norm, seed=123):
 
     existing_names = []
     for type, steps, lr, num_decay in itertools.product(
-            models.keys(), [100], [1.0], [20]):
+            models.keys(), [1000], [1.0], [20]):
         working_dir = f"../results_imagenet/test_{type}/{norm}/bethge"
         attack_args.update({
             "norm": norm,
@@ -923,38 +923,41 @@ def pixel_attack_config(seed=123):
 
 
 if __name__ == "__main__":
+    # our attacks
+    test_our_attack_config("li")
+    test_our_attack_config("l2g")
+    test_our_attack_config("l1")
+    test_our_attack_config("l0")
     # li attacks
     deepfool_config("li")
     foolbox_config("li", "df")
     bethge_config("li")
-    # to_execute_cmds = daa_config(1000)
-    # if to_execute_cmds == 0:
-    #     daa_custom_config()
-    # to_execute_cmds = pgd_config("li")
-    # if to_execute_cmds == 0:
-    #     pgd_custom_config("li")
+    to_execute_cmds = daa_config(1000)
+    if to_execute_cmds == 0:
+        daa_custom_config()
+    to_execute_cmds = pgd_config("li", 1000)
+    if to_execute_cmds == 0:
+        pgd_custom_config("li")
     fab_config("li")
-    # l2 attacks
+    l2 attacks
     deepfool_config("l2")
     foolbox_config("l2", "df")
-    art_config("l2", "df")
     foolbox_config("l2", "cw")
     foolbox_config("l2", "ddn")
     bethge_config("l2")
-    # # to_execute_cmds = pgd_config("l2")
-    # # if to_execute_cmds == 0:
-    # #     pgd_custom_config("l2")
+    to_execute_cmds = pgd_config("l2", 1000)
+    if to_execute_cmds == 0:
+        pgd_custom_config("l2")
     fab_config("l2")
     # l1 attacks
     sparsefool_config()
     foolbox_config("l1", "ead")
     bethge_config("l1")
-    # # to_execute_cmds = pgd_config("l1")
-    # # if to_execute_cmds == 0:
-    # #     pgd_custom_config("l1")
+    to_execute_cmds = pgd_config("l1", 100)
+    if to_execute_cmds == 0:
+        pgd_custom_config("l1")
     fab_config("l1")
     # l0 attacks
     jsma_config()
-    cornersearch_config()
     # pixel_attack_config()
     bethge_config("l0")
