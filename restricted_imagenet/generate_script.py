@@ -16,9 +16,8 @@ from lib.attack_lp import ProximalPrimalDualGradientAttack
 from lib.generate_script import (cleanflags, count_number_of_lines,
                                  format_name, generate_test_optimizer)
 from lib.parse_logs import parse_log
-from lib.tf_utils import ConstantDecay, ExpDecay, LinearDecay
-from lib.utils import (format_float, import_func_annotations_as_flags,
-                       import_klass_annotations_as_flags)
+from lib.tf_utils import ConstantDecay, LinearDecay
+from lib.utils import format_float, import_klass_annotations_as_flags
 
 from config import test_model_thresholds
 
@@ -73,202 +72,187 @@ def load_logs(load_dir):
     return df
 
 
-def test_lp_config(attack, runs=1, master_seed=1):
+@cleanflags
+def test_our_attack_config(attack, epsilon=None, seed=123):
+    if epsilon is not None:
+        import test_our_eps_attack
+        from test_our_eps_attack import import_flags, lp_attacks
+
+        flags.FLAGS._flags().clear()
+        importlib.reload(test_our_eps_attack)
+        script_name = "test_our_eps_attack"
+    else:
+        import test_our_attack
+        from test_our_attack import import_flags, lp_attacks
+
+        flags.FLAGS._flags().clear()
+        importlib.reload(test_our_attack)
+        script_name = "test_our_attack"
+
+    import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
-    num_images = {'l0': 500, 'li': 500, 'l1': 500, 'l2': 500}[norm]
-    batch_size = 50
+
+    batch_size = 250
     attack_grid_args = {
-        'num_batches': [num_images // batch_size],
-        'batch_size': [batch_size],
-        'attack': [attack],
-        'attack_loss': ["cw"],
-        'attack_iterations': [500],
-        'attack_simultaneous_updates': [True, False],
-        'attack_primal_lr': [1e-1],
-        'attack_dual_optimizer': ["sgd"],
-        'attack_dual_lr': [1e-1],
-        'attack_dual_ema': [True],
-        'attack_use_proxy_constraint': [False],
-        'attack_loop_number_restarts': [1],
-        'attack_loop_finetune': [True],
-        'attack_loop_r0_sampling_algorithm': ['uniform'],
-        'attack_loop_r0_sampling_epsilon': [0.1, 0.3, 0.5],
-        'attack_loop_c0_initial_const': [0.01]
+        "num_batches": [NUM_IMAGES // batch_size],
+        "batch_size": [batch_size],
+        "seed": [seed],
+        "attack": [attack],
+        "attack_loss": ["log", "cw"],
+        "attack_iterations": [500],
+        "attack_simultaneous_updates": [True],
+        "attack_primal_lr": [1e-1],
+        "attack_dual_opt": ["sgd"],
+        "attack_dual_opt_kwargs": ["{}"],
+        "attack_dual_lr": [1e-1],
+        "attack_dual_ema": [True, False],
+        "attack_loop_number_restarts": [1],
+        "attack_loop_finetune": [True],
+        "attack_loop_r0_sampling_algorithm": ["uniform"],
+        "attack_loop_r0_sampling_epsilon": [0.1, 0.25],
+        "attack_loop_r0_ods_init": [False],
+        "attack_loop_multitargeted": [False],
+        "attack_loop_c0_initial_const": [0.1, 0.01],
+        "attack_save": [False],
     }
+    if epsilon is not None:
+        attack_grid_args["attack_epsilon"] = [epsilon]
 
-    if attack == 'l1g':
+    if issubclass(attack_klass, ProximalPrimalDualGradientAttack):
         attack_grid_args.update({
-            'attack_hard_threshold': [True, False]
-        })
-
-    if issubclass(attack_klass, ProximalGradientOptimizerAttack):
-        attack_grid_args.update({
-            'attack_primal_optimizer': ["sgd"],
-            'attack_accelerated': [False],
-            'attack_momentum': [0.9],
-            'attack_adaptive_momentum': [True, False]
+            "attack_primal_opt": ["adam"],
+            "attack_primal_opt_kwargs": ["{}"],
+            "attack_accelerated": [False],
+            "attack_momentum": [0.9],
+            "attack_adaptive_momentum": [False],
         })
     else:
-        attack_grid_args.update({'attack_primal_optimizer': ["adam"]})
+        attack_grid_args.update({
+            "attack_primal_opt": ["adam"],
+            "attack_primal_opt_kwargs": ["{}"],
+        })
 
-    if norm == 'li':
-        attack_grid_args.update({'attack_gradient_preprocessing': [True]})
+    if norm == "li":
+        attack_grid_args.update(
+            {"attack_gradient_preprocessing": [False, True]})
+
+    if attack == "l1g":
+        attack_grid_args.update({"attack_hard_threshold": [False, True]})
+
+    if norm == "l0":
+        attack_grid_args.update({
+            "attack_operator": ["l2/3"],
+            "attack_has_ecc": [False],
+        })
 
     attack_arg_names = list(attack_grid_args.keys())
     existing_names = []
 
     for type in models.keys():
+        working_dir = f"../{basedir}/test_{type}/{norm}/our_{norm}"
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         for attack_arg_value in itertools.product(*attack_grid_args.values()):
-            working_dir = f"../results/imagenet_10/test_{type}_{norm}"
             attack_args = dict(zip(attack_arg_names, attack_arg_value))
             attack_args.update({
-                'working_dir': working_dir,
-                'load_from': models[type]
+                "load_from": models[type],
+                "working_dir": working_dir,
             })
-            for lr, decay_factor, flr_decay_factor, lr_decay in itertools.product(
-                [0.005, 0.01, 0.05, 0.1, 0.5], [0.01], [0.1], [True]):
+            if (attack_args["attack_loop_r0_ods_init"]
+                    and attack_args["attack_loop_multitargeted"]):
+                continue
+            for lr, decay_factor, dlr_decay_factor, lr_decay in itertools.product(
+                [1.0, 0.1, 0.01], [0.01], [0.1], [True]):
                 min_lr = round(lr * decay_factor, 6)
+                dlr = attack_args["attack_dual_lr"]
+                min_dlr = round(dlr * dlr_decay_factor, 6)
                 if lr_decay and min_lr < lr:
                     lr_config = {
-                        'schedule': 'linear',
-                        'config': {
-                            **LinearDecay(initial_learning_rate=lr,
-                                          minimal_learning_rate=min_lr,
-                                          decay_steps=attack_args['attack_iterations']).get_config(
-                            )
-                        }
+                        "schedule": "exp",
+                        "config": {
+                            **ExpDecay(
+                                initial_learning_rate=lr,
+                                minimal_learning_rate=min_lr,
+                                decay_steps=attack_args["attack_iterations"],
+                            ).get_config()
+                        },
+                    }
+                    dlr_config = {
+                        "schedule": "linear",
+                        "config": {
+                            **ExpDecay(
+                                initial_learning_rate=dlr,
+                                minimal_learning_rate=min_dlr,
+                                decay_steps=attack_args["attack_iterations"],
+                            ).get_config()
+                        },
                     }
                 else:
                     lr_config = {
-                        'schedule': 'constant',
-                        'config': {
+                        "schedule": "constant",
+                        "config": {
                             **ConstantDecay(lr).get_config()
-                        }
+                        },
                     }
-                if lr_decay and flr_decay_factor < 1.0:
+                    dlr_config = {
+                        "schedule": "constant",
+                        "config": {
+                            **ConstantDecay(learning_rate=dlr).get_config()
+                        },
+                    }
+                if lr_decay:
                     finetune_lr_config = {
-                        'schedule': 'linear',
-                        'config': {
-                            **LinearDecay(initial_learning_rate=min_lr,
-                                          minimal_learning_rate=round(
-                                              min_lr * flr_decay_factor, 6),
-                                          decay_steps=attack_args['attack_iterations']).get_config(
-                            )
-                        }
+                        "schedule": "exp",
+                        "config": {
+                            **ExpDecay(
+                                initial_learning_rate=min_lr,
+                                minimal_learning_rate=round(
+                                    min_lr * decay_factor, 8),
+                                decay_steps=attack_args["attack_iterations"],
+                            ).get_config()
+                        },
+                    }
+                    finetune_dlr_config = {
+                        "schedule": "linear",
+                        "config": {
+                            **ExpDecay(
+                                initial_learning_rate=min_dlr,
+                                minimal_learning_rate=round(
+                                    min_dlr * dlr_decay_factor, 8),
+                                decay_steps=attack_args["attack_iterations"],
+                            ).get_config()
+                        },
                     }
                 else:
                     finetune_lr_config = {
-                        'schedule': 'constant',
-                        'config': {
+                        "schedule": "constant",
+                        "config": {
                             **ConstantDecay(learning_rate=min_lr).get_config()
-                        }
+                        },
+                    }
+                    finetune_dlr_config = {
+                        "schedule": "constant",
+                        "config": {
+                            **ConstantDecay(learning_rate=min_dlr).get_config(
+                            )
+                        },
                     }
                 attack_args.update({
-                    'attack_loop_lr_config':
+                    "attack_loop_lr_config":
                     lr_config,
-                    'attack_loop_finetune_lr_config':
-                    finetune_lr_config
+                    "attack_loop_finetune_lr_config":
+                    finetune_lr_config,
+                    "attack_loop_dual_lr_config":
+                    dlr_config,
+                    "attack_loop_finetune_dual_lr_config":
+                    finetune_dlr_config,
                 })
                 base_name = f"imagenet_{type}"
-                name = format_name(base_name, attack_args) + '_'
+                name = format_name(base_name, attack_args) + "_"
                 attack_args["name"] = name
-                p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
                 if name in p or name in existing_names:
                     continue
                 existing_names.append(name)
-                np.random.seed(master_seed)
-                for i in range(runs):
-                    seed = np.random.randint(1000)
-                    attack_args["seed"] = seed
-                    if True:
-                        print(generate_test_optimizer_lp(**attack_args))
-
-
-def test_lp_custom_config(attack, topk=1, runs=1, master_seed=1):
-    import test_optimizer_lp_madry
-    from test_optimizer_lp_madry import lp_attacks
-
-    flags.FLAGS._flags().clear()
-    importlib.reload(test_optimizer_lp_madry)
-    assert attack in lp_attacks
-    norm, attack_klass = lp_attacks[attack]
-    import_klass_annotations_as_flags(attack_klass, 'attack_')
-    # import args
-    defined_flags = flags.FLAGS._flags().keys()
-    test_params = [
-        flag for flag in defined_flags if flag.startswith("attack")
-        if flag not in ['attack_simultaneous_updates']
-    ]
-
-    num_images = {'l0': 500, 'li': 500, 'l1': 500, 'l2': 500}[norm]
-    batch_size = 50
-    attack_args = {
-        'attack': attack,
-        'num_batches': num_images // batch_size,
-        'batch_size': batch_size,
-        'seed': 1
-    }
-
-    existing_names = []
-    for type in models.keys():
-        working_dir = f"../results/imagenet_10/test_{type}_{norm}"
-        attack_args.update({'load_from': models[type], 'working_dir': working_dir})
-
-        # parse test log
-        df = parse_test_log(Path(working_dir) / f"imagenet_{type}_{attack}_*",
-                            export_test_params=test_params)
-        df = df[df.attack == attack]
-        df = df.sort_values(norm)
-        j = 0
-        for id, df in df.iterrows():
-            attack_args.update(
-                {col: df[col]
-                 for col in df.keys() if col in test_params})
-            # check args
-            if issubclass(attack_klass, ProximalGradientOptimizerAttack):
-                if attack_args['attack_accelerated']:
-                    continue
-            if attack_args['attack_loop_c0_initial_const'] != 0.01:
-                continue
-            if attack_args['attack_loop_r0_sampling_epsilon'] != 0.1:
-                continue
-            lr_config = ast.literal_eval(attack_args['attack_loop_lr_config'])
-            flr_config = ast.literal_eval(attack_args['attack_loop_finetune_lr_config'])
-            if lr_config['schedule'] != 'linear':
-                continue
-            if flr_config['schedule'] != 'linear':
-                continue
-            if round(lr_config['config']['initial_learning_rate'] /
-                     lr_config['config']['minimal_learning_rate']) != 100:
-                continue
-            if round(flr_config['config']['initial_learning_rate'] /
-                     flr_config['config']['minimal_learning_rate']) != 10:
-                continue
-            attack_args['working_dir'] = f"../results/imagenet_final/test_{type}_{norm}"
-
-            # change args
-            j += 1
-            for upd, r, R in itertools.product([True, False], [0.1], [1, 10]):
-                attack_args['attack_simultaneous_updates'] = upd
-                attack_args['attack_loop_number_restarts'] = R
-                attack_args['attack_loop_r0_sampling_epsilon'] = r
-                # generate unique name
-                base_name = f"imagenet_{type}"
-                name = format_name(base_name, attack_args) + '_'
-                attack_args["name"] = name
-                if name in existing_names:
-                    continue
-                p = [s.name[:-1] for s in list(Path(attack_args['working_dir']).glob("*"))]
-                if name in p or j > topk:
-                    continue
-                existing_names.append(name)
-                np.random.seed(master_seed)
-                for i in range(runs):
-                    seed = np.random.randint(1000)
-                    attack_args["seed"] = seed
-                    print(
-                        generate_test_optimizer('test_optimizer_lp_madry',
-                                                **attack_args))
+                print(generate_test_optimizer(script_name, **attack_args))
 
 
 @count_number_of_lines
