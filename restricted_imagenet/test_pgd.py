@@ -14,8 +14,9 @@ from absl import flags
 from cleverhans.attacks import ProjectedGradientDescent, SparseL1Descent
 from cleverhans.model import Model
 from lib.attack_utils import cw_loss
-from lib.tf_utils import (MetricsDictionary, l1_metric, l2_metric, li_metric,
-                          make_input_pipeline)
+from lib.pgd_l0 import SparseL0Descent
+from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
+                          l1_metric, l2_metric, li_metric, make_input_pipeline)
 from lib.utils import (format_float, import_func_annotations_as_flags,
                        log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
@@ -42,6 +43,7 @@ flags.DEFINE_string("attack_loss", "ce", "loss for the attack")
 FLAGS = flags.FLAGS
 
 lp_attacks = {
+    "l0": SparseL0Descent,
     "l1": SparseL1Descent,
     "l2": ProjectedGradientDescent,
     "li": ProjectedGradientDescent,
@@ -52,7 +54,7 @@ def import_flags(norm):
     global lp_attacks
     assert norm in lp_attacks
     exclude_args = ['clip_min', 'clip_max', 'rand_init']
-    if norm != 'l1':
+    if norm not in ['l0', 'l1']:
         exclude_args.append('ord')
     import_func_annotations_as_flags(lp_attacks[norm].parse_params,
                                      prefix="attack_",
@@ -61,7 +63,6 @@ def import_flags(norm):
 
 def main(unused_args):
     assert len(unused_args) == 1, unused_args
-
     assert FLAGS.load_from is not None
     assert FLAGS.data_dir is not None
     if FLAGS.data_dir.startswith("$"):
@@ -99,7 +100,12 @@ def main(unused_args):
 
     pgd = lp_attacks[FLAGS.norm](MadryModel())
 
-    lp_metrics = {"l1": l1_metric, "l2": l2_metric, "li": li_metric}
+    lp_metrics = {
+        "l1": l1_metric,
+        "l2": l2_metric,
+        "li": li_metric,
+        "l0": l0_metric
+    }
 
     # attack arguments
     attack_kwargs = {
@@ -107,7 +113,7 @@ def main(unused_args):
         for kwarg in dir(FLAGS) if kwarg.startswith("attack_")
         and kwarg not in ['attack_loss', 'attack_nb_restarts']
     }
-    if FLAGS.norm != 'l1':
+    if FLAGS.norm not in ['l0', 'l1']:
         attack_kwargs['ord'] = 2 if FLAGS.norm == 'l2' else np.inf
     # select loss
     if FLAGS.attack_loss == "cw":
@@ -165,10 +171,24 @@ def main(unused_args):
         test_metrics["conf_adv"](outs_adv["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_adv)
-        test_metrics[f"{FLAGS.norm}"](lp)
+        r = image - image_adv
+        lp = lp_metrics[FLAGS.norm](r)
+        l0 = l0_metric(r)
+        l0p = l0_pixel_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics["l0"](l0)
+        test_metrics["l0p"](l0p)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
         # exclude incorrectly classified
-        test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0p_corr"](l0p[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
 
         # robust accuracy at threshold
         # NOTE: cleverhans lp-norm projection may result in numerical error
@@ -177,6 +197,10 @@ def main(unused_args):
             is_adv_at_th = tf.logical_and(lp <= threshold + 5e-6, is_adv)
             test_metrics[f"acc_{FLAGS.norm}_%s" %
                          format_float(threshold, 4)](~is_adv_at_th)
+            if FLAGS.norm == "l0":
+                is_adv_at_th = tf.logical_and(l0p <= threshold, is_adv)
+                test_metrics["acc_l0p_%s" %
+                             format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
         return image_adv
