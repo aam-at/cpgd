@@ -13,12 +13,10 @@ import numpy as np
 import tensorflow as tf
 from absl import flags
 from lib.daa import LinfBLOBAttack, LinfDGFAttack
-from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric, make_input_pipeline,
-                          to_indexed_slices)
-from lib.utils import (batch_iterator, import_klass_annotations_as_flags,
-                       log_metrics, register_experiment_flags, reset_metrics,
-                       save_images, setup_experiment)
+from lib.tf_utils import (MetricsDictionary, li_metric, make_input_pipeline)
+from lib.utils import (batch_iterator, format_float,
+                       import_klass_annotations_as_flags, log_metrics,
+                       register_experiment_flags, reset_metrics, setup_experiment)
 
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
@@ -155,7 +153,7 @@ def main(unused_args):
         # robust accuracy at threshold
         for threshold in test_thresholds["li"]:
             is_adv_at_th = tf.logical_and(li <= threshold + 5e-6, is_adv)
-            test_metrics["acc_li_%.4f" % threshold](~is_adv_at_th)
+            test_metrics["acc_li_%s" % format_float(threshold, 4)](~is_adv_at_th)
         test_metrics["success_rate"](is_adv[is_corr])
 
     # reset metrics
