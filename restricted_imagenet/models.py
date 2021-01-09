@@ -20,6 +20,7 @@ class TsiprasCNN(tf.keras.Model):
     def __init__(self):
         super(TsiprasCNN, self).__init__()
         self.backbone = ResnetCNNTf()
+        self.cast = tf.keras.layers.Activation('linear', dtype=tf.float32)
 
     @staticmethod
     def image_preprocess(image, bgr=True):
@@ -28,8 +29,8 @@ class TsiprasCNN(tf.keras.Model):
         if bgr:
             mean = mean[::-1]
             std = std[::-1]
-        image_mean = tf.constant(mean, dtype=tf.float32)
-        image_std = tf.constant(std, dtype=tf.float32)
+        image_mean = tf.constant(mean, dtype=image.dtype)
+        image_std = tf.constant(std, dtype=image.dtype)
         image = (image - image_mean) / image_std
         return image
 
@@ -37,6 +38,7 @@ class TsiprasCNN(tf.keras.Model):
         from lib.tf_utils import add_default_end_points
         inputs = self.image_preprocess(inputs)
         logits = self.backbone(inputs, training=training)
+        logits = self.cast(logits)
         num_labels = len(TsiprasCNN.LABEL_RANGES)
         return add_default_end_points({"logits": logits[:, :num_labels]})
 

@@ -5,7 +5,6 @@ import logging
 import os
 import sys
 import time
-from pathlib import Path
 
 import absl
 import numpy as np
@@ -16,10 +15,11 @@ from cleverhans.model import Model
 from lib.attack_utils import cw_loss
 from lib.pgd_l0 import SparseL0Descent
 from lib.tf_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric, make_input_pipeline)
+                          l1_metric, l2_metric, li_metric)
 from lib.utils import (format_float, import_func_annotations_as_flags,
                        log_metrics, register_experiment_flags, reset_metrics,
                        setup_experiment)
+from tensorflow.keras.mixed_precision import experimental as mixed_precision
 
 from config import test_thresholds
 from data import fbresnet_augmentor, get_imagenet_dataflow
@@ -31,6 +31,7 @@ register_experiment_flags(working_dir="../results/imagenet/test_pgd")
 flags.DEFINE_string("norm", "lp", "lp-norm attack")
 flags.DEFINE_string("data_dir", "$IMAGENET_DIR", "path to imagenet dataset")
 flags.DEFINE_string("load_from", None, "path to load checkpoint from")
+flags.DEFINE_bool("mixed_precision", False, "whenever to used mixed precision?")
 # test params
 flags.DEFINE_integer("num_batches", -1, "number of batches to corrupt")
 flags.DEFINE_integer("batch_size", 100, "batch size")
@@ -67,6 +68,9 @@ def main(unused_args):
     assert FLAGS.data_dir is not None
     if FLAGS.data_dir.startswith("$"):
         FLAGS.data_dir = os.environ[FLAGS.data_dir[1:]]
+    if FLAGS.mixed_precision:
+        policy = mixed_precision.Policy('mixed_float16')
+        mixed_precision.set_policy(policy)
     setup_experiment(f"madry_pgd_{FLAGS.norm}_test", [__file__])
 
     # data

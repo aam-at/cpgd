@@ -326,7 +326,7 @@ def test_our_attack_custom_config(attack,
 
 @count_number_of_lines
 @cleanflags
-def pgd_config(norm, num_images=NUM_IMAGES, seed=123):
+def pgd_config(norm, num_images=NUM_IMAGES, mixed_precision=False, seed=123):
     import test_pgd
     from test_pgd import import_flags
 
@@ -339,6 +339,7 @@ def pgd_config(norm, num_images=NUM_IMAGES, seed=123):
         "num_batches": [num_images // batch_size],
         "batch_size": [batch_size],
         "seed": [seed],
+        "mixed_precision": [mixed_precision],
         "norm": [norm],
         "attack_loss": ["ce", "cw"],
         "attack_nb_iter": [500],
@@ -369,7 +370,8 @@ def pgd_config(norm, num_images=NUM_IMAGES, seed=123):
                 })
                 name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
-eps{format_float(eps, 4)}_epss{eps_scale}_""".replace("\n", "")
+eps{format_float(eps, 4)}_epss{eps_scale}_
+{'f16_' if mixed_precision else ''}""".replace("\n", "")
                 if norm == "l1":
                     name = f"{name}s{attack_args['attack_grad_sparsity']}_"
                 if num_images < 1000:
@@ -383,7 +385,11 @@ eps{format_float(eps, 4)}_epss{eps_scale}_""".replace("\n", "")
 
 
 @cleanflags
-def pgd_custom_config(norm, based_on_num_images, top_k=1, seed=123):
+def pgd_custom_config(norm,
+                      based_on_num_images,
+                      top_k=1,
+                      mixed_precision=False,
+                      seed=123):
     """Generate config for PGD with 10, 100 restarts based on the results with 1
     restart"""
     import test_pgd
@@ -399,6 +405,7 @@ def pgd_custom_config(norm, based_on_num_images, top_k=1, seed=123):
         "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
+        "mixed_precision": [mixed_precision]
     }
     existing_names = []
     for type in models.keys():
@@ -439,7 +446,8 @@ def pgd_custom_config(norm, based_on_num_images, top_k=1, seed=123):
                         })
                         name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
-eps{eps}_epss{eps_scale}_""".replace("\n", "")
+eps{eps}_epss{eps_scale}_
+{'f16_' if mixed_precision else ''}""".replace("\n", "")
                         if norm == "l1":
                             name = f"{name}s{attack_args['attack_grad_sparsity']}_"
                         attack_args["name"] = name
