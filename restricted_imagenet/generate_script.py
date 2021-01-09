@@ -2,7 +2,6 @@
 """
 from __future__ import absolute_import, division, print_function
 
-import ast
 import glob
 import importlib
 import itertools
@@ -30,6 +29,7 @@ hostname = subprocess.getoutput("hostname")
 basedir = "results_imagenet"
 
 NUM_IMAGES = 1000
+PGD_L0_EPS = 100000
 
 
 def test_random(runs=1, master_seed=1):
@@ -72,8 +72,12 @@ def load_logs(load_dir):
     return df
 
 
+@count_number_of_lines
 @cleanflags
-def test_our_attack_config(attack, epsilon=None, seed=123):
+def test_our_attack_config(attack,
+                           num_images=NUM_IMAGES,
+                           epsilon=None,
+                           seed=123):
     if epsilon is not None:
         import test_our_eps_attack
         from test_our_eps_attack import import_flags, lp_attacks
@@ -94,11 +98,11 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
 
     batch_size = 50
     attack_grid_args = {
-        "num_batches": [NUM_IMAGES // batch_size],
+        "num_batches": [num_images // batch_size],
         "batch_size": [batch_size],
         "seed": [seed],
         "attack": [attack],
-        "attack_loss": ["log", "cw"],
+        "attack_loss": ["log"],
         "attack_iterations": [500],
         "attack_simultaneous_updates": [True],
         "attack_primal_lr": [1e-1],
@@ -109,10 +113,10 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         "attack_loop_number_restarts": [1],
         "attack_loop_finetune": [True],
         "attack_loop_r0_sampling_algorithm": ["uniform"],
-        "attack_loop_r0_sampling_epsilon": [0.1, 0.25],
+        "attack_loop_r0_sampling_epsilon": [0.1],
         "attack_loop_r0_ods_init": [False],
         "attack_loop_multitargeted": [False],
-        "attack_loop_c0_initial_const": [0.1, 0.01],
+        "attack_loop_c0_initial_const": [0.1],
         "attack_save": [False],
     }
     if epsilon is not None:
@@ -248,11 +252,76 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                 })
                 base_name = f"imagenet_{type}"
                 name = format_name(base_name, attack_args) + "_"
+                if num_images < 1000:
+                    batches = num_images / batch_size
+                    name = name.replace("imagenet", f"imagenet_{batches}b")
                 attack_args["name"] = name
                 if name in p or name in existing_names:
                     continue
                 existing_names.append(name)
                 print(generate_test_optimizer(script_name, **attack_args))
+
+
+@cleanflags
+def test_our_attack_custom_config(attack,
+                                  based_on_num_images,
+                                  top_k=1,
+                                  seed=123):
+    """Generate config for PGD with 10, 100 restarts based on the results with 1
+    restart"""
+    import test_our_attack
+    from test_our_attack import import_flags, lp_attacks
+
+    flags.FLAGS._flags().clear()
+    importlib.reload(test_our_attack)
+    import_flags(attack)
+    norm, attack_klass = lp_attacks[attack]
+
+    batch_size = 50
+    default_args = {
+        "num_batches": NUM_IMAGES // batch_size,
+        "batch_size": batch_size,
+        "seed": seed,
+        "attack": attack,
+    }
+    existing_names = []
+    for type in models.keys():
+        working_dir = f"../{basedir}/test_{type}/{norm}/our_{norm}/"
+        default_args.update({
+            "load_from": models[type],
+            "working_dir": working_dir,
+        })
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
+        df_all = load_logs(working_dir)
+        for eps in test_model_thresholds[type][norm]:
+            df = df_all.copy()
+            df["total"] = df["num_batches"] * df["batch_size"]
+            df = df[df.total == based_on_num_images]
+            df = df[df.attack_loop_c0_initial_const == 0.1]
+            df = df[df.attack_loop_r0_sampling_epsilon == 0.1]
+            df = df[df.attack_loss == "log"]
+            df = df.sort_values(f"{norm}_corr")
+            lowest_norm = df.head(1)[f"{norm}_corr"].item()
+            i = 0
+            for index, df_row in df.iterrows():
+                # select top-k attack parameters
+                if df_row.at[f"{norm}_corr"] > lowest_norm + 0.01 or i >= top_k:
+                    break
+                else:
+                    attack_args = default_args.copy()
+                    for col in df.columns:
+                        if "attack_" in col:
+                            attack_args[col] = df_row.at[col]
+                    base_name = f"imagenet_{type}"
+                    i += 1
+                    for n_restarts in [1, 10]:
+                        attack_args["attack_loop_number_restarts"] = n_restarts
+                        name = format_name(base_name, attack_args) + "_"
+                        attack_args["name"] = name
+                        if name in p or name in existing_names:
+                            continue
+                        existing_names.append(name)
+                        print(generate_test_optimizer('test_our_attack', **attack_args))
 
 
 @count_number_of_lines
@@ -295,13 +364,17 @@ def pgd_config(norm, num_images=NUM_IMAGES, seed=123):
                 [1, 2, 5, 10, 25, 50, 100]):
                 attack_args.update({
                     "attack_eps": eps,
-                    "attack_eps_iter": eps / eps_scale
+                    'attack_eps_iter':
+                    (PGD_L0_EPS if norm == "l0" else eps) / eps_scale
                 })
                 name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
 eps{format_float(eps, 4)}_epss{eps_scale}_""".replace("\n", "")
                 if norm == "l1":
                     name = f"{name}s{attack_args['attack_grad_sparsity']}_"
+                if num_images < 1000:
+                    batches = num_images / batch_size
+                    name = name.replace("imagenet", f"imagenet_{batches}b")
                 attack_args["name"] = name
                 if name in p or name in existing_names:
                     continue
@@ -310,7 +383,7 @@ eps{format_float(eps, 4)}_epss{eps_scale}_""".replace("\n", "")
 
 
 @cleanflags
-def pgd_custom_config(norm, top_k=1, seed=123):
+def pgd_custom_config(norm, based_on_num_images, top_k=1, seed=123):
     """Generate config for PGD with 10, 100 restarts based on the results with 1
     restart"""
     import test_pgd
@@ -338,6 +411,8 @@ def pgd_custom_config(norm, top_k=1, seed=123):
         df_all = load_logs(working_dir)
         for eps in test_model_thresholds[type][norm]:
             df = df_all.copy()
+            df["total"] = df["num_batches"] * df["batch_size"]
+            df = df[df.total == based_on_num_images]
             df = df[df.attack_eps == eps]
             df = df[df.attack_nb_restarts == 1]
             df = df[df.attack_nb_iter == 500]
@@ -357,7 +432,7 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                         round(eps / attack_args["attack_eps_iter"], 2))
                     i += 1
                     for loss, n_restarts in itertools.product(["cw", "ce"],
-                                                              [10]):
+                                                              [1, 10]):
                         attack_args.update({
                             "attack_nb_restarts": n_restarts,
                             "attack_loss": loss
@@ -419,6 +494,9 @@ def daa_config(num_images=NUM_IMAGES, seed=123):
 {attack_args['attack_loss_fn']}_{attack_args['method']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
 eps{eps}_epss{eps_scale}_""".replace("\n", "")
+                if num_images < 1000:
+                    batches = num_images / batch_size
+                    name = name.replace("imagenet", f"imagenet_{batches}b")
                 attack_args["name"] = name
                 if name in p or name in existing_names:
                     continue
@@ -427,7 +505,7 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
 
 
 @cleanflags
-def daa_custom_config(top_k=1, seed=123):
+def daa_custom_config(based_on_num_images, top_k=1, seed=123):
     """Generate config for DAA with 10, 100 restarts based on the results with 1
     restart"""
     import test_daa
@@ -451,10 +529,12 @@ def daa_custom_config(top_k=1, seed=123):
             'load_from': models[type],
             'working_dir': working_dir,
         })
-        p = [s.name[:-1] for s in list(Path(working_dir).glob("*2b*"))]
+        p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         df_all = load_logs(working_dir)
         for eps in test_model_thresholds[type][norm]:
             df = df_all.copy()
+            df["total"] = df["num_batches"] * df["batch_size"]
+            df = df[df.total == based_on_num_images]
             df = df[df.attack_eps == eps]
             df = df[df.attack_nb_restarts == 1]
             df = df[df.attack_nb_iter == 500]
@@ -870,8 +950,8 @@ def jsma_config(seed=123):
 
     existing_names = []
     for type, targets, theta, lib in itertools.product(
-            models.keys(), ["all", "random", "second"], [1.0],
-        ["cleverhans", "art"]):
+            models.keys(), ["second"], [1.0, 0.1],
+        ["art"]):
         working_dir = f"../{basedir}/test_{type}/{norm}/jsma"
         attack_args.update({
             "load_from": models[type],
@@ -924,30 +1004,30 @@ def pixel_attack_config(seed=123):
 
 if __name__ == "__main__":
     # our attacks
-    test_our_attack_config("li")
-    test_our_attack_config("l2g")
-    test_our_attack_config("l1")
-    test_our_attack_config("l0")
+    for attack in ["li", "l2g", "l1", "l0"]:
+        to_execute_cmds = test_our_attack_config(attack, 100)
+        if to_execute_cmds == 0:
+            test_our_attack_custom_config(attack, 100)
     # li attacks
     deepfool_config("li")
     foolbox_config("li", "df")
     bethge_config("li")
-    to_execute_cmds = daa_config(1000)
+    to_execute_cmds = daa_config(100)
     if to_execute_cmds == 0:
-        daa_custom_config()
-    to_execute_cmds = pgd_config("li", 1000)
+        daa_custom_config(100)
+    to_execute_cmds = pgd_config("li", 100)
     if to_execute_cmds == 0:
         pgd_custom_config("li")
     fab_config("li")
-    l2 attacks
+    # l2 attacks
     deepfool_config("l2")
     foolbox_config("l2", "df")
     foolbox_config("l2", "cw")
     foolbox_config("l2", "ddn")
     bethge_config("l2")
-    to_execute_cmds = pgd_config("l2", 1000)
+    to_execute_cmds = pgd_config("l2", 100)
     if to_execute_cmds == 0:
-        pgd_custom_config("l2")
+        pgd_custom_config("l2", 100)
     fab_config("l2")
     # l1 attacks
     sparsefool_config()
@@ -955,9 +1035,12 @@ if __name__ == "__main__":
     bethge_config("l1")
     to_execute_cmds = pgd_config("l1", 100)
     if to_execute_cmds == 0:
-        pgd_custom_config("l1")
+        pgd_custom_config("l1", 100)
     fab_config("l1")
     # l0 attacks
     jsma_config()
     # pixel_attack_config()
     bethge_config("l0")
+    to_execute_cmds = pgd_config("l0", 100)
+    if to_execute_cmds == 0:
+        pgd_custom_config("l0", 100)

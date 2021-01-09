@@ -80,6 +80,7 @@ def output_excel(df,
         df_gr = df.groupby(by=group_by)
         for gr_key, gr_df in df_gr:
             gr_df = gr_df.drop(columns=group_by)
+            gr_key = format_float(gr_key, 4)
             df_list[f"{attack}-{gr_key}"] = gr_df
 
     output_file = f"{base_dir}/{model_type}_{norm}.xlsx"
