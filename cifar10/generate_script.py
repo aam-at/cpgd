@@ -102,14 +102,14 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         "attack_dual_opt": ["sgd"],
         "attack_dual_opt_kwargs": ["{}"],
         "attack_dual_lr": [1e-1],
-        "attack_dual_ema": [False, True],
-        "attack_loop_number_restarts": [1, 10],
+        "attack_dual_ema": [True],
+        "attack_loop_number_restarts": [1, 10, 100],
         "attack_loop_finetune": [True],
         "attack_loop_r0_sampling_algorithm": ["uniform"],
         "attack_loop_r0_sampling_epsilon": [0.25],
         "attack_loop_r0_ods_init": [False],
         "attack_loop_multitargeted": [False],
-        "attack_loop_c0_initial_const": [0.1, 0.01],
+        "attack_loop_c0_initial_const": [0.1],
         "attack_save": [False],
     }
     if epsilon is not None:
