@@ -253,7 +253,7 @@ def test_our_attack_config(attack,
                 base_name = f"imagenet_{type}"
                 name = format_name(base_name, attack_args) + "_"
                 if num_images < 1000:
-                    batches = num_images / batch_size
+                    batches = num_images // batch_size
                     name = name.replace("imagenet", f"imagenet_{batches}b")
                 attack_args["name"] = name
                 if name in p or name in existing_names:
@@ -370,16 +370,16 @@ def pgd_config(norm, num_images=NUM_IMAGES, mixed_precision=False, seed=123):
                 })
                 name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
-eps{format_float(eps, 4)}_epss{eps_scale}_
-{'f16_' if mixed_precision else ''}""".replace("\n", "")
+eps{format_float(eps, 4)}_epss{eps_scale}_""".replace("\n", "")
                 if norm == "l1":
                     name = f"{name}s{attack_args['attack_grad_sparsity']}_"
                 if num_images < 1000:
-                    batches = num_images / batch_size
+                    batches = num_images // batch_size
                     name = name.replace("imagenet", f"imagenet_{batches}b")
-                attack_args["name"] = name
                 if name in p or name in existing_names:
                     continue
+                name = f"{name}{'f16_' if mixed_precision else ''}"
+                attack_args["name"] = name
                 existing_names.append(name)
                 print(generate_test_optimizer("test_pgd", **attack_args))
 
@@ -405,7 +405,7 @@ def pgd_custom_config(norm,
         "num_batches": NUM_IMAGES // batch_size,
         "batch_size": batch_size,
         "seed": seed,
-        "mixed_precision": [mixed_precision]
+        "mixed_precision": mixed_precision
     }
     existing_names = []
     for type in models.keys():
@@ -446,13 +446,13 @@ def pgd_custom_config(norm,
                         })
                         name = f"""imagenet_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
-eps{eps}_epss{eps_scale}_
-{'f16_' if mixed_precision else ''}""".replace("\n", "")
+eps{eps}_epss{eps_scale}_""".replace("\n", "")
                         if norm == "l1":
                             name = f"{name}s{attack_args['attack_grad_sparsity']}_"
-                        attack_args["name"] = name
                         if name in p or name in existing_names:
                             continue
+                        name = f"{name}{'f16_' if mixed_precision else ''}"
+                        attack_args["name"] = name
                         existing_names.append(name)
                         print(
                             generate_test_optimizer("test_pgd", **attack_args))
@@ -503,7 +503,7 @@ def daa_config(num_images=NUM_IMAGES, seed=123):
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
 eps{eps}_epss{eps_scale}_""".replace("\n", "")
                 if num_images < 1000:
-                    batches = num_images / batch_size
+                    batches = num_images // batch_size
                     name = name.replace("imagenet", f"imagenet_{batches}b")
                 attack_args["name"] = name
                 if name in p or name in existing_names:
@@ -1025,7 +1025,7 @@ if __name__ == "__main__":
         daa_custom_config(100)
     to_execute_cmds = pgd_config("li", 100)
     if to_execute_cmds == 0:
-        pgd_custom_config("li")
+        pgd_custom_config("li", 100)
     fab_config("li")
     # l2 attacks
     deepfool_config("l2")
