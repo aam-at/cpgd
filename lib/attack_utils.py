@@ -325,7 +325,7 @@ class AttackOptimizationLoop(object):
             if self.r0_ods_init:
                 with ods_init(self.attack, self.r0_ods_steps) as attack:
                     attack.run(X, y_onehot)
-                    r0_ods = self.attack.rx.read_value()
+                    r0_ods = self.attack._rx.read_value()
                 self.attack.reset_attack(r0_ods, c0)
             # multitargeted attack
             if self.multitargeted:
