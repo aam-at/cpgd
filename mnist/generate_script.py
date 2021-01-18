@@ -95,14 +95,14 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         "batch_size": [batch_size],
         "seed": [seed],
         "attack": [attack],
-        "attack_loss": ["log", "cw"],
+        "attack_loss": ["log"],
         "attack_iterations": [500],
         "attack_simultaneous_updates": [True],
         "attack_primal_lr": [1e-1],
         "attack_dual_opt": ["sgd"],
         "attack_dual_opt_kwargs": ["{}"],
         "attack_dual_lr": [1e-1],
-        "attack_dual_ema": [True, False],
+        "attack_dual_ema": [True],
         "attack_loop_number_restarts": [1, 10, 100],
         "attack_loop_finetune": [True],
         "attack_loop_r0_sampling_algorithm": ["uniform"],
@@ -348,7 +348,10 @@ def pgd_custom_config(norm, top_k=1, seed=123):
             i = 0
             for index, df_row in df.iterrows():
                 # select top-k attack parameters
-                if df_row.at['acc_adv'] > lowest_acc + 0.01 or i >= top_k:
+                if df_row.at['acc_adv'] > lowest_acc:
+                    lowest_acc = df_row['acc_adv']
+                    i += 1
+                if i >= top_k:
                     break
                 else:
                     attack_args = default_args.copy()
@@ -358,11 +361,9 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                     eps_scale = int(
                         round((PGD_L0_EPS if norm == "l0" else eps) /
                               attack_args["attack_eps_iter"], 2))
-                    i += 1
-                    for loss, n_restarts in itertools.product(["cw", "ce"], [10, 100]):
+                    for n_restarts in [10]:
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
-                            'attack_loss': loss
                         })
                         name = f"""mnist_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
@@ -468,7 +469,10 @@ def daa_custom_config(top_k=1, seed=123):
             i = 0
             for index, df_row in df.iterrows():
                 # select top-k attack parameters
-                if df_row.at['acc_adv'] > lowest_acc + 0.01 or i >= top_k:
+                if df_row.at['acc_adv'] > lowest_acc:
+                    lowest_acc = df_row.at['acc_adv']
+                    i += 1
+                if i >= top_k:
                     break
                 else:
                     attack_args = default_args.copy()
@@ -477,11 +481,9 @@ def daa_custom_config(top_k=1, seed=123):
                             attack_args[col] = df_row.at[col]
                     eps_scale = int(
                         round(eps / attack_args["attack_eps_iter"], 2))
-                    i += 1
-                    for loss, n_restarts in itertools.product(['xent', 'cw'], [10]):
+                    for n_restarts in [10]:
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
-                            'attack_loss_fn': loss
                         })
                         name = f"""mnist_daa_{type}_{norm}_
 {attack_args['attack_loss_fn']}_{attack_args['method']}_
@@ -514,7 +516,7 @@ def fab_config(norm, seed=123):
     }
 
     existing_names = []
-    for model, n_iter, n_restarts in itertools.product(models, [100, 500],
+    for model, n_iter, n_restarts in itertools.product(models, [100],
                                                        [1, 10, 100]):
         # default params for mnist
         # see: https://openreview.net/pdf?id=HJlzxgBtwH
