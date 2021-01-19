@@ -342,13 +342,15 @@ def pgd_custom_config(norm, top_k=1, seed=123):
             df = df[df.attack_eps == eps]
             df = df[df.attack_nb_restarts == 1]
             df = df[df.attack_nb_iter == 500]
-            acc_col = f"acc_{norm}_{format_float(eps, 4)}"
-            df = df.sort_values(acc_col)
-            lowest_acc = df.head(1)[acc_col].item()
+            df = df.sort_values("acc_adv")
+            lowest_acc = df.head(1).acc_adv.item()
             i = 0
             for index, df_row in df.iterrows():
                 # select top-k attack parameters
-                if df_row.at[acc_col] > lowest_acc + 0.01 or i >= top_k:
+                if df_row.at['acc_adv'] > lowest_acc:
+                    lowest_acc = df_row.at['acc_adv']
+                    i += 1
+                if i >= top_k:
                     break
                 else:
                     attack_args = default_args.copy()
@@ -359,11 +361,9 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                         round((PGD_L0_EPS if norm == "l0" else eps) /
                               attack_args["attack_eps_iter"], 2))
                     i += 1
-                    for loss, n_restarts in itertools.product(["cw", "ce"],
-                                                              [10, 100]):
+                    for n_restarts in [10, 100]:
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
-                            'attack_loss': loss
                         })
                         name = f"""cifar10_pgd_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
@@ -468,7 +468,10 @@ def daa_custom_config(top_k=1, seed=123):
             i = 0
             for index, df_row in df.iterrows():
                 # select top-k attack parameters
-                if df_row.at['acc_adv'] > lowest_acc + 0.01 or i >= top_k:
+                if df_row.at['acc_adv'] > lowest_acc:
+                    lowest_acc = df_row.at['acc_adv']
+                    i += 1
+                if i >= top_k:
                     break
                 else:
                     attack_args = default_args.copy()
@@ -477,12 +480,9 @@ def daa_custom_config(top_k=1, seed=123):
                             attack_args[col] = df_row.at[col]
                     eps_scale = int(
                         round(eps / attack_args["attack_eps_iter"], 2))
-                    i += 1
-                    for loss, n_restarts in itertools.product(['xent', 'cw'],
-                                                              [10, 100]):
+                    for n_restarts in [10, 100]:
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
-                            'attack_loss_fn': loss
                         })
                         name = f"""cifar10_daa_{type}_{norm}_
 {attack_args['attack_loss_fn']}_{attack_args['method']}_

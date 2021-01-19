@@ -349,7 +349,7 @@ def pgd_custom_config(norm, top_k=1, seed=123):
             for index, df_row in df.iterrows():
                 # select top-k attack parameters
                 if df_row.at['acc_adv'] > lowest_acc:
-                    lowest_acc = df_row['acc_adv']
+                    lowest_acc = df_row.at['acc_adv']
                     i += 1
                 if i >= top_k:
                     break
@@ -361,7 +361,7 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                     eps_scale = int(
                         round((PGD_L0_EPS if norm == "l0" else eps) /
                               attack_args["attack_eps_iter"], 2))
-                    for n_restarts in [10]:
+                    for n_restarts in [10, 100]:
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
                         })
@@ -481,7 +481,7 @@ def daa_custom_config(top_k=1, seed=123):
                             attack_args[col] = df_row.at[col]
                     eps_scale = int(
                         round(eps / attack_args["attack_eps_iter"], 2))
-                    for n_restarts in [10]:
+                    for n_restarts in [10, 100]:
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
                         })
