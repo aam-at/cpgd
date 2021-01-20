@@ -66,6 +66,20 @@ def l2_metric(x, dim=-1, keepdim=False):
     return torch.sqrt(square_sum)
 
 
+def margin(logits, y_onehot, delta=0.0, targeted=False):
+    real = (y_onehot * logits).sum(1)
+    other = ((1 - y_onehot) * logits - y_onehot * 10000).max(1)[0]
+    if targeted:
+        # if targetted, optimize for making the other class
+        # most likely
+        margin = other - real + delta
+    else:
+        # if untargeted, optimize for making this class least
+        # likely.
+        margin = real - other + delta
+    return margin
+
+
 def prediction(prob, dim=-1):
     return torch.argmax(prob, dim=dim)
 

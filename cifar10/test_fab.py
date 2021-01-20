@@ -12,7 +12,7 @@ import torch.nn.functional as F
 from absl import flags
 from lib.fab import FABAttack, FABPtModelAdapter
 from lib.pt_utils import (MetricsDictionary, l0_metric, l0_pixel_metric,
-                          l1_metric, l2_metric, li_metric, setup_torch,
+                          l1_metric, l2_metric, li_metric, margin, setup_torch,
                           to_torch)
 from lib.tf_utils import limit_gpu_growth, make_input_pipeline
 from lib.utils import (format_float, import_klass_annotations_as_flags,
@@ -88,6 +88,7 @@ def main(unused_args):
     def test_step(image, label):
         outs = classifier(image)
         is_corr = outs['pred'] == label
+        label_onehot = F.one_hot(label, num_classes)
 
         # fab attack
         image_s = image[is_corr]
@@ -96,7 +97,7 @@ def main(unused_args):
         image_adv[is_corr] = fab.perturb(image_s, label_s)
 
         outs_adv = classifier(image_adv)
-        is_adv = outs_adv["pred"] != label
+        is_adv = margin(outs_adv['logits'], label_onehot) <= 5e-5
 
         # metrics
         nll_loss = F.cross_entropy(outs['logits'], label, reduction='none')
