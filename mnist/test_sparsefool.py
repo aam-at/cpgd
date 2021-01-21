@@ -93,7 +93,6 @@ def main(unused_args):
                 if torch.all(is_adv_l and norm_l < min_norm_i):
                     image_adv_i = image_adv_l.clone()
                     min_norm_i = norm_l
-
             image_adv[indx] = image_adv_i
 
         # sanity check
