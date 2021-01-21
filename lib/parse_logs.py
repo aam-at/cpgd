@@ -65,6 +65,9 @@ def parse_log(load_dir, exclude=None, export_test_params=None):
 
     try:
         test_results_str = re.findall("(?<=Test results).*", text)[-1]
+        total_time = test_results_str[test_results_str.find("[") +
+                                      1:test_results_str.find("]")]
+        total_time = float(total_time[:total_time.find("s")])
         test_results_str = test_results_str[test_results_str.find(":") + 1:]
         test_values_with_name = test_results_str.split(",")
         test_result = {"name": name}
@@ -83,6 +86,7 @@ def parse_log(load_dir, exclude=None, export_test_params=None):
             elif isinstance(export_test_params, bool) and export_test_params:
                 for test_param, test_param_value in test_params.items():
                     test_result[test_param] = test_param_value
+        test_result["total_time"] = total_time
         df = pd.DataFrame.from_dict([test_result])
     except:
         print(f"Failed to parse directory: {load_dir}")

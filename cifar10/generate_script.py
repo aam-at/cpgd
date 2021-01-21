@@ -293,7 +293,8 @@ def pgd_config(norm, seed=123):
                     test_model_thresholds[type][norm],
                 [1, 2, 5, 10, 25, 50, 100]):
                 attack_args.update({
-                    'attack_eps': eps,
+                    'attack_eps':
+                    eps,
                     'attack_eps_iter':
                     (PGD_L0_EPS if norm == "l0" else eps) / eps_scale
                 })
