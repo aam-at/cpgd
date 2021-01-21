@@ -60,6 +60,11 @@ def parse_log(load_dir, exclude=None, export_test_params=None):
     with open(os.path.join(load_dir, "tensorflow.log"), "r") as f:
         test_param_str = f.readline()
         test_params = load_params(test_param_str)
+        host_str = f.readline()
+        if host_str.startswith("Host: "):
+            host = host_str[6:].strip()
+        else:
+            host = ""
         text = "\n".join(f.readlines())
     name = os.path.basename(load_dir)
 
@@ -86,6 +91,7 @@ def parse_log(load_dir, exclude=None, export_test_params=None):
             elif isinstance(export_test_params, bool) and export_test_params:
                 for test_param, test_param_value in test_params.items():
                     test_result[test_param] = test_param_value
+        test_result["host"] = host
         test_result["total_time"] = total_time
         df = pd.DataFrame.from_dict([test_result])
     except:
