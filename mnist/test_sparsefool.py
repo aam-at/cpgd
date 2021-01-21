@@ -85,11 +85,12 @@ def main(unused_args):
                                          classifier,
                                          0.0,
                                          1.0,
-                                         lambda_fac=lambda_fac,
+                                         lambda_=lambda_fac,
                                          **attack_kwargs)[0]
-                is_adv_l = classifier(image_adv_l, wrap_outputs=True)['pred'] != label[indx]
-                norm_l = l1_metric(image_i - image_adv_l)
-                if is_adv_l and norm_l < min_norm_i:
+                is_adv_l = classifier(image_adv_l,
+                                      wrap_outputs=True)['pred'] != label[indx]
+                norm_l = l1_metric((image_i - image_adv_l).view(1, -1))
+                if torch.all(is_adv_l and norm_l < min_norm_i):
                     image_adv_i = image_adv_l.clone()
                     min_norm_i = norm_l
 
