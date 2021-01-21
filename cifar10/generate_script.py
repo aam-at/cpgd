@@ -361,7 +361,6 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                     eps_scale = int(
                         round((PGD_L0_EPS if norm == "l0" else eps) /
                               attack_args["attack_eps_iter"], 2))
-                    i += 1
                     for n_restarts in [10, 100]:
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
@@ -817,7 +816,7 @@ def sparsefool_config(seed=123):
     }
 
     existing_names = []
-    for model, lambda_ in itertools.product(models, [1.0, 2.0, 3.0]):
+    for model in models:
         type = Path(model).stem.split("_")[-1]
         working_dir = f"../{basedir}/test_{type}/{norm}/sparsefool"
         attack_args.update({
@@ -825,9 +824,8 @@ def sparsefool_config(seed=123):
             'working_dir': working_dir,
             'attack_epsilon': 0.02,
             'attack_max_iter': 20,
-            'attack_lambda_': lambda_,
         })
-        name = f"cifar10_sparsefool_{type}_{norm}_l{lambda_}_"
+        name = f"cifar10_sf_{type}_{norm}_"
         attack_args['name'] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
