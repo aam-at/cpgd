@@ -30,7 +30,9 @@ flags.DEFINE_integer("batch_size", 100, "batch size")
 flags.DEFINE_integer("validation_size", 10000, "training size")
 
 # attack parameters
-import_func_annotations_as_flags(sparsefool, "attack_")
+import_func_annotations_as_flags(sparsefool,
+                                 "attack_",
+                                 exclude_args=["lambda_"])
 
 FLAGS = flags.FLAGS
 
@@ -76,8 +78,21 @@ def main(unused_args):
         image_adv = image.clone()
         for indx in torch.where(is_corr)[0]:
             image_i = torch.unsqueeze(image[indx], 0)
-            image_adv_i = sparsefool(image_i, classifier, 0.0, 1.0,
-                                     **attack_kwargs)[0]
+            image_adv_i = image_i.clone()
+            min_norm_i = 1e8
+            for lambda_fac in [1.0, 2.0, 3.0]:
+                image_adv_l = sparsefool(image_i,
+                                         classifier,
+                                         0.0,
+                                         1.0,
+                                         lambda_fac=lambda_fac,
+                                         **attack_kwargs)[0]
+                is_adv_l = classifier(image_adv_l, wrap_outputs=True)['pred'] != label[indx]
+                norm_l = l1_metric(image_i - image_adv_l)
+                if is_adv_l and norm_l < min_norm_i:
+                    image_adv_i = image_adv_l.clone()
+                    min_norm_i = norm_l
+
             image_adv[indx] = image_adv_i
 
         # sanity check
