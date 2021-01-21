@@ -819,16 +819,15 @@ def sparsefool_config(seed=123):
     }
 
     existing_names = []
-    for type, lambda_ in itertools.product(models.keys(), [1.0, 2.0, 3.0]):
+    for type in models.keys():
         working_dir = f"../results_imagenet/test_{type}/{norm}/sparsefool"
         attack_args.update({
             "load_from": models[type],
             "working_dir": working_dir,
             "attack_epsilon": 0.02,
             "attack_max_iter": 20,
-            "attack_lambda_": lambda_,
         })
-        name = f"imagenet_sparsefool_{type}_{norm}_l{lambda_}_"
+        name = f"imagenet_sparsefool_{type}_{norm}_"
         attack_args["name"] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
