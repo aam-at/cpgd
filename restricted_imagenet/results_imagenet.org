@@ -68,7 +68,7 @@
 #+BEGIN_SRC python :async :noweb yes :results output :tangle yes
   <<init_script>>
   for model_type in ["plain", "linf", "l2"]:
-      df = parse_results(model_type, "li", "bethge", sort_column="li_corr")
+      df = parse_results(model_type, "li", "bethge", sort_column="avg_acc_adv")
       output_excel(df, model_type, "li", "bethge")
 #+END_SRC
 
@@ -133,7 +133,7 @@
 #+BEGIN_SRC python :async :noweb yes :results output :tangle yes
   <<init_script>>
   for model_type in ["plain", "linf", "l2"]:
-      df = parse_results(model_type, "l2", "bethge")
+      df = parse_results(model_type, "l2", "bethge", sort_column="avg_acc_adv")
       output_excel(df, model_type, "l2", "bethge")
 #+END_SRC
 
@@ -182,7 +182,7 @@
 #+BEGIN_SRC python :async :noweb yes :results output :tangle yes
   <<init_script>>
   for model_type in ["plain", "linf", "l2"]:
-      df = parse_results(model_type, "l1", "bethge")
+      df = parse_results(model_type, "l1", "bethge", sort_column="avg_acc_adv")
       output_excel(df, model_type, "l1", "bethge")
 #+END_SRC
 
@@ -239,7 +239,7 @@
 #+BEGIN_SRC python :async :noweb yes :results output :tangle yes
   <<init_script>>
   for model_type in ["plain", "linf", "l2"]:
-      df = parse_results(model_type, "l0", "bethge")
+      df = parse_results(model_type, "l0", "bethge", sort_column="avg_acc_adv")
       output_excel(df, model_type, "l0", "bethge")
 #+END_SRC
 

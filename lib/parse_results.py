@@ -37,7 +37,6 @@ def parse_results(model_type,
     if len(df_logs) == 0:
         raise ValueError("No logs parsed")
     df = pd.concat(df_logs, ignore_index=True)
-    df = df.sort_values(sort_column)
     df["total"] = df["num_batches"] * df["batch_size"]
     df = df.drop(columns=["num_batches", "batch_size"])
 
@@ -52,18 +51,25 @@ def parse_results(model_type,
             return 0
 
     df = df[sorted(df.columns, key=col_sort, reverse=True)]
-    for norm in ["l0", "l0p", "l1", "l2", "li"]:
+    for n in ["l0", "l0p", "l1", "l2", "li"]:
         model_thresholds = np.array(
-            test_model_thresholds[model_type][norm if norm != "l0p" else "l0"])
+            test_model_thresholds[model_type][n if n != "l0p" else "l0"])
         for col in df.columns:
-            if col.startswith(f"acc_{norm}_"):
-                threshold = float(col.replace(f"acc_{norm}_", ""))
+            if col.startswith(f"acc_{n}_"):
+                threshold = float(col.replace(f"acc_{n}_", ""))
                 if not np.any((model_thresholds - threshold)**2 < 1e-6):
                     df = df.drop(columns=[col])
 
+    i = 0
+    df["avg_acc_adv"] = 0
     for col in df.columns:
-        if col.startswith(f"acc_{norm}_"):
+        if col.startswith(f"acc"):
             df[col] = df[col] * 100
+        if col.startswith(f"acc_{norm}_"):
+            df["avg_acc_adv"] += df[col]
+            i += 1
+    df["avg_acc_adv"] /= i
+    df = df.sort_values(sort_column)
     return df
 
 
