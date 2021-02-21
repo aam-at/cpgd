@@ -1,6 +1,7 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
+import os.path
 import sys
 import time
 
@@ -88,7 +89,12 @@ def main(unused_args):
         image_s = image[is_corr]
         label_s = label[is_corr]
         image_adv = image.clone()
+        import numpy as np
+        norms = np.zeros((fab.n_restarts, FLAGS.batch_size))
         image_adv[is_corr] = fab.perturb(image_s, label_s)
+        norms_ = np.load(f"{fab.file_name}.npy")
+        norms[:, is_corr.cpu().numpy()] = norms_
+        np.save(os.path.join(FLAGS.working_dir, "norms.npy"), norms)
 
         outs_adv = classifier(image_adv)
         is_adv = outs_adv["pred"] != label

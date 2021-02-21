@@ -1,4 +1,5 @@
 import ast
+import tempfile
 from contextlib import contextmanager
 
 import numpy as np
@@ -310,11 +311,14 @@ class AttackOptimizationLoop(object):
         self.finetune_lr = build_lr(finetune_lr, finetune_lr_config)
         self.finetune_dual_lr = build_lr(finetune_dual_lr,
                                          finetune_dual_lr_config)
+        _, temp_file_name = tempfile.mkstemp()
+        self.file_name = temp_file_name
 
     def _run_loop(self, X, y_onehot):
         self.attack.restart_attack(X, y_onehot)
         self.attack.primal_lr = self.lr
         self.attack.dual_lr = self.dual_lr
+        norms = []
         for i in range(self.number_restarts):
             r0 = init_r0(X.shape, self.r0_sampling_epsilon, self.attack.ord,
                          self.r0_sampling_algorithm)
@@ -336,6 +340,9 @@ class AttackOptimizationLoop(object):
             else:
                 self.attack.targeted = False
                 self.attack.run(X, y_onehot)
+            norms.append(self.attack.bestobj.read_value())
+        norms = np.array(norms)
+        np.save(self.file_name, norms)
         if self.finetune:
             self.attack.primal_lr = self.finetune_lr
             self.attack.dual_lr = self.finetune_dual_lr

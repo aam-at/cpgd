@@ -6,8 +6,10 @@
 
 from __future__ import absolute_import, division, print_function
 
+import tempfile
 import time
 
+import numpy as np
 import tensorflow as tf
 import torch
 from torch.autograd.gradcheck import zero_gradients
@@ -116,6 +118,8 @@ class FABAttack:
         self.seed = seed
         self.target_class = None
         self.device = device
+        _, temp_file_name = tempfile.mkstemp()
+        self.file_name = temp_file_name
 
     def _get_predicted_label(self, x):
         with torch.no_grad():
@@ -395,6 +399,7 @@ class FABAttack:
         x1 = im2.clone()
         x0 = im2.clone().reshape([bs, -1])
         counter_restarts = 0
+        norms = []
 
         while counter_restarts < self.n_restarts:
             if counter_restarts > 0:
@@ -516,6 +521,7 @@ class FABAttack:
                     counter_iter += 1
 
             counter_restarts += 1
+            norms.append(res2.cpu().numpy())
 
         ind_succ = res2 < 1e10
         if self.verbose:
@@ -527,5 +533,7 @@ class FABAttack:
         res_c[pred] = res2 * ind_succ.float() + 1e10 * (1 - ind_succ.float())
         ind_succ = self.check_shape(ind_succ.nonzero().squeeze())
         adv_c[pred[ind_succ]] = adv[ind_succ].clone()
+        norms = np.array(norms)
+        np.save(self.file_name, norms)
 
         return adv_c
