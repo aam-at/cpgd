@@ -2,6 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
+import os
 import sys
 import time
 
@@ -137,7 +138,7 @@ def main(unused_args):
                              y=label_onehot[~is_adv],
                              clip_min=0.0,
                              clip_max=1.0,
-                             rand_init=True,
+                             rand_init=False,
                              **attack_kwargs))
         # sanity check
         assert_op = tf.Assert(
@@ -161,10 +162,21 @@ def main(unused_args):
         test_metrics["conf_adv"](outs_adv["conf"])
 
         # measure norm
-        lp = lp_metrics[FLAGS.norm](image - image_adv)
-        test_metrics[f"{FLAGS.norm}"](lp)
+        r = image - image_adv
+        lp = lp_metrics[FLAGS.norm](r)
+        l0 = l0_metric(r)
+        l1 = l1_metric(r)
+        l2 = l2_metric(r)
+        li = li_metric(r)
+        test_metrics["l0"](l0)
+        test_metrics["l1"](l1)
+        test_metrics["l2"](l2)
+        test_metrics["li"](li)
         # exclude incorrectly classified
-        test_metrics[f"{FLAGS.norm}_corr"](lp[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l0_corr"](l0[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l1_corr"](l1[tf.logical_and(is_corr, is_adv)])
+        test_metrics["l2_corr"](l2[tf.logical_and(is_corr, is_adv)])
+        test_metrics["li_corr"](li[tf.logical_and(is_corr, is_adv)])
 
         # robust accuracy at threshold
         # NOTE: cleverhans lp-norm projection may result in numerical error
@@ -183,6 +195,11 @@ def main(unused_args):
     try:
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_lp = test_step(image, label)
+            is_corr = (test_classifier(image)['pred'] == label).numpy()
+            acc = np.load(pgd.file_name)
+            acc0 = np.zeros((acc.shape[0], X_lp.shape[0]))
+            acc0[:, is_corr] = acc
+            np.save(os.path.join(FLAGS.working_dir, f"acc_{FLAGS.attack_eps}.npy"), acc0)
             log_metrics(
                 test_metrics,
                 "Batch results [{}, {:.2f}s]:".format(batch_index,

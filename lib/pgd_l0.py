@@ -1,5 +1,8 @@
+import os
+import tempfile
 import warnings
 
+import numpy as np
 import tensorflow as tf
 from cleverhans import utils_tf
 from cleverhans.attacks.attack import Attack
@@ -22,6 +25,7 @@ class SparseL0Descent(Attack):
         self.structural_kwargs = [
             'nb_iter', 'rand_init', 'clip_grad', 'sanity_checks'
         ]
+        self.file_name = tempfile.mktemp()
 
     def generate(self, x, **kwargs):
         """
@@ -36,6 +40,19 @@ class SparseL0Descent(Attack):
         assert self.clip_max is not None
 
         asserts = []
+        def save_acc(X, y):
+            y = tf.argmax(y, -1)
+            model_preds = self.model.get_probs(X)
+            preds = tf.argmax(model_preds, -1)
+            r = tf.cast(preds == y, tf.float32).numpy()
+            if os.path.exists(self.file_name):
+                p = np.load(self.file_name)
+                p = np.vstack((p, r))
+            else:
+                p = r
+            with open(self.file_name, "wb") as f:
+                np.save(f, p)
+            return X
         # If a data range was specified, check that the input was in that range
         asserts.append(
             utils_tf.assert_greater_equal(x, tf.cast(self.clip_min, x.dtype)))
@@ -73,6 +90,9 @@ class SparseL0Descent(Attack):
             del model_preds
 
         y_kwarg = 'y_target' if targeted else 'y'
+        sh = x.get_shape()
+        x = tf.py_function(save_acc, [x, y], tf.float32)
+        x.set_shape(sh)
 
         for i in tf.range(self.nb_iter):
             labels, _ = self.get_or_guess_labels(adv_x, {y_kwarg: y})
@@ -93,6 +113,9 @@ class SparseL0Descent(Attack):
             if self.clip_min is not None or self.clip_max is not None:
                 adv_x = utils_tf.clip_by_value(adv_x, self.clip_min,
                                                self.clip_max)
+            sh = adv_x.get_shape()
+            adv_x = tf.py_function(save_acc, [adv_x, y], tf.float32)
+            adv_x.set_shape(sh)
 
         if self.sanity_checks:
             with tf.control_dependencies(asserts):

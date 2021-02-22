@@ -24,6 +24,7 @@ models = [
     "./models/mnist_weights_plain.mat",
     "./models/mnist_weights_linf.mat",
     "./models/mnist_weights_l2.mat",
+    # "./models/mnist_weights_linf_secret.mat",
 ]
 hostname = subprocess.getoutput("hostname")
 basedir = "results_mnist"
@@ -89,7 +90,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
     import_flags(attack)
     norm, attack_klass = lp_attacks[attack]
 
-    batch_size = 500
+    batch_size = 1000
     attack_grid_args = {
         "num_batches": [NUM_IMAGES // batch_size],
         "batch_size": [batch_size],
@@ -102,15 +103,15 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
         "attack_dual_opt": ["sgd"],
         "attack_dual_opt_kwargs": ["{}"],
         "attack_dual_lr": [1e-1],
-        "attack_dual_ema": [True],
-        "attack_loop_number_restarts": [1, 10, 100],
-        "attack_loop_finetune": [True],
+        "attack_dual_ema": [False, True],
+        "attack_loop_number_restarts": [1],
+        "attack_loop_finetune": [False],
         "attack_loop_r0_sampling_algorithm": ["uniform"],
         "attack_loop_r0_sampling_epsilon": [0.5],
         "attack_loop_r0_ods_init": [False],
         "attack_loop_multitargeted": [False],
-        "attack_loop_c0_initial_const": [0.1],
-        "attack_save": [False],
+        "attack_loop_c0_initial_const": [0.1, 1.0],
+        "attack_save": [True],
     }
     if epsilon is not None:
         attack_grid_args["attack_epsilon"] = [epsilon]
@@ -131,7 +132,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
 
     if norm == "li":
         attack_grid_args.update(
-            {"attack_gradient_preprocessing": [False, True]})
+            {"attack_gradient_preprocessing": [False]})
 
     if attack == "l1g":
         attack_grid_args.update({"attack_hard_threshold": [False, True]})
@@ -159,7 +160,7 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                     and attack_args["attack_loop_multitargeted"]):
                 continue
             for lr, decay_factor, dlr_decay_factor, lr_decay in itertools.product(
-                [1.0], [0.01], [0.1], [True]):
+                [1.0], [0.0001], [0.01], [True]):
                 min_lr = round(lr * decay_factor, 6)
                 dlr = attack_args["attack_dual_lr"]
                 min_dlr = round(dlr * dlr_decay_factor, 6)
@@ -244,13 +245,16 @@ def test_our_attack_config(attack, epsilon=None, seed=123):
                     "attack_loop_finetune_dual_lr_config":
                     finetune_dlr_config,
                 })
-                base_name = f"mnist_{type}"
+                base_name = f"mnist_{type}_avg_acc"
                 name = format_name(base_name, attack_args) + "_"
                 attack_args["name"] = name
                 if name in p or name in existing_names:
                     continue
                 existing_names.append(name)
-                print(generate_test_optimizer(script_name, **attack_args))
+                for i in range(10):
+                    seed = np.random.randint(1e6)
+                    attack_args["seed"] = seed
+                    print(generate_test_optimizer(script_name, **attack_args))
 
 
 @count_number_of_lines
@@ -263,7 +267,7 @@ def pgd_config(norm, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    batch_size = 500
+    batch_size = 1000
     attack_grid_args = {
         'num_batches': [NUM_IMAGES // batch_size],
         'batch_size': [batch_size],
@@ -321,7 +325,7 @@ def pgd_custom_config(norm, top_k=1, seed=123):
     importlib.reload(test_pgd)
     import_flags(norm)
 
-    batch_size = 500
+    batch_size = 1000
     default_args = {
         "norm": norm,
         "num_batches": NUM_IMAGES // batch_size,
@@ -341,7 +345,7 @@ def pgd_custom_config(norm, top_k=1, seed=123):
         for eps in test_model_thresholds[type][norm]:
             df = df_all.copy()
             df = df[df.attack_eps == eps]
-            df = df[df.attack_nb_restarts == 1]
+            df = df[df.attack_nb_restarts == 100]
             df = df[df.attack_nb_iter == 500]
             df = df.sort_values("acc_adv")
             lowest_acc = df.head(1).acc_adv.item()
@@ -361,11 +365,11 @@ def pgd_custom_config(norm, top_k=1, seed=123):
                     eps_scale = int(
                         round((PGD_L0_EPS if norm == "l0" else eps) /
                               attack_args["attack_eps_iter"], 2))
-                    for n_restarts in [10, 100]:
+                    for n_restarts in [1]:
                         attack_args.update({
                             'attack_nb_restarts': n_restarts,
                         })
-                        name = f"""mnist_pgd_{type}_{norm}_{attack_args['attack_loss']}_
+                        name = f"""mnist_pgd_avg_acc_{type}_{norm}_{attack_args['attack_loss']}_
 n{attack_args['attack_nb_iter']}_N{attack_args['attack_nb_restarts']}_
 eps{eps}_epss{eps_scale}_""".replace("\n", "")
                         if norm == 'l1':
@@ -373,9 +377,13 @@ eps{eps}_epss{eps_scale}_""".replace("\n", "")
                         attack_args['name'] = name
                         if name in p or name in existing_names:
                             continue
+                        i += 1
                         existing_names.append(name)
-                        print(
-                            generate_test_optimizer('test_pgd', **attack_args))
+                        for i in range(10):
+                            seed = np.random.randint(1e6)
+                            attack_args["seed"] = seed
+                            print(
+                                generate_test_optimizer('test_pgd', **attack_args))
 
 
 @count_number_of_lines
@@ -507,7 +515,7 @@ def fab_config(norm, seed=123):
     importlib.reload(test_fab)
     import_klass_annotations_as_flags(FABAttack, "attack_")
 
-    batch_size = 500
+    batch_size = 1000
     attack_args = {
         "attack_norm": norm,
         "num_batches": NUM_IMAGES // batch_size,
@@ -517,7 +525,7 @@ def fab_config(norm, seed=123):
 
     existing_names = []
     for model, n_iter, n_restarts in itertools.product(models, [100],
-                                                       [1, 10, 100]):
+                                                       [100]):
         # default params for mnist
         # see: https://openreview.net/pdf?id=HJlzxgBtwH
         alpha_max = 0.1
@@ -555,7 +563,7 @@ def fab_config(norm, seed=123):
             "working_dir": working_dir,
             "load_from": model,
         })
-        name = f"mnist_fab_{type}_{norm}_n{n_iter}_N{n_restarts}_"
+        name = f"mnist_fab_norms_{type}_{norm}_n{n_iter}_N{n_restarts}_"
         attack_args["name"] = name
         p = [s.name[:-1] for s in list(Path(working_dir).glob("*"))]
         if name in p or name in existing_names:
@@ -1027,48 +1035,48 @@ def pixel_attack_config(seed=123):
 
 
 if __name__ == '__main__':
-    # our attacks
-    test_our_attack_config("li")
-    test_our_attack_config("l2g")
-    test_our_attack_config("l1")
-    test_our_attack_config("l0")
-    # li attacks
-    deepfool_config("li")
-    foolbox_config("li", "df")
-    bethge_config("li")
-    to_execute_cmds = daa_config()
-    if to_execute_cmds == 0:
-        daa_custom_config()
+    # # our attacks
+    # test_our_attack_config("li")
+    # test_our_attack_config("l2g")
+    # test_our_attack_config("l1")
+    # test_our_attack_config("l0")
+    # # li attacks
+    # deepfool_config("li")
+    # foolbox_config("li", "df")
+    # bethge_config("li")
+    # to_execute_cmds = daa_config()
+    # if to_execute_cmds == 0:
+    #     daa_custom_config()
     to_execute_cmds = pgd_config("li")
     if to_execute_cmds == 0:
         pgd_custom_config("li")
-    fab_config("li")
-    # l2 attacks
-    deepfool_config("l2")
-    foolbox_config("l2", "df")
-    foolbox_config("l2", "cw")
-    cleverhans_config("l2", "cw")
-    foolbox_config("l2", "ddn")
-    foolbox_config("l2", "newton")
-    bethge_config("l2")
+    # fab_config("li")
+    # # l2 attacks
+    # deepfool_config("l2")
+    # foolbox_config("l2", "df")
+    # foolbox_config("l2", "cw")
+    # cleverhans_config("l2", "cw")
+    # foolbox_config("l2", "ddn")
+    # foolbox_config("l2", "newton")
+    # bethge_config("l2")
     to_execute_cmds = pgd_config("l2")
     if to_execute_cmds == 0:
         pgd_custom_config("l2")
-    fab_config("l2")
-    # l1 attacks
-    sparsefool_config()
-    cleverhans_config("l1", "ead")
-    foolbox_config("l1", "ead")
-    bethge_config("l1")
+    # fab_config("l2")
+    # # l1 attacks
+    # sparsefool_config()
+    # cleverhans_config("l1", "ead")
+    # foolbox_config("l1", "ead")
+    # bethge_config("l1")
     to_execute_cmds = pgd_config("l1")
     if to_execute_cmds == 0:
         pgd_custom_config("l1")
-    fab_config("l1")
-    # l0 attacks
-    jsma_config()
-    cornersearch_config()
-    pixel_attack_config()
-    bethge_config("l0")
+    # fab_config("l1")
+    # # l0 attacks
+    # jsma_config()
+    # cornersearch_config()
+    # pixel_attack_config()
+    # bethge_config("l0")
     to_execute_cmds = pgd_config("l0")
     if to_execute_cmds == 0:
         pgd_custom_config("l0")

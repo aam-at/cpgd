@@ -1,9 +1,12 @@
 from __future__ import absolute_import, division, print_function
 
 import ast
+import os.path
+import tempfile
 from abc import ABC, abstractmethod
 from typing import Union
 
+import numpy as np
 import tensorflow as tf
 
 from .attack_utils import (get_opt_psi, l2_metric, margin, project_box,
@@ -55,7 +58,8 @@ class PrimalDualGradientAttack(ABC):
         boxmax: float = 1.0,
         min_dual_ratio: float = 1e-6,
         # other parameters
-        has_ecc: bool = False
+        has_ecc: bool = False,
+        thresholds: dict = {},
     ):
         """
         Args:
@@ -102,6 +106,9 @@ class PrimalDualGradientAttack(ABC):
         self.boxmax = boxmax
         self.min_dual_ratio = min_dual_ratio
         self.has_ecc = has_ecc
+        assert len(thresholds) == 5
+        self.thresholds = thresholds
+        self.file_name = tempfile.mktemp()
         self.built = False
 
     @property
@@ -385,8 +392,33 @@ class PrimalDualGradientAttack(ABC):
         return X_hat
 
     def _run(self, X, y_onehot):
+        @tf.function
+        def compute_acc(X, y):
+            lp = self.lp_metric(self.bestsol - X)
+            pred = tf.argmax(self.model(self.bestsol.read_value()), -1)
+            is_adv = tf.not_equal(pred, y)
+            acc_sublist = []
+            for threshold in self.thresholds:
+                acc_at = tf.logical_and(lp <= threshold, is_adv)
+                acc_sublist.append(tf.reduce_mean(tf.cast(~acc_at, tf.float32)))
+            return acc_sublist
+
+        y = tf.argmax(y_onehot, axis=-1)
+        pred = tf.argmax(self.model(X), -1)
+        if os.path.exists(self.file_name):
+            with open(self.file_name, "rb") as f:
+                acc_list = list(np.load(f))
+        else:
+            acc = tf.reduce_mean(tf.cast(pred == y, tf.float32)).numpy()
+            acc_list = [[acc] * 5]
         for iteration in range(self.iterations):
             self.optim_step(X, y_onehot)
+            # compute accuracy at 5 thresholds
+            acc_list.append(compute_acc(X, y))
+        acc_list = np.array(acc_list)
+        with open(self.file_name, "wb") as f:
+            np.save(f, acc_list)
+
 
     def run(self, X, y_onehot):
         if tf.executing_eagerly():

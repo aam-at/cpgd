@@ -2,6 +2,9 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
+import os
+import os.path
+import shutil
 import time
 import traceback
 from pathlib import Path
@@ -25,7 +28,7 @@ from lib.utils import (format_float, import_klass_annotations_as_flags,
                        setup_experiment)
 from tensorboard.plugins.hparams import api as hp
 
-from config import test_thresholds
+from config import test_model_thresholds, test_thresholds
 from data import load_mnist
 from models import MadryCNNTf
 from utils import load_madry
@@ -112,7 +115,10 @@ def main(unused_args):
         if kwarg.startswith("attack_") and not kwarg.startswith("attack_loop_")
         and kwarg not in ["attack_save"]
     }
-    alp = attack_klass(lambda x: test_classifier(x)["logits"], **attack_kwargs)
+    model_type = Path(FLAGS.load_from).stem.split("_")[-1]
+    alp = attack_klass(lambda x: test_classifier(x)["logits"],
+                       thresholds=test_model_thresholds[model_type][norm],
+                       **attack_kwargs)
     alp.build([X_shape, y_shape])
     allp = AttackOptimizationLoop(alp, **attack_loop_kwargs)
 
@@ -178,6 +184,7 @@ def main(unused_args):
         X_adv = []
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_adv_b = test_step(image, label)
+            shutil.move(f"{alp.file_name}", os.path.join(FLAGS.working_dir, "avg_acc.npy"))
             X_adv.append(X_adv_b)
             log_metrics(
                 test_metrics,
