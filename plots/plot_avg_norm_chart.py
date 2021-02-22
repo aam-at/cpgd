@@ -5,11 +5,10 @@ import itertools
 from collections import defaultdict
 from pathlib import Path
 
-import tikzplotlib
-import matplotlib as mpl
 import matplotlib.pyplot as plt
 import numpy as np
 import seaborn as sns
+import tikzplotlib
 
 # set plot style
 plt.style.use("seaborn-paper")
@@ -73,5 +72,5 @@ for norm in ["l1", "l2", "li"]:
 
         # tikzplotlib.clean_figure()
         # tikzplotlib.save(f"{norm}_{type}.tikz")
-        plt.savefig(f"{norm}_{type}.pgf", bbox_inches="tight")
+        plt.savefig(f"avg_norm_{norm}_{type}.pgf", bbox_inches="tight")
 
