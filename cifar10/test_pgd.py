@@ -2,6 +2,7 @@ from __future__ import absolute_import, division, print_function
 
 import argparse
 import logging
+import os
 import sys
 import time
 from pathlib import Path
@@ -146,7 +147,7 @@ def main(unused_args):
                              y=label_onehot[~is_adv],
                              clip_min=0.0,
                              clip_max=1.0,
-                             rand_init=True,
+                             rand_init=False,
                              **attack_kwargs))
         # sanity check
         assert_op = tf.Assert(
@@ -208,8 +209,15 @@ def main(unused_args):
     reset_metrics(test_metrics)
     start_time = time.time()
     try:
+        acc_list = []
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_lp = test_step(image, label)
+            is_corr = (test_classifier(image)['pred'] == label).numpy()
+            acc = np.load(pgd.file_name)
+            acc0 = np.zeros((acc.shape[0], X_lp.shape[0]))
+            acc0[:, is_corr] = acc
+            acc_list.append(acc0)
+            os.remove(pgd.file_name)
             log_metrics(
                 test_metrics,
                 "Batch results [{}, {:.2f}s]:".format(batch_index,
@@ -218,6 +226,8 @@ def main(unused_args):
             )
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
+        acc = np.concatenate(acc_list, axis=1)
+        np.save(os.path.join(FLAGS.working_dir, f"acc_{FLAGS.attack_eps}.npy"), acc)
     except KeyboardInterrupt:
         logging.info("Stopping after {}".format(batch_index))
     except Exception as e:
