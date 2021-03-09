@@ -3,6 +3,8 @@ from __future__ import absolute_import, division, print_function
 import argparse
 import logging
 import os
+import os.path
+import shutil
 import time
 import traceback
 from pathlib import Path
@@ -26,7 +28,7 @@ from lib.utils import (format_float, import_klass_annotations_as_flags,
                        setup_experiment)
 from tensorboard.plugins.hparams import api as hp
 
-from config import test_thresholds
+from config import test_model_thresholds, test_thresholds
 from data import load_cifar10
 from models import MadryCNNTf
 from utils import load_madry
@@ -115,7 +117,9 @@ def main(unused_args):
         if kwarg.startswith("attack_") and not kwarg.startswith("attack_loop_")
         and kwarg not in ["attack_save"]
     }
-    alp = attack_klass(lambda x: test_classifier(x)["logits"], **attack_kwargs)
+    alp = attack_klass(lambda x: test_classifier(x)["logits"],
+                       thresholds=test_model_thresholds[model_type][norm],
+                       **attack_kwargs)
     alp.build([X_shape, y_shape])
     allp = AttackOptimizationLoop(alp, **attack_loop_kwargs)
 
@@ -182,8 +186,11 @@ def main(unused_args):
     try:
         is_completed = False
         X_adv = []
+        avg_acc = []
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_adv_b = test_step(image, label)
+            avg_acc.append(np.load(f"{alp.file_name}"))
+            os.remove(f"{alp.file_name}")
             X_adv.append(X_adv_b)
             log_metrics(
                 test_metrics,
@@ -197,6 +204,8 @@ def main(unused_args):
         else:
             is_completed = True
         X_adv = np.concatenate(X_adv, axis=0)
+        avg_acc = np.stack(avg_acc).mean(0)
+        np.save(Path(FLAGS.working_dir) / "avg_acc.npy", avg_acc)
         if is_completed:
             if FLAGS.attack_save:
                 np.save(
