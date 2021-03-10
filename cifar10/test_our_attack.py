@@ -182,8 +182,12 @@ def main(unused_args):
     try:
         is_completed = False
         X_adv = []
+        avg_norm = []
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_adv_b = test_step(image, label)
+            X_adv.append(X_adv_b)
+            avg_norm.append(np.load(f"{allp.file_name}.npy"))
+            os.remove(f"{allp.file_name}.npy")
             X_adv.append(X_adv_b)
             log_metrics(
                 test_metrics,
@@ -197,6 +201,8 @@ def main(unused_args):
         else:
             is_completed = True
         X_adv = np.concatenate(X_adv, axis=0)
+        avg_norm = np.concatenate(avg_norm, axis=1)
+        np.save(Path(FLAGS.working_dir) / "norms.npy", avg_norm)
         if is_completed:
             if FLAGS.attack_save:
                 np.save(

@@ -1,12 +1,14 @@
 from __future__ import absolute_import, division, print_function
 
 import logging
+import os
 import sys
 import time
 from pathlib import Path
 
 import absl
 import lib
+import numpy as np
 import torch
 import torch.nn.functional as F
 from absl import flags
@@ -94,7 +96,11 @@ def main(unused_args):
         image_s = image[is_corr]
         label_s = label[is_corr]
         image_adv = image.clone()
+        norms = np.zeros((fab.n_restarts, FLAGS.batch_size))
         image_adv[is_corr] = fab.perturb(image_s, label_s)
+        norms_ = np.load(f"{fab.file_name}.npy")
+        norms[:, is_corr.cpu().numpy()] = norms_
+        np.save(fab.file_name, norms)
 
         outs_adv = classifier(image_adv)
         is_adv = margin(outs_adv['logits'], label_onehot) <= 5e-5
@@ -146,8 +152,12 @@ def main(unused_args):
     reset_metrics(test_metrics)
     start_time = time.time()
     try:
+        norms = []
         for batch_index, (image, label) in enumerate(test_ds, 1):
             X_lp = test_step(*to_torch(image, label))
+            n = np.load(f"{fab.file_name}.npy")
+            norms.append(n)
+            os.remove(f"{fab.file_name}.npy")
             log_metrics(
                 test_metrics,
                 "Batch results [{}, {:.2f}s]:".format(batch_index,
@@ -156,6 +166,8 @@ def main(unused_args):
             )
             if FLAGS.num_batches != -1 and batch_index >= FLAGS.num_batches:
                 break
+        norms = np.concatenate(norms, axis=1)
+        np.save(Path(FLAGS.working_dir) / "norms.npy", norms)
     except KeyboardInterrupt:
         logging.info("Stopping after {}".format(batch_index))
     except Exception as e:
