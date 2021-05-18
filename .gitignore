@@ -107,5 +107,6 @@ venv.bak/
 .idea/*
 /mnist/data/*
 results*/*
+plots/*
 *.org
 *.org_archive
