@@ -1,0 +1,20 @@
+#!/usr/bin/env bash
+
+cd ../mnist
+
+# Pixel-l0 attack
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_plain.mat" --working_dir="../results_mnist/test_plain/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=1 --name="mnist_one_pixel_plain_es1_i100_t1_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_plain.mat" --working_dir="../results_mnist/test_plain/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=3 --name="mnist_one_pixel_plain_es1_i100_t3_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_plain.mat" --working_dir="../results_mnist/test_plain/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=5 --name="mnist_one_pixel_plain_es1_i100_t5_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_plain.mat" --working_dir="../results_mnist/test_plain/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=8 --name="mnist_one_pixel_plain_es1_i100_t8_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_plain.mat" --working_dir="../results_mnist/test_plain/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=12 --name="mnist_one_pixel_plain_es1_i100_t12_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_linf.mat" --working_dir="../results_mnist/test_linf/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=1 --name="mnist_one_pixel_linf_es1_i100_t1_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_linf.mat" --working_dir="../results_mnist/test_linf/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=3 --name="mnist_one_pixel_linf_es1_i100_t3_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_linf.mat" --working_dir="../results_mnist/test_linf/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=5 --name="mnist_one_pixel_linf_es1_i100_t5_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_linf.mat" --working_dir="../results_mnist/test_linf/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=8 --name="mnist_one_pixel_linf_es1_i100_t8_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_linf.mat" --working_dir="../results_mnist/test_linf/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=12 --name="mnist_one_pixel_linf_es1_i100_t12_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_l2.mat" --working_dir="../results_mnist/test_l2/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=5 --name="mnist_one_pixel_l2_es1_i100_t5_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_l2.mat" --working_dir="../results_mnist/test_l2/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=10 --name="mnist_one_pixel_l2_es1_i100_t10_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_l2.mat" --working_dir="../results_mnist/test_l2/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=15 --name="mnist_one_pixel_l2_es1_i100_t15_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_l2.mat" --working_dir="../results_mnist/test_l2/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=20 --name="mnist_one_pixel_l2_es1_i100_t20_"
+python test_pixel_attack.py --num_batches=5 --batch_size=200 --seed=123 --load_from="./models/mnist_weights_l2.mat" --working_dir="../results_mnist/test_l2/l0/one_pixel" --attack_iters=100 --attack_es=1 --attack_threshold=25 --name="mnist_one_pixel_l2_es1_i100_t25_"
